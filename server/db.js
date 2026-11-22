@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS users (
   verify_url TEXT DEFAULT '',
   min_price_pref DOUBLE PRECISION DEFAULT 0,
   notify_pref TEXT DEFAULT 'whatsapp',
+  available_today INTEGER DEFAULT 0,
+  daily_capacity INTEGER DEFAULT 0,
   created_at BIGINT NOT NULL
 );
 
@@ -100,6 +102,7 @@ CREATE TABLE IF NOT EXISTS shop_requests (
   guest_name TEXT DEFAULT '',
   guest_phone TEXT DEFAULT '',
   guest_token TEXT DEFAULT '',
+  urgent INTEGER DEFAULT 0,
   created_at BIGINT NOT NULL
 );
 
@@ -158,6 +161,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   escrow_released_ref TEXT DEFAULT '',
   escrow_released_at BIGINT DEFAULT 0,
   escrow_release_seen TEXT DEFAULT '',
+  urgent INTEGER DEFAULT 0,
   created_at BIGINT NOT NULL,
   completed_at BIGINT DEFAULT 0
 );
@@ -282,6 +286,16 @@ CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, recipient_id
 CREATE INDEX IF NOT EXISTS idx_messages_inbox ON messages(recipient_id, sender_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read);
 
+CREATE TABLE IF NOT EXISTS guest_messages (
+  id SERIAL PRIMARY KEY,
+  booking_id INTEGER NOT NULL,
+  sender TEXT NOT NULL CHECK(sender IN ('guest','talent')),
+  body TEXT NOT NULL,
+  is_read INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_guest_messages_booking ON guest_messages(booking_id, created_at);
+
 CREATE TABLE IF NOT EXISTS money_obligations (
   id SERIAL PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
@@ -404,6 +418,19 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, recipient_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_inbox ON messages(recipient_id, sender_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read);
+CREATE TABLE IF NOT EXISTS guest_messages (
+  id SERIAL PRIMARY KEY,
+  booking_id INTEGER NOT NULL,
+  sender TEXT NOT NULL CHECK(sender IN ('guest','talent')),
+  body TEXT NOT NULL,
+  is_read INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_guest_messages_booking ON guest_messages(booking_id, created_at);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS available_today INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_capacity INTEGER DEFAULT 0;
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS urgent INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS urgent INTEGER DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by INTEGER DEFAULT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS featured_until BIGINT DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by);

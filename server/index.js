@@ -418,6 +418,7 @@ async function buildEvidenceBundle(b) {
   const finalOb = await finalObligation(b.id);
   const ledger = finalOb ? await db.prepare('SELECT from_status,to_status,actor,note,created_at FROM money_ledger WHERE obligation_id=? ORDER BY id ASC').all(finalOb.id) : [];
   const dispute = await db.prepare('SELECT id,opened_by,reason,status,created_at FROM disputes WHERE booking_id=? ORDER BY id DESC LIMIT 1').get(b.id);
+  const chat = await db.prepare('SELECT sender,body,created_at FROM guest_messages WHERE booking_id=? ORDER BY created_at ASC, id ASC').all(b.id);
   const fmt = (ts) => (ts ? new Date(ts).toISOString() : null);
   const amounts = bookingLegAmounts(b);
   return {
@@ -441,6 +442,7 @@ async function buildEvidenceBundle(b) {
     escrow: { status: b.escrow_status || '', final_obligation_code: finalOb ? finalOb.code : null, ledger: ledger.map((e) => ({ from: e.from_status, to: e.to_status, actor: e.actor, note: e.note, at: fmt(e.created_at) })) },
     proof: b.proof_url ? { url: b.proof_url, server_timestamp: fmt(b.proof_at), check: b.proof_check } : null,
     dispute: dispute ? { id: dispute.id, reason: dispute.reason, status: dispute.status, opened_at: fmt(dispute.created_at) } : null,
+    chat: chat.map((m) => ({ sender: m.sender, body: m.body, at: fmt(m.created_at) })),
     statement: 'هذه الحزمة مُولَّدة آلياً من سجلات منصة Deal المختومة بوقت الخادم، وتثبت أن العمل المنشور على رابط الإثبات نُفّذ ضمن حجز مدفوع المراحل على المنصة — صالحة للاستخدام في بلاغات حقوق النشر لدى المنصات.',
   };
 }
@@ -513,6 +515,8 @@ async function publicUser(u, viewerId = null) {
     // يظهر للمؤسس أيضاً (عدّاد متابِعيه جزء من ملفه)، وis_following خاص بالمشاهد المسجل.
     followers_count: await followersCount(u.id),
     is_following: await isFollowing(viewerId, u.id),
+    // «متاح اليوم» لمقدمي الخدمة/الصناع (يضبطه صاحبه من لوحته) — المؤسس عرضه فقط.
+    available_today: founder ? false : !!u.available_today,
   };
   // مدينة المؤسس ودولته (وعملته المشتقة منها) غير ظاهرة للعامة (طلب المالك
   // الصريح): تُحذف من كل رد عام (الدليل، الملف العام، أطراف الحجوزات...) —
@@ -823,6 +827,52 @@ app.post('/api/me/prefs', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
+/* ---------------- توفّر اليوم + مهام اليوم (مهام متعددة بالتوازي) ----------------
+   مقدم الخدمة/الصانع يعلن «متاح اليوم» وسعة يومية اختيارية من لوحته، وقائمة
+   مهامه تعرض كل حجوزاته النشطة بالتوازي — لا حظر «مهمة نشطة واحدة» في أي
+   مكان: السعة إعلان تنظيمي لليوم فقط، لا تقفل قبول أي حجز. */
+function nextActionFor(b) {
+  if (b.status === 'disputed') return 'disputed';
+  if (b.status === 'pending_agreement') return b.agreed_talent ? 'wait_client' : 'agree';
+  if (b.status === 'awaiting_fee') return 'wait_fee';
+  if (b.status === 'awaiting_deposit') return 'wait_deposit';
+  if (b.status === 'in_progress') return 'submit_proof';
+  if (b.status === 'proof_submitted') return 'wait_receipt';
+  if (b.status === 'awaiting_rest') return 'wait_rest';
+  if (b.status === 'completed') return b.escrow_status === 'ready_release' ? 'wait_release' : 'done';
+  return 'wait_client';
+}
+app.post('/api/me/availability', auth, async (req, res) => {
+  if (!['creator', 'provider'].includes(req.user.role)) return res.status(400).json({ error: 'إعدادات اليوم للصناع ومقدمي الخدمة فقط' });
+  const { available_today, daily_capacity } = req.body || {};
+  let cap = req.user.daily_capacity || 0;
+  if (daily_capacity !== undefined) {
+    cap = Math.floor(+daily_capacity);
+    if (!Number.isFinite(cap) || cap < 0 || cap > 50) return res.status(400).json({ error: 'سعة يومية صحيحة مطلوبة (0 = بلا حد، حتى 50)' });
+  }
+  const avail = available_today === undefined ? (req.user.available_today || 0) : (available_today ? 1 : 0);
+  await db.prepare('UPDATE users SET available_today=?, daily_capacity=? WHERE id=?').run(avail, cap, req.user.id);
+  res.json({ ok: true, available_today: !!avail, daily_capacity: cap });
+});
+app.get('/api/me/tasks', auth, async (req, res) => {
+  await sweepAutoConfirm();
+  const u = req.user;
+  const rows = await db.prepare(`SELECT * FROM bookings WHERE talent_id=? AND status NOT IN ('cancelled','completed') ORDER BY created_at DESC`).all(u.id);
+  const items = [];
+  for (const b of rows) {
+    items.push({ ...(await bookingView(b, u)), next_action: nextActionFor(b) });
+  }
+  items.sort((a, b2) => ((b2.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.created_at - b2.created_at));
+  const cap = u.daily_capacity || 0;
+  res.json({
+    available_today: !!u.available_today,
+    daily_capacity: cap,
+    active_count: rows.length,
+    capacity_left: cap > 0 ? Math.max(0, cap - rows.length) : null,
+    items,
+  });
+});
+
 /* ---------------- المتابعة: متابعة/إلغاء + ملخصي الاجتماعي ----------------
    المتابعة هي الاستثناء الوحيد المسموح على حساب المؤسس (عرض + متابعة فقط):
    زرها يظهر على بطاقته وملفه، وعدّاد متابِعيه يظهر عنده — بينما الحجز والمراسلة
@@ -862,6 +912,11 @@ app.get('/api/me/social', auth, async (req, res) => {
 /* ---------------- المراسلة الداخلية 1:1 (حسابات مسجلة فقط) ----------------
    المؤسس خارج المراسلة تماماً من الطرفين: لا رسائل إليه ولا منه عبر هذا المسار. */
 const MSG_MAX = 1000;
+/* رسائل ضيف غير مقروءة لحجوزات هذا المنفذ (محادثات عميل↔مقدم داخل المنصة). */
+async function guestUnreadForTalent(userId) {
+  return +(await db.prepare(`SELECT COUNT(*) c FROM guest_messages gm JOIN bookings b ON b.id=gm.booking_id
+    WHERE b.talent_id=? AND gm.sender='guest' AND gm.is_read=0`).get(userId)).c || 0;
+}
 app.get('/api/messages', auth, async (req, res) => {
   const me = req.user.id;
   const rows = await db.prepare(`SELECT *, CASE WHEN sender_id=? THEN recipient_id ELSE sender_id END AS other_id
@@ -882,7 +937,7 @@ app.get('/api/messages', auth, async (req, res) => {
       unread: c.unread,
     });
   }
-  res.json({ items, unread_total });
+  res.json({ items, unread_total, guest_unread_total: await guestUnreadForTalent(me) });
 });
 app.get('/api/messages/:userId', auth, async (req, res) => {
   const other = await getUser(+req.params.userId);
@@ -1141,6 +1196,7 @@ async function bookingView(b, viewer) {
   return {
     ...view,
     is_guest: !!b.guest_token,
+    urgent: !!b.urgent,
     fee, net, deposit: Math.round(net / 2 * 100) / 100, rest: Math.round(net / 2 * 100) / 100,
     client: b.client_id ? await publicUser(await getUser(b.client_id)) : null, talent: await publicUser(await getUser(b.talent_id)),
     my_review: myReview || null,
@@ -1187,7 +1243,7 @@ async function sweepAutoConfirm() {
 }
 
 app.post('/api/bookings', auth, async (req, res) => {
-  const { talent_id, title = '', price, source = 'direct', ref_id = null, deadline_days = 7 } = req.body || {};
+  const { talent_id, title = '', price, source = 'direct', ref_id = null, deadline_days = 7, urgent = 0 } = req.body || {};
   const talent = await getUser(+talent_id);
   if (!talent || !['creator', 'provider'].includes(talent.role)) return res.status(400).json({ error: 'المنفذ غير صحيح' });
   if (talent.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً' });
@@ -1195,9 +1251,9 @@ app.post('/api/bookings', auth, async (req, res) => {
   if (talent.penalty_level === 'suspended' || talent.frozen) return res.status(403).json({ error: 'هذا الحساب معلّق حالياً ولا يستقبل حجوزات' });
   const p = price != null ? +price : talent.price;
   if (!p || p <= 0) return res.status(400).json({ error: 'حدد سعراً صحيحاً' });
-  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,created_at) VALUES (?,?,?,?,?,?,?,?,?)`)
-    .run(req.user.id, talent.id, source, ref_id, title || `حجز مع ${talent.name}`, p, talent.currency, now() + deadline_days * 24 * 3600 * 1000, now());
-  await notify(talent.id, 'booking_new', `طلب حجز جديد #${info.lastInsertRowid} بقيمة ${p} ${talent.currency}`, `booking:${info.lastInsertRowid}`);
+  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, talent.id, source, ref_id, title || `حجز مع ${talent.name}`, p, talent.currency, now() + deadline_days * 24 * 3600 * 1000, urgent ? 1 : 0, now());
+  await notify(talent.id, 'booking_new', `طلب حجز جديد #${info.lastInsertRowid} بقيمة ${p} ${talent.currency}${urgent ? ' · 🔥 مستعجل — تنفيذ اليوم' : ''}`, `booking:${info.lastInsertRowid}`);
   res.json({ booking: await bookingView(await getBooking(info.lastInsertRowid), req.user) });
 });
 
@@ -1274,6 +1330,16 @@ async function applyConfirmReceipt(b) {
   }
   return { booking: await getBooking(b.id) };
 }
+
+/* علم «مستعجل — تنفيذ اليوم» على حجز قائم: من العميل المسجل صاحب الحجز فقط. */
+app.post('/api/bookings/:id/urgent', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b) return res.status(404).json({ error: 'غير موجود' });
+  if (b.client_id !== req.user.id) return res.status(403).json({ error: 'علم المستعجل من العميل صاحب الحجز فقط' });
+  if (['completed', 'cancelled'].includes(b.status)) return res.status(400).json({ error: 'الحجز انتهى' });
+  await db.prepare('UPDATE bookings SET urgent=? WHERE id=?').run((req.body || {}).urgent ? 1 : 0, b.id);
+  res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
+});
 
 app.post('/api/bookings/:id/agree', auth, async (req, res) => {
   const b = await getBooking(+req.params.id);
@@ -1388,20 +1454,20 @@ app.post('/api/bookings/:id/review', auth, async (req, res) => {
 
 /* ---------------- shop requests + opportunities ---------------- */
 app.post('/api/requests', auth, async (req, res) => {
-  const { title, niche = '', city = '', budget = 0, details = '' } = req.body || {};
+  const { title, niche = '', city = '', budget = 0, details = '', urgent = 0 } = req.body || {};
   if (!title) return res.status(400).json({ error: 'عنوان الطلب مطلوب' });
   // دولة الطلب وعملته من حساب الناشر نفسه (مشتقة من دولته) — لا من العميل.
-  const info = await db.prepare('INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,country,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
-    .run(req.user.id, title, niche, city || req.user.city, budget, req.user.currency || 'EGP', details, req.user.country || 'EG', now());
+  const info = await db.prepare('INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,country,urgent,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run(req.user.id, title, niche, city || req.user.city, budget, req.user.currency || 'EGP', details, req.user.country || 'EG', urgent ? 1 : 0, now());
   res.json({ id: info.lastInsertRowid });
 });
 app.get('/api/requests', async (req, res) => {
   // رقم واتساب الضيف يظهر للمسجلين فقط — الزائر العام لا يراه أبداً
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   const s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
-  const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, r.country, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' AND r.target_talent_id IS NULL ORDER BY r.created_at DESC`).all();
+  const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, r.country, r.urgent, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' AND r.target_talent_id IS NULL ORDER BY r.urgent DESC, r.created_at DESC`).all();
   const items = rows.map(r => {
-    const it = { ...r, is_guest: !!r.is_guest };
+    const it = { ...r, is_guest: !!r.is_guest, urgent: !!r.urgent };
     if (!s) delete it.guest_phone;
     return it;
   });
@@ -1433,9 +1499,10 @@ app.get('/api/opportunities', auth, async (req, res) => {
       .map(c => ({ kind: 'campaign', ...c, ...matchScore(req.user, c) }))
     : [];
   // مقدم الخدمة يرى في «فرص ليك» ما وُجّه إليه فقط؛ الصانع يرى كل ما يطابقه كالمعتاد.
+  // «مستعجل — تنفيذ اليوم» أولوية عرض صريحة: يتصدّر القائمة قبل فرز المطابقة.
   const items = [...reqs, ...camps]
     .filter(x => req.user.role === 'provider' ? x.targeted : x.score > 0)
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || b.score - a.score);
   // باقة نجم Deal — «ترشيح أول» داخل فرص المشترك نفسه: المطابقات القوية (80%+)
   // تُعلَّم كترشيحات أولى ذهبية للمشترك النشط فقط، والفرز بالمطابقة كما هو.
   if (await isStar(req.user.id)) {
@@ -1452,8 +1519,31 @@ const GUEST_OPEN_LIMIT = 3; // أقصى طلبات ضيف مفتوحة لنفس 
 // تحقق/تطبيع هاتف الضيف يتم عبر normalizePhoneForCountry بقاعدة دولة الضيف
 // (مصر بصيغتها المحلية القائمة، وغيرها دولياً) — انظر قسم الدول أعلاه.
 
+/* رسالتا حصر قناة الضيف (قرار المالك): القناة للعملاء من غير حسابات فقط —
+   لا عضو مسجّل يستخدمها برقمه، ولا تعمل أصلاً أثناء جلسة عضو قائمة. */
+const GUEST_MEMBER_NUMBER_ERR = 'الرقم ده مسجل كعضو — ادخل بحسابك واطلب من جوه · This number is registered as a member — log in and order from your account';
+const GUEST_SESSION_ERR = 'أنت مسجل الدخول بحساب عضو — قناة الضيف للعملاء من غير حسابات فقط، اطلب من داخل حسابك · You are logged in as a member — the guest channel is for clients without accounts; please order from your account';
+/* هل الرقم (بأي صيغة كتابة في أي دولة مدعومة) يخص عضواً مسجلاً؟ المقارنة
+   بالقيم القانونية المخزّنة في contact وphone معاً بعد تطبيع المدخل بقاعدة
+   كل دولة — فلا يفلت عضو بصيغة بديلة (+/00/محلي/وطني مجرد) لنفس الرقم. */
+async function guestNumberIsMember(rawPhone) {
+  const candidates = new Set();
+  for (const c of COUNTRIES) {
+    const n = normalizePhoneForCountry(rawPhone, c.code);
+    if (n) candidates.add(n);
+  }
+  if (!candidates.size) return false;
+  const list = [...candidates];
+  const ph = list.map(() => '?').join(',');
+  const hit = await db.prepare(`SELECT id FROM users WHERE contact IN (${ph}) OR phone IN (${ph}) LIMIT 1`).get(...list, ...list);
+  return !!hit;
+}
+
 app.post('/api/guest-requests', async (req, res) => {
   const { business_name, phone, city, niche, budget, details = '', title, target_talent_id } = req.body || {};
+  // جلسة عضو قائمة = القناة مغلقة لهذا الطلب أصلاً (الرفض على الخادم، والواجهة
+  // تعطّل النموذج للمسجلين أيضاً) — التصفح العام وحده يبقى مفتوحاً للجميع.
+  if (await optionalViewer(req)) return res.status(403).json({ error: GUEST_SESSION_ERR });
   if (!business_name || !String(business_name).trim()) return res.status(400).json({ error: 'اسم النشاط مطلوب' });
   // دولة العميل الضيف (افتراضي مصر): الرقم يُتحقق ويُطبَّع بقاعدة دولته،
   // ويُحفظ بصيغته القانونية (مصر محلياً، وغيرها دولياً كاملاً +dial) فتظهر
@@ -1462,6 +1552,8 @@ app.post('/api/guest-requests', async (req, res) => {
   if (!guestCountry) return res.status(400).json({ error: 'دولة غير مدعومة حالياً' });
   const ph = normalizePhoneForCountry(phone, guestCountry.code);
   if (!ph) return res.status(400).json({ error: phoneErrorFor(guestCountry) });
+  // رقم عضو مسجل (بكل صيغ دولته) لا يدخل قناة الضيف — صاحبه يطلب من حسابه.
+  if (await guestNumberIsMember(phone)) return res.status(400).json({ error: GUEST_MEMBER_NUMBER_ERR });
   if (!city || !String(city).trim()) return res.status(400).json({ error: 'المدينة مطلوبة' });
   if (!niche || !String(niche).trim()) return res.status(400).json({ error: 'نوع الإعلان / المجال مطلوب' });
   if (budget == null || budget === '' || !isFinite(+budget) || +budget < 0) return res.status(400).json({ error: 'ميزانية تقريبية صحيحة مطلوبة' });
@@ -1481,11 +1573,12 @@ app.post('/api/guest-requests', async (req, res) => {
   const openCount = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE is_guest=1 AND guest_phone=? AND status='open'`).get(ph)).c;
   if (openCount >= GUEST_OPEN_LIMIT) return res.status(429).json({ error: 'عندك طلبات مفتوحة كتير بنفس الرقم — استنى لما طلب يتقفل الأول' });
   const token = rnd(24);
-  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_token,target_talent_id,country,created_at) VALUES (NULL,?,?,?,?,?,?,'open',1,?,?,?,?,?,?)`)
-    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, guestCountry.currency, details, String(business_name).trim(), ph, token, targetId, guestCountry.code, now());
+  const urgent = (req.body || {}).urgent ? 1 : 0;
+  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_token,target_talent_id,country,urgent,created_at) VALUES (NULL,?,?,?,?,?,?,'open',1,?,?,?,?,?,?,?)`)
+    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, guestCountry.currency, details, String(business_name).trim(), ph, token, targetId, guestCountry.code, urgent, now());
   if (targetId) {
     await notify(targetId, 'guest_targeted',
-      `🎯 طلب موجّه ليك مباشرة من عميل «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget} — افتح «فرص ليك» لتحويله لحجز بضمان Deal`,
+      `🎯 طلب موجّه ليك مباشرة من عميل «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget}${urgent ? ' · 🔥 مستعجل — تنفيذ اليوم' : ''} — افتح «فرص ليك» لتحويله لحجز بضمان Deal`,
       `request:${info.lastInsertRowid}`);
   }
   res.json({ id: info.lastInsertRowid, token, follow: `/#/g/${token}` });
@@ -1513,9 +1606,9 @@ app.post('/api/guest-requests/:id/book', auth, async (req, res) => {
     const p = price != null ? +price : (rq.budget || req.user.price);
     if (!p || p <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'حدد سعراً صحيحاً' }); }
     const ins = await client.query(
-      `INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,created_at)
-       VALUES (NULL,$1,'guest_request',$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-      [req.user.id, rq.id, rq.title, p, rq.currency, now() + deadline_days * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, now()]);
+      `INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,urgent,created_at)
+       VALUES (NULL,$1,'guest_request',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+      [req.user.id, rq.id, rq.title, p, rq.currency, now() + deadline_days * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, rq.urgent ? 1 : 0, now()]);
     bookingId = ins.rows[0].id;
     guestToken = rq.guest_token;
     await client.query(`UPDATE shop_requests SET status='booked' WHERE id=$1`, [rq.id]);
@@ -1546,6 +1639,8 @@ async function guestBookingView(b) {
     fee, net, deposit: half, rest: half,
     proof_url: b.proof_url, proof_check: b.proof_check, proof_at: b.proof_at || 0, created_at: b.created_at,
     receipt_confirmed_at: b.receipt_confirmed_at || 0, receipt_auto: !!b.receipt_auto,
+    urgent: !!b.urgent,
+    chat_unread: (await db.prepare(`SELECT COUNT(*) c FROM guest_messages WHERE booking_id=? AND sender='talent' AND is_read=0`).get(b.id)).c,
     escrow_status: b.escrow_status || '', escrow_released_ref: b.escrow_released_ref || '',
     escrow_released_at: b.escrow_released_at || 0, escrow_release_seen: b.escrow_release_seen || '',
     has_dispute: !!(await db.prepare('SELECT id FROM disputes WHERE booking_id=? LIMIT 1').get(b.id)),
@@ -1637,6 +1732,84 @@ app.post('/api/guest/:token/review', async (req, res) => {
   await applyPenalties(b.talent_id);
   await syncBadges(b.talent_id);
   res.json({ ok: true });
+});
+
+/* ---------------- محادثة عميل ضيف ↔ مقدم الخدمة (داخل المنصة) ----------------
+   محادثة واحدة لكل حجز ضيف، مربوطة بالحجز نفسه وموثقة في سجلاته (تظهر في
+   حزمة أدلة أي نزاع عليه). العميل طرفه رمز متابعته (بلا حساب)، والمقدم طرفه
+   حسابه من قسم «الرسائل». المؤسس خارجها تماماً: لا حجز له أصلاً، وأي محاولة
+   إشراكه (طرفاً أو مرسِلاً في حجز غيره) تُرفض. */
+async function guestChatItems(bookingId) {
+  const rows = await db.prepare('SELECT * FROM guest_messages WHERE booking_id=? ORDER BY created_at ASC, id ASC LIMIT 500').all(bookingId);
+  return rows.map((m) => ({ id: m.id, sender: m.sender, body: m.body, created_at: m.created_at, is_read: !!m.is_read }));
+}
+function guestChatBody(req) {
+  const body = String((req.body || {}).body || '').trim();
+  if (!body) return { error: 'اكتب رسالة أولاً' };
+  if (body.length > MSG_MAX) return { error: `الرسالة أطول من الحد الأقصى (${MSG_MAX} حرف)` };
+  return { body };
+}
+
+/* طرف العميل: يقرأ (فتح الصفحة يعلّم ردود المنفذ مقروءة) ويكتب من صفحة رمزه. */
+app.get('/api/guest/:token/messages', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  await db.prepare(`UPDATE guest_messages SET is_read=1 WHERE booking_id=? AND sender='talent' AND is_read=0`).run(b.id);
+  const talent = await getUser(b.talent_id);
+  res.json({ items: await guestChatItems(b.id), talent: talent ? { id: talent.id, name: talent.name } : null, booking_id: b.id });
+});
+app.post('/api/guest/:token/messages', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  const v = guestChatBody(req);
+  if (v.error) return res.status(400).json({ error: v.error });
+  const ts = now();
+  const info = await db.prepare(`INSERT INTO guest_messages (booking_id,sender,body,created_at) VALUES (?,'guest',?,?)`).run(b.id, v.body, ts);
+  await notify(b.talent_id, 'guest_message', `💬 رسالة جديدة من عميل حجز #${b.id} جوه المنصة — افتح الحجز للرد`, `booking:${b.id}`);
+  res.json({ ok: true, message: { id: info.lastInsertRowid, sender: 'guest', body: v.body, created_at: ts } });
+});
+/* علم «مستعجل — تنفيذ اليوم» من صفحة متابعة الضيف على حجزه. */
+app.post('/api/guest/:token/urgent', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  if (['completed', 'cancelled'].includes(b.status)) return res.status(400).json({ error: 'الحجز انتهى' });
+  await db.prepare('UPDATE bookings SET urgent=? WHERE id=?').run((req.body || {}).urgent ? 1 : 0, b.id);
+  res.json({ booking: await guestBookingView(await getBooking(b.id)) });
+});
+
+/* طرف المقدم (وكل طرف مسجل في الحجز): قائمة محادثات الضيوف لحجوزاته. */
+app.get('/api/guest-conversations', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.json({ items: [], unread_total: 0 });
+  const rows = await db.prepare(`SELECT * FROM (SELECT b.id, b.title, b.guest_name, b.status, b.urgent, b.created_at,
+      (SELECT COUNT(*) FROM guest_messages gm WHERE gm.booking_id=b.id AND gm.sender='guest' AND gm.is_read=0) AS unread,
+      (SELECT gm2.body FROM guest_messages gm2 WHERE gm2.booking_id=b.id ORDER BY gm2.created_at DESC, gm2.id DESC LIMIT 1) AS last_body,
+      (SELECT gm3.created_at FROM guest_messages gm3 WHERE gm3.booking_id=b.id ORDER BY gm3.created_at DESC, gm3.id DESC LIMIT 1) AS last_at,
+      (SELECT gm4.sender FROM guest_messages gm4 WHERE gm4.booking_id=b.id ORDER BY gm4.created_at DESC, gm4.id DESC LIMIT 1) AS last_sender
+    FROM bookings b WHERE b.talent_id=? AND b.guest_token<>'') s ORDER BY COALESCE(s.last_at, s.created_at) DESC`).all(req.user.id);
+  let unread_total = 0;
+  const items = rows.map((x) => { const un = +(x.unread || 0); unread_total += un; return { booking_id: x.id, title: x.title, guest_name: x.guest_name || '', status: x.status, urgent: !!x.urgent, unread: un, last: x.last_body ? { body: x.last_body, created_at: x.last_at, sender: x.last_sender } : null }; });
+  res.json({ items, unread_total });
+});
+/* قراءة/كتابة المقدم داخل محادثة حجز ضيف — فتحها يعلّم رسائل العميل مقروءة. */
+app.get('/api/bookings/:id/guest-messages', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b || !b.guest_token) return res.status(404).json({ error: 'غير موجود' });
+  if (b.talent_id !== req.user.id && !req.user.is_platform_founder) return res.status(403).json({ error: 'لست طرفاً في الحجز' });
+  if (b.talent_id === req.user.id) {
+    await db.prepare(`UPDATE guest_messages SET is_read=1 WHERE booking_id=? AND sender='guest' AND is_read=0`).run(b.id);
+  }
+  res.json({ items: await guestChatItems(b.id), booking_id: b.id, guest_name: b.guest_name || '', guest_phone: b.talent_id === req.user.id ? (b.guest_phone || '') : '' });
+});
+app.post('/api/bookings/:id/guest-messages', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b || !b.guest_token) return res.status(404).json({ error: 'غير موجود' });
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس خارج المراسلة — عرضه ومتابعته فقط' });
+  if (b.talent_id !== req.user.id) return res.status(403).json({ error: 'الرد من مقدم الخدمة صاحب الحجز فقط' });
+  const v = guestChatBody(req);
+  if (v.error) return res.status(400).json({ error: v.error });
+  const ts = now();
+  const info = await db.prepare(`INSERT INTO guest_messages (booking_id,sender,body,created_at) VALUES (?,'talent',?,?)`).run(b.id, v.body, ts);
+  res.json({ ok: true, message: { id: info.lastInsertRowid, sender: 'talent', body: v.body, created_at: ts } });
 });
 
 /* ---------------- campaigns ---------------- */
@@ -1882,7 +2055,8 @@ app.get('/api/me/overview', auth, async (req, res) => {
     opportunities = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE status='open' AND target_talent_id=?`).get(u.id)).c;
   }
   const active_bookings = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE (client_id=? OR talent_id=?) AND status NOT IN ('completed','cancelled')`).get(u.id, u.id)).c;
-  const unread_messages = (await db.prepare('SELECT COUNT(*) c FROM messages WHERE recipient_id=? AND is_read=0').get(u.id)).c;
+  const unread_messages = (await db.prepare('SELECT COUNT(*) c FROM messages WHERE recipient_id=? AND is_read=0').get(u.id)).c
+    + await guestUnreadForTalent(u.id);
   res.json({
     opportunities,
     active_bookings,

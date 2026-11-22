@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE TABLE IF NOT EXISTS shop_requests (
   id SERIAL PRIMARY KEY,
-  shop_user_id INTEGER NOT NULL,
+  shop_user_id INTEGER,
   title TEXT NOT NULL,
   niche TEXT DEFAULT '',
   city TEXT DEFAULT '',
@@ -93,6 +93,10 @@ CREATE TABLE IF NOT EXISTS shop_requests (
   currency TEXT DEFAULT 'EGP',
   details TEXT DEFAULT '',
   status TEXT DEFAULT 'open',
+  is_guest INTEGER DEFAULT 0,
+  guest_name TEXT DEFAULT '',
+  guest_phone TEXT DEFAULT '',
+  guest_token TEXT DEFAULT '',
   created_at BIGINT NOT NULL
 );
 
@@ -122,8 +126,11 @@ CREATE TABLE IF NOT EXISTS campaign_applications (
 
 CREATE TABLE IF NOT EXISTS bookings (
   id SERIAL PRIMARY KEY,
-  client_id INTEGER NOT NULL,
+  client_id INTEGER,
   talent_id INTEGER NOT NULL,
+  guest_name TEXT DEFAULT '',
+  guest_phone TEXT DEFAULT '',
+  guest_token TEXT DEFAULT '',
   source TEXT DEFAULT 'direct',
   ref_id INTEGER DEFAULT NULL,
   title TEXT DEFAULT '',
@@ -168,8 +175,8 @@ CREATE TABLE IF NOT EXISTS disputes (
 CREATE TABLE IF NOT EXISTS reviews (
   id SERIAL PRIMARY KEY,
   booking_id INTEGER NOT NULL,
-  reviewer_id INTEGER NOT NULL,
-  reviewee_id INTEGER NOT NULL,
+  reviewer_id INTEGER,
+  reviewee_id INTEGER,
   sentiment TEXT NOT NULL CHECK(sentiment IN ('positive','negative')),
   stars INTEGER DEFAULT 5,
   comment TEXT DEFAULT '',
@@ -202,11 +209,32 @@ CREATE TABLE IF NOT EXISTS badge_state (
 );
 `;
 
+/* ترحيلات «طلب العميل كضيف»: آمنة للتكرار على قواعد قائمة (إنتاج Supabase)
+   وعلى قواعد جديدة على حد سواء — كل عبارة idempotent. */
+const MIGRATIONS_SQL = `
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS is_guest INTEGER DEFAULT 0;
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_name TEXT DEFAULT '';
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_phone TEXT DEFAULT '';
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_token TEXT DEFAULT '';
+ALTER TABLE shop_requests ALTER COLUMN shop_user_id DROP NOT NULL;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_name TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_phone TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_token TEXT DEFAULT '';
+ALTER TABLE bookings ALTER COLUMN client_id DROP NOT NULL;
+ALTER TABLE reviews ALTER COLUMN reviewer_id DROP NOT NULL;
+ALTER TABLE reviews ALTER COLUMN reviewee_id DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shop_requests_guest_token ON shop_requests(guest_token) WHERE guest_token<>'';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_guest_token ON bookings(guest_token) WHERE guest_token<>'';
+`;
+
 /* إنشاء الجداول مرة واحدة عند أول تشغيل (آمن للتكرار: IF NOT EXISTS). */
 let readyPromise = null;
 function init() {
   if (!readyPromise) {
-    readyPromise = pool.query(SCHEMA_SQL).then(() => undefined);
+    readyPromise = (async () => {
+      await pool.query(SCHEMA_SQL);
+      await pool.query(MIGRATIONS_SQL);
+    })();
   }
   return readyPromise;
 }

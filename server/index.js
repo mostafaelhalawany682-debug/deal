@@ -29,6 +29,7 @@ const rnd = (n) => crypto.randomBytes(n).toString('hex');
 
 /* ---------------- helpers ---------------- */
 async function notify(userId, type, text, ref = '') {
+  if (!userId) return; // طرف ضيف (بلا حساب) — لا إشعارات داخلية له
   await db.prepare('INSERT INTO notifications (user_id,type,text,ref,created_at) VALUES (?,?,?,?,?)')
     .run(userId, type, text, ref, now());
 }
@@ -102,6 +103,7 @@ async function computeBadges(userId) {
   return BADGE_DEFS.map(d => ({ ...d, ...defs[d.key] }));
 }
 async function syncBadges(userId) {
+  if (!userId || !(await getUser(userId))) return; // ضيف بلا حساب — لا شارات
   const badges = await computeBadges(userId);
   for (const b of badges) {
     const row = await db.prepare('SELECT earned FROM badge_state WHERE user_id=? AND badge_key=?').get(userId, b.key);
@@ -115,6 +117,7 @@ async function syncBadges(userId) {
 
 /* ---------------- penalties (automatic, graduated) ---------------- */
 async function applyPenalties(userId) {
+  if (!userId || !(await getUser(userId))) return; // ضيف بلا حساب — لا عقوبات
   const neg = (await db.prepare(`SELECT COUNT(*) c FROM reviews WHERE reviewee_id=? AND sentiment='negative'`).get(userId)).c;
   const u = await getUser(userId);
   let level = 'none';
@@ -208,7 +211,7 @@ app.get('/api/talent/:id', async (req, res) => {
   const s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
   const viewerId = s ? s.user_id : null;
   if (viewerId !== u.id) await db.prepare('INSERT INTO profile_views (talent_id,viewer_id,created_at) VALUES (?,?,?)').run(u.id, viewerId, now());
-  const reviews = await db.prepare(`SELECT r.*, u2.name reviewer_name FROM reviews r JOIN users u2 ON u2.id=r.reviewer_id WHERE r.reviewee_id=? ORDER BY r.created_at DESC LIMIT 10`).all(u.id);
+  const reviews = await db.prepare(`SELECT r.*, COALESCE(u2.name, 'عميل') reviewer_name FROM reviews r LEFT JOIN users u2 ON u2.id=r.reviewer_id WHERE r.reviewee_id=? ORDER BY r.created_at DESC LIMIT 10`).all(u.id);
   res.json({ user: await publicUser(u), stats: await talentStats(u.id), badges: await computeBadges(u.id), reviews });
 });
 
@@ -260,10 +263,15 @@ async function bookingView(b, viewer) {
   const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
   const net = b.price - fee;
   const myReview = viewer ? await db.prepare('SELECT * FROM reviews WHERE booking_id=? AND reviewer_id=?').get(b.id, viewer.id) : null;
+  const view = { ...b };
+  delete view.guest_token; // رمز وصول الضيف لا يخرج في أي رد أبداً
+  // رقم واتساب الضيف يظهر للمنفّذ المسجّل فقط (للتواصل)، ولا يظهر لأي شخص آخر
+  if (!(viewer && viewer.id === b.talent_id)) delete view.guest_phone;
   return {
-    ...b,
+    ...view,
+    is_guest: !!b.guest_token,
     fee, net, deposit: Math.round(net / 2 * 100) / 100, rest: Math.round(net / 2 * 100) / 100,
-    client: await publicUser(await getUser(b.client_id)), talent: await publicUser(await getUser(b.talent_id)),
+    client: b.client_id ? await publicUser(await getUser(b.client_id)) : null, talent: await publicUser(await getUser(b.talent_id)),
     my_review: myReview || null,
     can_review: b.status === 'completed' && viewer && !myReview && (viewer.id === b.client_id || viewer.id === b.talent_id),
     alternatives: b.status === 'disputed' ? await verifiedAlternatives(b) : [],
@@ -311,20 +319,61 @@ app.get('/api/bookings/:id', auth, async (req, res) => {
   res.json({ booking: await bookingView(b, req.user) });
 });
 
-app.post('/api/bookings/:id/agree', auth, async (req, res) => {
-  let b = await getBooking(+req.params.id);
-  if (!b) return res.status(404).json({ error: 'غير موجود' });
-  if (b.status !== 'pending_agreement') return res.status(400).json({ error: 'الحجز تجاوز مرحلة الاتفاق' });
-  if (req.user.id === b.client_id) await db.prepare('UPDATE bookings SET agreed_client=1 WHERE id=?').run(b.id);
-  else if (req.user.id === b.talent_id) await db.prepare('UPDATE bookings SET agreed_talent=1 WHERE id=?').run(b.id);
-  else return res.status(403).json({ error: 'لست طرفاً في الحجز' });
-  b = await getBooking(b.id);
-  if (b.agreed_client && b.agreed_talent) {
+/* إجراءات طرف العميل في آلة حالات الحجز — مشتركة بين العميل المسجل وعميل الضيف
+   (صفحة الرمز) حتى لا تتكرر آلة الحالات. كل دالة تعيد {error} أو {booking}. */
+async function applyAgree(b, side) {
+  if (b.status !== 'pending_agreement') return { error: 'الحجز تجاوز مرحلة الاتفاق' };
+  if (side === 'client') await db.prepare('UPDATE bookings SET agreed_client=1 WHERE id=?').run(b.id);
+  else await db.prepare('UPDATE bookings SET agreed_talent=1 WHERE id=?').run(b.id);
+  let nb = await getBooking(b.id);
+  if (nb.agreed_client && nb.agreed_talent) {
     await db.prepare(`UPDATE bookings SET status='awaiting_fee' WHERE id=?`).run(b.id);
-    await notify(b.client_id, 'booking', `حجز #${b.id}: اتفق الطرفان — خطوة العمولة أولاً`, `booking:${b.id}`);
-    await notify(b.talent_id, 'booking', `حجز #${b.id}: اتفق الطرفان — في انتظار تأكيد عمولة Deal`, `booking:${b.id}`);
+    await notify(nb.client_id, 'booking', `حجز #${b.id}: اتفق الطرفان — خطوة العمولة أولاً`, `booking:${b.id}`);
+    await notify(nb.talent_id, 'booking', `حجز #${b.id}: اتفق الطرفان — في انتظار تأكيد عمولة Deal`, `booking:${b.id}`);
+    nb = await getBooking(b.id);
   }
-  res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
+  return { booking: nb };
+}
+
+async function applyClientPayment(b, kind, ref) {
+  const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
+  const net = b.price - fee, half = Math.round(net / 2 * 100) / 100;
+  if (kind === 'fee') {
+    if (b.status !== 'awaiting_fee') return { error: 'خطوة العمولة ليست مفتوحة' };
+    await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)').run(b.id, 'fee', fee, ref, 'confirmed', now());
+    await db.prepare(`UPDATE bookings SET fee_status='confirmed', fee_ref=?, fee_confirmed_at=?, status='awaiting_deposit' WHERE id=?`).run(ref, now(), b.id);
+    await notify(b.talent_id, 'booking', `حجز #${b.id}: تأكدت عمولة Deal — العربون اتفتح`, `booking:${b.id}`);
+  } else if (kind === 'deposit') {
+    if (b.status !== 'awaiting_deposit') return { error: 'العربون غير مفتوح الآن' };
+    await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)').run(b.id, 'deposit', half, ref, 'confirmed', now());
+    await db.prepare(`UPDATE bookings SET status='in_progress' WHERE id=?`).run(b.id);
+    await notify(b.talent_id, 'booking', `حجز #${b.id}: وصلك العربون ${half} — ابدأ التنفيذ`, `booking:${b.id}`);
+  } else if (kind === 'rest') {
+    if (b.status !== 'awaiting_rest') return { error: 'الباقي غير مفتوح الآن' };
+    await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)').run(b.id, 'rest', half, ref, 'confirmed', now());
+    await db.prepare(`UPDATE bookings SET status='completed', completed_at=? WHERE id=?`).run(now(), b.id);
+    await notify(b.talent_id, 'booking', `حجز #${b.id}: اكتمل القبض — قيّم تجربتك`, `booking:${b.id}`);
+    await notify(b.client_id, 'booking', `حجز #${b.id}: اكتمل — قيّم المنفذ`, `booking:${b.id}`);
+    await syncBadges(b.talent_id);
+  } else return { error: 'نوع دفعة غير صحيح' };
+  return { booking: await getBooking(b.id) };
+}
+
+async function applyConfirmReceipt(b) {
+  if (b.status !== 'proof_submitted') return { error: 'لا يوجد إثبات بانتظار التأكيد' };
+  await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
+  await notify(b.talent_id, 'booking', `حجز #${b.id}: العميل أكد الاستلام — الباقي اتفتح`, `booking:${b.id}`);
+  return { booking: await getBooking(b.id) };
+}
+
+app.post('/api/bookings/:id/agree', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b) return res.status(404).json({ error: 'غير موجود' });
+  const side = req.user.id === b.client_id ? 'client' : req.user.id === b.talent_id ? 'talent' : null;
+  if (!side) return res.status(403).json({ error: 'لست طرفاً في الحجز' });
+  const r = await applyAgree(b, side);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ booking: await bookingView(r.booking, req.user) });
 });
 
 /** Commission number: ONLY to the paying client, ONLY at the fee step of a confirmed booking. */
@@ -337,31 +386,12 @@ app.get('/api/bookings/:id/fee-info', auth, async (req, res) => {
 
 app.post('/api/bookings/:id/pay', auth, async (req, res) => {
   const { kind, ref } = req.body || {};
-  let b = await getBooking(+req.params.id);
+  const b = await getBooking(+req.params.id);
   if (!b || b.client_id !== req.user.id) return res.status(403).json({ error: 'الدفع من العميل فقط' });
   if (!ref) return res.status(400).json({ error: 'مرجع العملية مطلوب' });
-  const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
-  const net = b.price - fee, half = Math.round(net / 2 * 100) / 100;
-
-  if (kind === 'fee') {
-    if (b.status !== 'awaiting_fee') return res.status(400).json({ error: 'خطوة العمولة ليست مفتوحة' });
-    await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)').run(b.id, 'fee', fee, ref, 'confirmed', now());
-    await db.prepare(`UPDATE bookings SET fee_status='confirmed', fee_ref=?, fee_confirmed_at=?, status='awaiting_deposit' WHERE id=?`).run(ref, now(), b.id);
-    await notify(b.talent_id, 'booking', `حجز #${b.id}: تأكدت عمولة Deal — العربون اتفتح`, `booking:${b.id}`);
-  } else if (kind === 'deposit') {
-    if (b.status !== 'awaiting_deposit') return res.status(400).json({ error: 'العربون غير مفتوح الآن' });
-    await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)').run(b.id, 'deposit', half, ref, 'confirmed', now());
-    await db.prepare(`UPDATE bookings SET status='in_progress' WHERE id=?`).run(b.id);
-    await notify(b.talent_id, 'booking', `حجز #${b.id}: وصلك العربون ${half} — ابدأ التنفيذ`, `booking:${b.id}`);
-  } else if (kind === 'rest') {
-    if (b.status !== 'awaiting_rest') return res.status(400).json({ error: 'الباقي غير مفتوح الآن' });
-    await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)').run(b.id, 'rest', half, ref, 'confirmed', now());
-    await db.prepare(`UPDATE bookings SET status='completed', completed_at=? WHERE id=?`).run(now(), b.id);
-    await notify(b.talent_id, 'booking', `حجز #${b.id}: اكتمل القبض — قيّم تجربتك`, `booking:${b.id}`);
-    await notify(b.client_id, 'booking', `حجز #${b.id}: اكتمل — قيّم المنفذ`, `booking:${b.id}`);
-    await syncBadges(b.talent_id);
-  } else return res.status(400).json({ error: 'نوع دفعة غير صحيح' });
-  res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
+  const r = await applyClientPayment(b, kind, ref);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ booking: await bookingView(r.booking, req.user) });
 });
 
 app.post('/api/bookings/:id/proof', auth, async (req, res) => {
@@ -384,10 +414,9 @@ app.post('/api/bookings/:id/proof', auth, async (req, res) => {
 app.post('/api/bookings/:id/confirm-receipt', auth, async (req, res) => {
   const b = await getBooking(+req.params.id);
   if (!b || b.client_id !== req.user.id) return res.status(403).json({ error: 'التأكيد من العميل فقط' });
-  if (b.status !== 'proof_submitted') return res.status(400).json({ error: 'لا يوجد إثبات بانتظار التأكيد' });
-  await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
-  await notify(b.talent_id, 'booking', `حجز #${b.id}: العميل أكد الاستلام — الباقي اتفتح`, `booking:${b.id}`);
-  res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
+  const r = await applyConfirmReceipt(b);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ booking: await bookingView(r.booking, req.user) });
 });
 
 app.post('/api/bookings/:id/dispute', auth, async (req, res) => {
@@ -429,8 +458,16 @@ app.post('/api/requests', auth, async (req, res) => {
   res.json({ id: info.lastInsertRowid });
 });
 app.get('/api/requests', async (req, res) => {
-  const rows = await db.prepare(`SELECT r.*, u.name shop_name FROM shop_requests r JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' ORDER BY r.created_at DESC`).all();
-  res.json({ items: rows });
+  // رقم واتساب الضيف يظهر للمسجلين فقط — الزائر العام لا يراه أبداً
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  const s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
+  const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' ORDER BY r.created_at DESC`).all();
+  const items = rows.map(r => {
+    const it = { ...r, is_guest: !!r.is_guest };
+    if (!s) delete it.guest_phone;
+    return it;
+  });
+  res.json({ items });
 });
 
 function matchScore(creator, item) {
@@ -444,11 +481,135 @@ function matchScore(creator, item) {
 app.get('/api/opportunities', auth, async (req, res) => {
   if (req.user.role !== 'creator') return res.json({ items: [] });
   const reqs = (await db.prepare(`SELECT * FROM shop_requests WHERE status='open'`).all())
-    .map(r => ({ kind: 'request', ...r, ...matchScore(req.user, r) }));
+    .map(r => { const { guest_token, ...rest } = r; return { kind: 'request', ...rest, is_guest: !!r.is_guest, ...matchScore(req.user, r) }; });
   const camps = (await db.prepare(`SELECT * FROM campaigns WHERE status='open'`).all())
     .map(c => ({ kind: 'campaign', ...c, ...matchScore(req.user, c) }));
   const items = [...reqs, ...camps].filter(x => x.score > 0).sort((a, b) => b.score - a.score);
   res.json({ items });
+});
+
+/* ---------------- guest client requests (طلب عميل بدون تسجيل) ----------------
+   العميل (محل/براند) ينشر طلبه كضيف: بلا حساب وبلا كلمة سر. هويته في المتابعة
+   هي رمز وصول عشوائي طويل (token) يُحفظ على الطلب ثم على الحجز عند التحويل،
+   وخطواته في الحجز تتم من صفحة الرمز بنفس آلة الحالات المشتركة أعلاه. */
+const GUEST_OPEN_LIMIT = 3; // أقصى طلبات ضيف مفتوحة لنفس الرقم — حد خفيف ضد الإغراق
+const EG_MOBILE = /^01[0125][0-9]{8}$/;
+function normEgPhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('0020')) d = d.slice(4);
+  else if (d.startsWith('20') && d.length === 12) d = d.slice(2);
+  if (d.length === 10 && d.startsWith('1')) d = '0' + d;
+  return EG_MOBILE.test(d) ? d : null;
+}
+
+app.post('/api/guest-requests', async (req, res) => {
+  const { business_name, phone, city, niche, budget, details = '', title } = req.body || {};
+  if (!business_name || !String(business_name).trim()) return res.status(400).json({ error: 'اسم النشاط مطلوب' });
+  const ph = normEgPhone(phone);
+  if (!ph) return res.status(400).json({ error: 'رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)' });
+  if (!city || !String(city).trim()) return res.status(400).json({ error: 'المدينة مطلوبة' });
+  if (!niche || !String(niche).trim()) return res.status(400).json({ error: 'نوع الإعلان / المجال مطلوب' });
+  if (budget == null || budget === '' || !isFinite(+budget) || +budget < 0) return res.status(400).json({ error: 'ميزانية تقريبية صحيحة مطلوبة' });
+  if (!details || !String(details).trim()) return res.status(400).json({ error: 'اوصف الشغلانة المطلوبة' });
+  const openCount = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE is_guest=1 AND guest_phone=? AND status='open'`).get(ph)).c;
+  if (openCount >= GUEST_OPEN_LIMIT) return res.status(429).json({ error: 'عندك طلبات مفتوحة كتير بنفس الرقم — استنى لما طلب يتقفل الأول' });
+  const token = rnd(24);
+  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_token,created_at) VALUES (NULL,?,?,?,?,'EGP',?,'open',1,?,?,?,?)`)
+    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, details, String(business_name).trim(), ph, token, now());
+  res.json({ id: info.lastInsertRowid, token, follow: `/#/g/${token}` });
+});
+
+/* صانع مسجل يحوّل طلب الضيف إلى حجز رسمي بنفس آلة الحالات — العميل طرفه الضيف. */
+app.post('/api/guest-requests/:id/book', auth, async (req, res) => {
+  if (!['creator', 'provider'].includes(req.user.role)) return res.status(400).json({ error: 'تحويل الطلبات للصناع ومقدمي الخدمة فقط' });
+  const rq = await db.prepare('SELECT * FROM shop_requests WHERE id=? AND is_guest=1').get(+req.params.id);
+  if (!rq) return res.status(404).json({ error: 'طلب ضيف غير موجود' });
+  if (rq.status !== 'open') return res.status(400).json({ error: 'هذا الطلب اتحجز خلاص' });
+  if (req.user.penalty_level === 'suspended' || req.user.frozen) return res.status(403).json({ error: 'حسابك معلّق حالياً ولا يستقبل حجوزات' });
+  const { price, deadline_days = 7 } = req.body || {};
+  const p = price != null ? +price : (rq.budget || req.user.price);
+  if (!p || p <= 0) return res.status(400).json({ error: 'حدد سعراً صحيحاً' });
+  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,created_at) VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, 'guest_request', rq.id, rq.title, p, rq.currency, now() + deadline_days * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, now());
+  await db.prepare(`UPDATE shop_requests SET status='booked' WHERE id=?`).run(rq.id);
+  await notify(req.user.id, 'booking_new', `حوّلت طلب عميل «${rq.guest_name}» إلى حجز #${info.lastInsertRowid} — العميل هيكمل خطواته من رابط متابعته`, `booking:${info.lastInsertRowid}`);
+  res.json({ booking: await bookingView(await getBooking(info.lastInsertRowid), req.user), follow: `/#/g/${rq.guest_token}` });
+});
+
+async function guestBookingByToken(token) {
+  if (!token) return null;
+  return await db.prepare('SELECT * FROM bookings WHERE guest_token=?').get(token);
+}
+async function guestBookingView(b) {
+  const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
+  const net = b.price - fee, half = Math.round(net / 2 * 100) / 100;
+  const myReview = await db.prepare('SELECT * FROM reviews WHERE booking_id=? AND reviewer_id IS NULL').get(b.id);
+  return {
+    id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status,
+    fee_status: b.fee_status, agreed_client: !!b.agreed_client, agreed_talent: !!b.agreed_talent,
+    fee, net, deposit: half, rest: half,
+    proof_url: b.proof_url, proof_check: b.proof_check, created_at: b.created_at,
+    talent: await publicUser(await getUser(b.talent_id)),
+    reviewed: !!myReview,
+  };
+}
+
+app.get('/api/guest/:token', async (req, res) => {
+  await sweepAutoConfirm();
+  const bk = await guestBookingByToken(req.params.token);
+  if (bk) return res.json({ type: 'booking', booking: await guestBookingView(bk) });
+  const rq = await db.prepare('SELECT id,title,niche,city,budget,currency,details,status,created_at FROM shop_requests WHERE guest_token=? AND is_guest=1').get(req.params.token);
+  if (rq) return res.json({ type: 'request', request: rq, booking: null });
+  return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+});
+
+/** Commission number: ONLY to the guest client, ONLY at the fee step (نفس قاعدة الحجز المسجل). */
+app.get('/api/guest/:token/fee-info', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  if (b.status !== 'awaiting_fee' || b.fee_status === 'confirmed') return res.status(400).json({ error: 'خطوة العمولة غير مفتوحة الآن' });
+  res.json({ label: 'Deal — حساب عمولات التطبيق', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency });
+});
+
+app.post('/api/guest/:token/agree', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  const r = await applyAgree(b, 'client');
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ booking: await guestBookingView(r.booking) });
+});
+
+app.post('/api/guest/:token/pay', async (req, res) => {
+  const { kind, ref } = req.body || {};
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  if (!ref) return res.status(400).json({ error: 'مرجع العملية مطلوب' });
+  const r = await applyClientPayment(b, kind, ref);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ booking: await guestBookingView(r.booking) });
+});
+
+app.post('/api/guest/:token/confirm-receipt', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  const r = await applyConfirmReceipt(b);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ booking: await guestBookingView(r.booking) });
+});
+
+app.post('/api/guest/:token/review', async (req, res) => {
+  const { sentiment, stars = 5, comment = '' } = req.body || {};
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  if (b.status !== 'completed') return res.status(400).json({ error: 'التقييم بعد اكتمال القبض فقط' });
+  if (!['positive', 'negative'].includes(sentiment)) return res.status(400).json({ error: 'اختر إيجابي أو سلبي' });
+  const existing = await db.prepare('SELECT id FROM reviews WHERE booking_id=? AND reviewer_id IS NULL').get(b.id);
+  if (existing) return res.status(409).json({ error: 'قيّمت هذا الحجز من قبل — التقييم لا يُعدّل' });
+  await db.prepare('INSERT INTO reviews (booking_id,reviewer_id,reviewee_id,sentiment,stars,comment,created_at) VALUES (?,NULL,?,?,?,?,?)')
+    .run(b.id, b.talent_id, sentiment, Math.min(5, Math.max(1, stars)), comment, now());
+  await applyPenalties(b.talent_id);
+  await syncBadges(b.talent_id);
+  res.json({ ok: true });
 });
 
 /* ---------------- campaigns ---------------- */

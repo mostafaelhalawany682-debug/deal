@@ -4,21 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deal — الشغل هو اللي بيدوّر عليك</title>
-<meta name="description" content="سوق يربط صناع المحتوى الصغار بمحلات وبراندات مدينتهم — بحجز محمي وضمان Deal.">
+<meta name="description" content="Deal — منصة كل صناع المحتوى: الشغل هو اللي بيدوّر عليك — فرص وحجوزات محمية بضمان Deal.">
 <meta name="theme-color" content="#07271d">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icons/icon-192.png">
 <style>
 :root{--bg:#07271d;--bg2:#0a2f23;--card:#0d3527;--line:#1c4d3a;--txt:#f2f7f4;--mut:#9fc4b2;
---em:#0e9f6e;--or:#e8720c;--gold:#d4a017;--grad:linear-gradient(90deg,#0e9f6e,#e8720c,#d4a017)}
-*{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--txt)}
+--em:#0e9f6e;--or:#e8720c;--gold:#d4a017;--grad:linear-gradient(90deg,#0e9f6e,#e8720c,#d4a017);
+--shadow:0 14px 34px rgba(0,0,0,.42);--shadow-sm:0 5px 16px rgba(0,0,0,.28)}
+*{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:var(--txt);
+background:var(--bg) radial-gradient(1100px 520px at 50% -8%,rgba(14,159,110,.16),transparent 62%) no-repeat}
 a{color:var(--gold)}button{cursor:pointer;font-family:inherit}
 .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-.btn{border:0;border-radius:12px;padding:11px 20px;font-weight:700;background:var(--grad);color:#fff;font-size:15px}
-.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+.btn{border:0;border-radius:12px;padding:11px 20px;font-weight:700;background:var(--grad);color:#fff;font-size:15px;
+position:relative;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.32);transition:transform .16s ease,box-shadow .16s ease}
+.btn::after{content:'';position:absolute;top:0;bottom:0;left:0;width:45%;pointer-events:none;
+background:linear-gradient(100deg,transparent,rgba(255,255,255,.38),transparent);transform:translateX(-240%) skewX(-18deg);transition:transform .55s ease}
+.btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(0,0,0,.4)}
+.btn:hover::after{transform:translateX(340%) skewX(-18deg)}
+.btn:active{transform:translateY(0)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);box-shadow:none}
+.btn.ghost::after{display:none}
 .btn.sm{padding:7px 13px;font-size:13px;border-radius:9px}
 .btn:disabled{opacity:.55;cursor:wait}
-header{position:sticky;top:0;z-index:20;background:rgba(7,39,29,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header{position:sticky;top:0;z-index:20;background:rgba(7,39,29,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);box-shadow:0 8px 26px rgba(0,0,0,.35)}
+header::after{content:'';display:block;height:2px;background:var(--grad);opacity:.65}
 .hwrap{max-width:1150px;margin:auto;display:flex;align-items:center;gap:10px;padding:10px 16px}
 .logo{display:flex;align-items:center;gap:9px;font-weight:900;font-size:21px}
 .logo img{width:34px;height:34px;border-radius:9px}
@@ -28,28 +38,44 @@ nav button.on{background:var(--card);color:var(--txt);border:1px solid var(--lin
 .sp{flex:1}.bell{position:relative;background:none;border:0;font-size:20px;color:var(--txt)}
 .bell b{position:absolute;top:-4px;inset-inline-start:-4px;background:#e03131;color:#fff;font-size:11px;border-radius:50%;min-width:18px;height:18px;display:grid;place-items:center}
 .hbtn{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:14px;font-weight:700}
-.hero{max-width:1150px;margin:auto;padding:56px 16px 30px;text-align:center}
-.hero h1{font-size:clamp(28px,5.4vw,50px);line-height:1.25;margin:0 0 10px}
-.hero p{color:var(--mut);font-size:17px;margin:0 0 22px}
+.hero{max-width:1150px;margin:auto;padding:72px 16px 34px;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:-30% -12%;pointer-events:none;
+background:radial-gradient(closest-side,rgba(212,160,23,.20),transparent 70%) 18% 22%/52% 52% no-repeat,
+radial-gradient(closest-side,rgba(14,159,110,.24),transparent 70%) 84% 12%/58% 58% no-repeat,
+radial-gradient(closest-side,rgba(232,114,12,.12),transparent 70%) 55% 88%/46% 46% no-repeat;
+animation:heroGlow 15s ease-in-out infinite alternate}
+@keyframes heroGlow{from{opacity:.5;transform:scale(1) translateY(0)}to{opacity:1;transform:scale(1.07) translateY(12px)}}
+.hero>*{position:relative;z-index:1}
+.hero h1{font-size:clamp(34px,6.8vw,64px);font-weight:900;line-height:1.22;margin:0 0 12px;letter-spacing:-.5px}
+.hero p{color:var(--mut);font-size:18px;margin:0 0 24px}
 .wrap{max-width:1150px;margin:auto;padding:10px 16px 60px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.card{background:linear-gradient(168deg,#0f3d2b,var(--card) 58%);border:1px solid var(--line);border-radius:20px;padding:16px;
+box-shadow:var(--shadow-sm);animation:cardIn .45s ease both;transition:transform .18s ease,box-shadow .18s ease}
+.card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
 .card h3{margin:6px 0 4px;font-size:17px}
 .mut{color:var(--mut);font-size:13.5px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .chip{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12.5px;color:var(--mut)}
 .price{font-weight:800;color:var(--gold)}
 .why{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:26px 0}
 input,select,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;margin:5px 0 11px;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,160,23,.18);outline:none}
 label{font-size:13.5px;color:var(--mut)}
-dialog{background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:18px;max-width:560px;width:94%;padding:22px}
+dialog{background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:22px;max-width:560px;width:94%;padding:22px;box-shadow:0 26px 60px rgba(0,0,0,.55)}
 dialog::backdrop{background:rgba(0,0,0,.6)}
 .step{border-inline-start:3px solid var(--line);padding:8px 12px;margin:9px 0;background:var(--card);border-radius:8px}
 .step.done{border-color:var(--em)}.step.open{border-color:var(--gold)}
 table{width:100%;border-collapse:collapse;font-size:14px}td,th{border-bottom:1px solid var(--line);padding:8px;text-align:start}
 .toast{position:fixed;bottom:18px;inset-inline-start:50%;transform:translateX(50%);background:#123f2e;border:1px solid var(--gold);padding:11px 18px;border-radius:12px;z-index:200;display:none}
-.badge-ic{width:20px;height:20px;border-radius:50%;display:inline-grid;place-items:center;font-size:11px;color:#fff;vertical-align:-4px}
+.badge-ic{width:24px;height:24px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;color:#fff;vertical-align:-5px;box-shadow:var(--shadow-sm);flex:none}
 .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.kpi .card{text-align:center}.kpi .n{font-size:26px;font-weight:900}
+.kpi .card{text-align:center;padding:18px 12px}
+.kpi .n{font-size:32px;font-weight:900;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ov-strip{background:linear-gradient(var(--card),var(--card)) padding-box,linear-gradient(120deg,var(--em),var(--or),var(--gold)) border-box;
+border:1.5px solid transparent;box-shadow:0 14px 36px rgba(0,0,0,.42)}
+.bdg-bar{background:var(--bg);border:1px solid var(--line);border-radius:99px;height:12px;overflow:hidden;margin-top:5px}
+.bdg-fill{height:100%;border-radius:99px;background:var(--grad);transition:width .7s ease;box-shadow:0 0 10px rgba(212,160,23,.35)}
 .guarantee{border:1px dashed var(--gold);border-radius:14px;padding:13px 16px;margin:16px 0;background:rgba(212,160,23,.06)}
 footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;color:var(--mut);font-size:13.5px}
 .hide{display:none}
@@ -59,8 +85,29 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
 .avatar.big{width:76px;height:76px}
 .avatar-fb{width:40px;height:40px;border-radius:50%;background:var(--grad);color:#fff;display:inline-grid;place-items:center;font-weight:900;font-size:18px;flex:none}
 .avatar-fb.big{width:76px;height:76px;font-size:32px}
-.founder-card{background:linear-gradient(160deg,#101418,#1a1405 70%);border:2px solid var(--gold);box-shadow:0 0 0 3px rgba(212,160,23,.18),0 10px 30px rgba(0,0,0,.45)}
+/* هوية المؤسس البصرية الفريدة — مربوطة فقط بعلم is_platform_founder من الخادم،
+   فلا إعداد ولا حقل في أي ملف يمنحها لحساب آخر. فحمي/ذهبي بالكامل (لا أخضر المنصة). */
+.founder-card{position:relative;overflow:hidden;background:linear-gradient(160deg,#151a20,#0b0d10 55%,#1d1604);
+border:1.5px solid var(--gold);box-shadow:0 0 0 3px rgba(212,160,23,.15),0 16px 38px rgba(0,0,0,.55)}
+.founder-card::before{content:'';position:absolute;inset:0;pointer-events:none;
+background:radial-gradient(540px 200px at 50% -34px,rgba(212,160,23,.32),transparent 65%);
+animation:founderPulse 6.5s ease-in-out infinite alternate}
+@keyframes founderPulse{from{opacity:.45}to{opacity:1}}
+.founder-card>*{position:relative}
+.founder-card .founder-ribbon{position:absolute;top:16px;inset-inline-end:-42px;z-index:2;pointer-events:none;
+transform:rotate(38deg);background:linear-gradient(90deg,#a87c0e,var(--gold),#a87c0e);color:#161104;
+font-weight:900;font-size:11.5px;letter-spacing:.4px;padding:4px 44px;box-shadow:0 4px 12px rgba(0,0,0,.45)}
+[dir="rtl"] .founder-card .founder-ribbon{transform:rotate(-38deg)}
 .founder-seal{display:inline-flex;align-items:center;gap:6px;background:#101418;border:1.5px solid var(--gold);color:var(--gold);border-radius:999px;padding:4px 12px;font-weight:900;font-size:13px}
+.founder-seal.big{font-size:15.5px;padding:6px 17px;border-width:2px;box-shadow:0 0 14px rgba(212,160,23,.35)}
+.founder-seal.sm{font-size:11px;padding:1.5px 8px;border-width:1px;vertical-align:1px}
+.founder-ava{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:50%;flex:none;font-size:19px;
+background:radial-gradient(circle at 35% 28%,#2b3138,#0d1013 72%);border:2px solid var(--gold);
+box-shadow:0 0 0 2px #0d1013,0 0 0 4px rgba(212,160,23,.55),0 6px 14px rgba(0,0,0,.5)}
+.founder-ava.big{width:78px;height:78px;font-size:35px;box-shadow:0 0 0 3px #0d1013,0 0 0 6px rgba(212,160,23,.6),0 0 26px rgba(212,160,23,.4)}
+.founder-hero{background:linear-gradient(180deg,#1a1f26,#0c0e11 62%,#1c1503);border-bottom:3px solid var(--gold);text-align:center}
+.founder-scope .card{background:linear-gradient(165deg,#12161c,#181204);border-color:rgba(212,160,23,.5)}
+.founder-scope h4{color:var(--gold)}
 .shorts{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:8px 0}
 .short{position:relative;aspect-ratio:9/16;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--line)}
 .short iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
@@ -85,7 +132,10 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
   nav{display:none}
   #langBtn,#authArea{display:none}
   .hwrap{gap:7px;padding:9px 10px}
-  .hero{padding:38px 14px 22px}
+  .hero{padding:46px 14px 24px}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
 }
 </style>
 </head>
@@ -197,7 +247,7 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
   </section>
 
   <!-- OWNER -->
-  <section id="tab-owner" class="hide">
+  <section id="tab-owner" class="hide founder-scope">
     <h3 data-i18n="nav_owner">لوحة المالك</h3>
     <div id="ownerBody"></div>
   </section>
@@ -213,7 +263,7 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
   </section>
 </main>
 
-<footer data-i18n="footer">Deal — منصة صناع المحتوى والمحلات المحلية · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal</footer>
+<footer data-i18n="footer">Deal — منصة كل صناع المحتوى · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal</footer>
 <div class="toast" id="toast"></div>
 <button class="fab" id="supportFab" onclick="openSupport()" title="الدعم">🎧</button>
 
@@ -370,7 +420,7 @@ function hideErr(id){const e=document.getElementById(id);if(e)e.classList.remove
 /* ================= i18n — قاموس كامل لكل نصوص الواجهة ================= */
 let LANG=localStorage.getItem('deal_lang')||'ar';
 const DICT={
-ar:{loading:'جارٍ…',copied:'تم النسخ ✓',nav_market:'السوق',nav_services:'الخدمات',nav_campaigns:'الحملات',nav_opps:'فرص ليك',nav_bookings:'حجوزاتي',nav_dash:'لوحتي',nav_owner:'لوحة المالك',post_job_btn:'📣 انشر شغلانة',menu:'القائمة',main_menu:'القائمة الرئيسية',login_register:'دخول / تسجيل',hero_l1:'انتهى زمن اللف على الشغل…',hero_l2:'الشغل هو اللي بيدوّر عليك',hero_sub:'فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.',register_creator:'سجّل كصانع',browse_market:'تصفح السوق',install_app:'ثبّت Deal على موبايلك',hero_guest_note:'عندك محل أو براند؟ انشر شغلانتك في دقيقة — من غير تسجيل، والصناع هيتواصلوا معاك واتساب.',why1_t:'فرص بتيجي لك',why1_d:'طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.',why2_t:'سمعة موثقة بتكبر',why2_d:'تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.',why3_t:'قبض محمي بضمان Deal',why3_d:'دفع على مراحل، عمولة التطبيق أولاً، وإثبات تنفيذ يحمي الطرفين.',search_ph:'ابحث باسم، مجال، مدينة…',search:'بحث',all_niches:'كل المجالات',all_cities:'كل المدن',guarantee_t:'ضمان Deal:',guarantee_d:'كل حجز هنا «حجز محمي بضمان Deal» — دفع مرحلي موثق، وبديل موثّق من نفس مدينتك ومجالك لو المنفذ أخلّ.',open_requests:'طلبات محلات مفتوحة',post_job_short:'📣 انشر شغلانة — بدون تسجيل',services_t:'خدمات متكاملة — بنفس حماية Deal',svc_ads:'إدارة إعلانات ممولة',svc_support:'حلول مشاكل الحسابات',campaigns_t:'حملات البراندات',new_campaign:'+ حملة جديدة',opps_t:'فرص ليك — مطابقة تلقائية لملفك',bookings_t:'حجوزاتي',footer:'Deal — منصة صناع المحتوى والمحلات المحلية · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal',register:'تسجيل',login:'دخول',f_name:'الاسم',f_iam:'أنا…',role_creator:'صانع محتوى',role_provider:'مقدم خدمة',role_shop:'محل',role_brand:'براند',f_provcat:'فئة الخدمة',f_niche:'المجال / التخصص',niche_ph:'كوميديا، طبخ، مراجعات…',f_city:'المدينة',f_country:'الدولة',f_currency:'العملة',f_followers:'عدد المتابعين (للصناع)',f_price:'سعرك المعلن لفيديو/خدمة',f_links:'روابط حساباتك العلنية (للتوثيق)',f_contact:'رقم الهاتف أو الإيميل (هو وسيلة الدخول)',contact_ph:'01xxxxxxxxx أو you@mail.com',continue_btn:'متابعة',close:'إغلاق',guest_title:'انشر شغلانة — بدون تسجيل',g_biz:'اسم النشاط / المحل',g_phone:'رقم الواتساب (موبايل مصري)',g_niche:'نوع الإعلان / المجال',g_niche_ph:'مطاعم، ملابس، عقارات…',g_budget:'الميزانية التقريبية (جنيه)',g_details:'اوصف الشغلانة',g_details_ph:'محتاج فيديو إعلاني عن…',g_publish:'انشر الطلب',g_done_t:'اتنشر طلبك ✓',g_done_d:'الصناع هيشوفوه دلوقتي وهيتواصلوا معاك واتساب. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:',copy_link:'نسخ الرابط',camp_title:'حملة براند جديدة',c_title:'العنوان',c_brief:'البريف',c_budget:'الميزانية',c_publish:'نشر الحملة',req_title:'طلب محل جديد',req_niche:'المجال المطلوب',req_details:'تفاصيل',edit_profile:'تعديل الملف الشخصي',pf_photo:'الصورة الشخصية',pf_photo_hint:'تُصغَّر تلقائياً لمربع صغير (≤256px).',pf_phone:'رقم الهاتف (واتساب)',pf_bio:'نبذة عنك',save_changes:'حفظ التعديلات',shorts_title:'نماذج الشورتس',shorts_hint:'بحد أقصى 3 فيديوهات — تظهر مضمّنة شغالة داخل ملفك العام.',short_url:'رابط فيديو قصير (يوتيوب Shorts / فيسبوك / إنستجرام / تيك توك)',short_title:'عنوان النموذج (اختياري)',short_add:'+ أضف نموذجاً',notifications:'التنبيهات',support_title:'دعم Deal — رد تلقائي فوري',support_hint:'اختر سؤالاً جاهزاً أو اكتب سؤالك — الرد فوري من قاعدة الأسئلة الشائعة.',support_contact:'وسيلة تواصل (اختياري) — لو حابب الفريق يرجع لك',support_ph:'اكتب سؤالك هنا…',send:'إرسال',
+ar:{loading:'جارٍ…',copied:'تم النسخ ✓',nav_market:'السوق',nav_services:'الخدمات',nav_campaigns:'الحملات',nav_opps:'فرص ليك',nav_bookings:'حجوزاتي',nav_dash:'لوحتي',nav_owner:'لوحة المالك',post_job_btn:'📣 انشر شغلانة',menu:'القائمة',main_menu:'القائمة الرئيسية',login_register:'دخول / تسجيل',hero_l1:'انتهى زمن اللف على الشغل…',hero_l2:'الشغل هو اللي بيدوّر عليك',hero_sub:'فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.',register_creator:'سجّل كصانع',browse_market:'تصفح السوق',install_app:'ثبّت Deal على موبايلك',hero_guest_note:'عندك محل أو براند؟ انشر شغلانتك في دقيقة — من غير تسجيل، والصناع هيتواصلوا معاك واتساب.',why1_t:'فرص بتيجي لك',why1_d:'طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.',why2_t:'سمعة موثقة بتكبر',why2_d:'تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.',why3_t:'قبض محمي بضمان Deal',why3_d:'دفع على مراحل، عمولة التطبيق أولاً، وإثبات تنفيذ يحمي الطرفين.',search_ph:'ابحث باسم، مجال، مدينة…',search:'بحث',all_niches:'كل المجالات',all_cities:'كل المدن',guarantee_t:'ضمان Deal:',guarantee_d:'كل حجز هنا «حجز محمي بضمان Deal» — دفع مرحلي موثق، وبديل موثّق من نفس مدينتك ومجالك لو المنفذ أخلّ.',open_requests:'طلبات محلات مفتوحة',post_job_short:'📣 انشر شغلانة — بدون تسجيل',services_t:'خدمات متكاملة — بنفس حماية Deal',svc_ads:'إدارة إعلانات ممولة',svc_support:'حلول مشاكل الحسابات',campaigns_t:'حملات البراندات',new_campaign:'+ حملة جديدة',opps_t:'فرص ليك — مطابقة تلقائية لملفك',bookings_t:'حجوزاتي',footer:'Deal — منصة كل صناع المحتوى · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal',register:'تسجيل',login:'دخول',f_name:'الاسم',f_iam:'أنا…',role_creator:'صانع محتوى',role_provider:'مقدم خدمة',role_shop:'محل',role_brand:'براند',f_provcat:'فئة الخدمة',f_niche:'المجال / التخصص',niche_ph:'كوميديا، طبخ، مراجعات…',f_city:'المدينة',f_country:'الدولة',f_currency:'العملة',f_followers:'عدد المتابعين (للصناع)',f_price:'سعرك المعلن لفيديو/خدمة',f_links:'روابط حساباتك العلنية (للتوثيق)',f_contact:'رقم الهاتف أو الإيميل (هو وسيلة الدخول)',contact_ph:'01xxxxxxxxx أو you@mail.com',continue_btn:'متابعة',close:'إغلاق',guest_title:'انشر شغلانة — بدون تسجيل',g_biz:'اسم النشاط / المحل',g_phone:'رقم الواتساب (موبايل مصري)',g_niche:'نوع الإعلان / المجال',g_niche_ph:'مطاعم، ملابس، عقارات…',g_budget:'الميزانية التقريبية (جنيه)',g_details:'اوصف الشغلانة',g_details_ph:'محتاج فيديو إعلاني عن…',g_publish:'انشر الطلب',g_done_t:'اتنشر طلبك ✓',g_done_d:'الصناع هيشوفوه دلوقتي وهيتواصلوا معاك واتساب. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:',copy_link:'نسخ الرابط',camp_title:'حملة براند جديدة',c_title:'العنوان',c_brief:'البريف',c_budget:'الميزانية',c_publish:'نشر الحملة',req_title:'طلب محل جديد',req_niche:'المجال المطلوب',req_details:'تفاصيل',edit_profile:'تعديل الملف الشخصي',pf_photo:'الصورة الشخصية',pf_photo_hint:'تُصغَّر تلقائياً لمربع صغير (≤256px).',pf_phone:'رقم الهاتف (واتساب)',pf_bio:'نبذة عنك',save_changes:'حفظ التعديلات',shorts_title:'نماذج الشورتس',shorts_hint:'بحد أقصى 3 فيديوهات — تظهر مضمّنة شغالة داخل ملفك العام.',short_url:'رابط فيديو قصير (يوتيوب Shorts / فيسبوك / إنستجرام / تيك توك)',short_title:'عنوان النموذج (اختياري)',short_add:'+ أضف نموذجاً',notifications:'التنبيهات',support_title:'دعم Deal — رد تلقائي فوري',support_hint:'اختر سؤالاً جاهزاً أو اكتب سؤالك — الرد فوري من قاعدة الأسئلة الشائعة.',support_contact:'وسيلة تواصل (اختياري) — لو حابب الفريق يرجع لك',support_ph:'اكتب سؤالك هنا…',send:'إرسال',
 followers_w:'متابع',completion_w:'إتمام',positive_w:'إيجابي',profile_btn:'الملف',book_btn:'احجز',founder_seal:'👑 مؤسس Deal',founder_only:'حساب المؤسس — عرض فقط',pioneer_w:'رائد المدينة',founder_member_w:'عضو مؤسس',empty_market:'السوق فاضي لسه — كن أول صانع يسجل.',guest_chip:'طلب عميل — بدون حساب',whatsapp:'💬 تواصل واتساب',wa_msg:'أهلاً، شفت طلبك على Deal وأقدر أنفذه',start_booking:'ابدأ حجز',view_opps:'شوف فرصك',shop_job_card:'+ عندك شغلانة؟',publish_request:'انشر طلب',no_providers:'لا يوجد مقدمو خدمة في هذه الفئة بعد.',no_campaigns:'لا حملات مفتوحة بعد.',apply_btn:'قدّم',applicants_btn:'المتقدمون',match_w:'مطابقة',kind_campaign:'حملة براند',kind_request:'طلب محل',no_opps:'لا فرص مطابقة لملفك الآن — حدّث مدينتك ومجالك وحدّك الأدنى للسعر من لوحتك.',no_bookings:'لا حجوزات بعد.',open_booking:'فتح الحجز',notify_talent:'📱 نبّه الصانع واتساب',wa_booking_msg:'جالك شغل جديد على Deal — حجز #',guaranteed_chip:'🛡️ حجز محمي بضمان Deal',client_w:'العميل',talent_w:'المنفذ',total_w:'الإجمالي',fee_w:'العمولة',first_w:'أولاً',net_two_w:'والصافي على دفعتين',
 stage_pending_agreement:'اتفاق الطرفين',stage_awaiting_fee:'عمولة Deal أولاً',stage_awaiting_deposit:'عربون الصانع',stage_in_progress:'التنفيذ',stage_proof_submitted:'إثبات التنفيذ',stage_awaiting_rest:'باقي القبض',stage_completed:'اكتمل القبض',stage_disputed:'نزاع مفتوح',stage_cancelled:'ملغي',
 step1:'١) اتفاق الطرفين',step2:'٢) عمولة Deal أولاً',step3:'٣) عربون المنفذ',step4:'٤) إثبات التنفيذ',step5:'٥) باقي القبض',agreed_w:'✔ وافق',waiting_w:'بانتظار',agree_btn:'أوافق',show_fee:'إظهار حساب عمولات Deal',fee_ref_ph:'مرجع عملية التحويل',fee_confirm_btn:'سجلت التحويل — تأكيد تلقائي',fee_confirmed:'اتأكدت تلقائياً ✓',dep_ref_ph:'مرجع تحويل العربون للمنفذ',paid_btn:'سجلت التحويل',proof_ph:'رابط العمل المنشور علناً',proof_btn:'إرسال الإثبات (يتحقق منه التطبيق)',proof_w:'الإثبات',proof_verified:'✔ تم التحقق وخُتم بوقته',receipt_t:'أكد الاستلام',receipt_d:'لو ما رديتش خلال 48 ساعة من الإثبات، الاستلام بيتأكد تلقائياً حمايةً للمنفذ.',receipt_btn:'أكدت الاستلام',completed_t:'اكتمل القبض ✓',rv_pos:'إيجابي 👍',rv_neg:'سلبي 👎',rv_comment_ph:'تعليق (اختياري)',rv_send:'إرسال التقييم (مرة واحدة، بلا تعديل)',rv_done:'قيّمت هذا الحجز ✓',dispute_btn:'فتح نزاع',dispute_prompt:'سبب النزاع؟',alternatives_t:'ضمان Deal — بدائل موثقة من نفس المدينة والمجال:',done_t:'تم',payment_saved:'اتسجلت الدفعة',proof_done:'الإثبات اتختم ✓',review_saved:'اتسجل تقييمك',dispute_opened:'اتفتح النزاع — الإدارة هتراجعه',booking_opened:'اتفتح الحجز #',ref_required:'اكتب مرجع العملية',bk_w:'حجز',bk_status:'الحالة',
@@ -381,8 +431,11 @@ auth_reg_t:'تسجيل حساب جديد',auth_login_t:'تسجيل الدخول'
 gp_request:'طلبك على Deal',gp_published:'منشور — الصناع بيشوفوه وهيتواصلوا معاك واتساب',gp_booked:'اتحجز — بيتحول لحجز',gp_booking:'حجزك على Deal',gp_invalid:'رابط متابعة غير صحيح.',gp_working:'المنفذ شغال على التنفيذ…',
 m_support:'الدعم',m_language:'اللغة',m_profile:'ملفي الشخصي',notif_empty:'لا تنبيهات بعد.',notif_login:'سجل دخولك لعرض الإشعارات',applied_t:'قدمت ✓',camp_published:'اتنشرت الحملة',req_published:'اتنشر الطلب',no_applicants:'لا متقدمين بعد',price_prompt:'سعر الشغلانة للعميل؟',guest_booked_suffix:' — العميل هيكمّل خطواته من رابط متابعته',install_hint:'من قائمة المتصفح ⋮ اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»',short_added:'اتضاف النموذج ✓',short_deleted:'اتحذف النموذج',delete_w:'حذف',
 follow_btn:'متابعة',following_btn:'أتابع ✓',followed_t:'بقيت تتابع',unfollowed_t:'ألغيت المتابعة',deal_followers:'متابِع على Deal',social_t:'المتابعة على Deal',my_followers:'متابِعيني',my_following:'من أتابعهم',no_followers_yet:'لا متابِعين بعد.',no_following_yet:'لا تتابع أحداً بعد — تابع صناعاً من السوق.',msg_btn:'مراسلة',nav_messages:'الرسائل',messages_t:'رسائلي',msg_ph:'اكتب رسالتك…',msg_empty:'لا محادثات بعد.',msg_no_thread:'لا رسائل بعد — ابدأ المحادثة.',msg_unread:'غير مقروءة',back_btn:'رجوع',open_msgs:'فتح الرسائل',
-copy_profile_link:'🔗 انسخ رابط ملفي',featured_chip:'⭐ صانع مميز',profile_locked_t:'هذا الملف غير متاح للزوار',profile_locked_d:'بعض الملفات (مثل ملف المؤسس) تظهر للصناع ومقدمي الخدمة المسجلين فقط — سجل دخولك أو تصفح السوق.',ov_tagline:'شغلك وقبضك ورسايلك وفرصك — كله في مكان واحد',ov_opps:'فرص مطابقة جديدة',ov_bookings:'حجوزات جارية',ov_msgs:'رسائل غير مقروءة',ov_followers:'متابِعون على Deal',ov_refs:'إحالات موثقة',referrals_t:'دعواتي — سجّلوا من رابطي',ref_total:'إجمالي المسجلين من رابطي',ref_verified:'موثّقون',ref_progress:'تقدمك نحو شارة «سفير Deal»',ref_empty:'لا دعوات بعد — شارك رابط ملفك وخلي الصناع يسجلوا من خلالك.',ref_state_verified:'موثّق ✓',ref_state_pending:'بانتظار التوثيق',ref_featured_active:'ظهورك المميز في السوق نشط الآن ⭐',ref_share_hint:'كل صانع يسجل من رابطك ويتوثّق بيقرّبك من شارة السفير وبيفعّل ظهورك المميز.'},
-en:{loading:'Loading…',copied:'Copied ✓',nav_market:'Market',nav_services:'Services',nav_campaigns:'Campaigns',nav_opps:'Opportunities',nav_bookings:'My bookings',nav_dash:'My dashboard',nav_owner:'Owner panel',post_job_btn:'📣 Post a job',menu:'Menu',main_menu:'Main menu',login_register:'Login / Register',hero_l1:'No more chasing work…',hero_l2:'Work comes looking for you',hero_sub:'Opportunities from shops and brands in your city, delivered to you — with a protected booking and the Deal Guarantee.',register_creator:'Register as a creator',browse_market:'Browse the market',install_app:'Install Deal on your phone',hero_guest_note:'Own a shop or a brand? Post your job in a minute — no registration, and creators will reach you on WhatsApp.',why1_t:'Opportunities come to you',why1_d:'Requests and campaigns matched to your city and niche — without searching.',why2_t:'A verified reputation that grows',why2_d:'Ratings, completion rate and achievement badges accumulate on your profile.',why3_t:'Protected payment with Deal Guarantee',why3_d:'Staged payments, the app fee first, and delivery proof that protects both sides.',search_ph:'Search by name, niche, city…',search:'Search',all_niches:'All niches',all_cities:'All cities',guarantee_t:'Deal Guarantee:',guarantee_d:'Every booking here is a "Deal-Guaranteed booking" — documented staged payments, and a verified alternative from your city and niche if the creator defaults.',open_requests:'Open shop requests',post_job_short:'📣 Post a job — no registration',services_t:'Integrated services — with the same Deal protection',svc_ads:'Sponsored ads management',svc_support:'Account problem solutions',campaigns_t:'Brand campaigns',new_campaign:'+ New campaign',opps_t:'Opportunities for you — auto-matched to your profile',bookings_t:'My bookings',footer:'Deal — the platform for local content creators and shops · The official Deal seal 🛡️ Deal-Guaranteed booking',register:'Register',login:'Login',f_name:'Name',f_iam:'I am a…',role_creator:'Content creator',role_provider:'Service provider',role_shop:'Shop',role_brand:'Brand',f_provcat:'Service category',f_niche:'Niche / specialty',niche_ph:'Comedy, cooking, reviews…',f_city:'City',f_country:'Country',f_currency:'Currency',f_followers:'Follower count (for creators)',f_price:'Your listed price per video/service',f_links:'Your public account links (for verification)',f_contact:'Phone number or email (your login)',contact_ph:'01xxxxxxxxx or you@mail.com',continue_btn:'Continue',close:'Close',guest_title:'Post a job — no registration',g_biz:'Business / shop name',g_phone:'WhatsApp number (Egyptian mobile)',g_niche:'Ad type / niche',g_niche_ph:'Restaurants, clothes, real estate…',g_budget:'Approximate budget (EGP)',g_details:'Describe the job',g_details_ph:'I need an ad video about…',g_publish:'Publish request',g_done_t:'Your request is published ✓',g_done_d:'Creators can see it now and will contact you on WhatsApp. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',copy_link:'Copy link',camp_title:'New brand campaign',c_title:'Title',c_brief:'Brief',c_budget:'Budget',c_publish:'Publish campaign',req_title:'New shop request',req_niche:'Needed niche',req_details:'Details',edit_profile:'Edit profile',pf_photo:'Profile photo',pf_photo_hint:'Automatically cropped to a small square (≤256px).',pf_phone:'Phone number (WhatsApp)',pf_bio:'Bio',save_changes:'Save changes',shorts_title:'Shorts samples',shorts_hint:'Maximum 3 videos — shown as embedded playable videos on your public profile.',short_url:'Short video link (YouTube Shorts / Facebook / Instagram / TikTok)',short_title:'Sample title (optional)',short_add:'+ Add sample',notifications:'Notifications',support_title:'Deal Support — instant auto-replies',support_hint:'Pick a ready question or type yours — replies are instant from the FAQ base.',support_contact:'Contact (optional) — if you want the team to get back to you',support_ph:'Type your question here…',send:'Send',
+copy_profile_link:'🔗 انسخ رابط ملفي',featured_chip:'⭐ صانع مميز',profile_locked_t:'هذا الملف غير متاح للزوار',profile_locked_d:'بعض الملفات (مثل ملف المؤسس) تظهر للصناع ومقدمي الخدمة المسجلين فقط — سجل دخولك أو تصفح السوق.',ov_tagline:'شغلك وقبضك ورسايلك وفرصك — كله في مكان واحد',ov_opps:'فرص مطابقة جديدة',ov_bookings:'حجوزات جارية',ov_msgs:'رسائل غير مقروءة',ov_followers:'متابِعون على Deal',ov_refs:'إحالات موثقة',referrals_t:'دعواتي — سجّلوا من رابطي',ref_total:'إجمالي المسجلين من رابطي',ref_verified:'موثّقون',ref_progress:'تقدمك نحو شارة «سفير Deal»',ref_empty:'لا دعوات بعد — شارك رابط ملفك وخلي الصناع يسجلوا من خلالك.',ref_state_verified:'موثّق ✓',ref_state_pending:'بانتظار التوثيق',ref_featured_active:'ظهورك المميز في السوق نشط الآن ⭐',ref_share_hint:'كل صانع يسجل من رابطك ويتوثّق بيقرّبك من شارة السفير وبيفعّل ظهورك المميز.',
+founder_ribbon:'المؤسس',bp_title:'شاراتي وتقدّمي',bp_closest:'أقرب شارة',bp_done_w:'أنجزت',bp_of_w:'من',bp_left_w:'باقي لك',bp_rate_now:'نسبتك الحالية',bp_pos_now:'إيجابيتك الحالية',bp_age_now:'عضويتك الآن',bp_day_w:'يوم',
+bdg_perfect:'إتمام مثالي',bdg_top_rated:'الأعلى تقييماً',bdg_fast:'تنفيذ سريع',bdg_rising:'صانع صاعد',bdg_ambassador:'سفير Deal',bdg_veteran:'مخضرم',
+bp_cond_perfect:'أكمل 10 صفقات بنسبة إتمام 100%',bp_cond_top_rated:'اجمع 10 تقييمات بإيجابية 95% فأكثر',bp_cond_fast:'سلّم إثبات التنفيذ قبل المهلة في آخر 5 صفقات مكتملة',bp_cond_rising:'أكمل 5 صفقات',bp_cond_ambassador:'5 صناع موثّقين سجّلوا من رابط ملفك',bp_cond_veteran:'أكمل 20 صفقة وعضوية 6 أشهر (180 يوم)'},
+en:{loading:'Loading…',copied:'Copied ✓',nav_market:'Market',nav_services:'Services',nav_campaigns:'Campaigns',nav_opps:'Opportunities',nav_bookings:'My bookings',nav_dash:'My dashboard',nav_owner:'Owner panel',post_job_btn:'📣 Post a job',menu:'Menu',main_menu:'Main menu',login_register:'Login / Register',hero_l1:'No more chasing work…',hero_l2:'Work comes looking for you',hero_sub:'Opportunities from shops and brands in your city, delivered to you — with a protected booking and the Deal Guarantee.',register_creator:'Register as a creator',browse_market:'Browse the market',install_app:'Install Deal on your phone',hero_guest_note:'Own a shop or a brand? Post your job in a minute — no registration, and creators will reach you on WhatsApp.',why1_t:'Opportunities come to you',why1_d:'Requests and campaigns matched to your city and niche — without searching.',why2_t:'A verified reputation that grows',why2_d:'Ratings, completion rate and achievement badges accumulate on your profile.',why3_t:'Protected payment with Deal Guarantee',why3_d:'Staged payments, the app fee first, and delivery proof that protects both sides.',search_ph:'Search by name, niche, city…',search:'Search',all_niches:'All niches',all_cities:'All cities',guarantee_t:'Deal Guarantee:',guarantee_d:'Every booking here is a "Deal-Guaranteed booking" — documented staged payments, and a verified alternative from your city and niche if the creator defaults.',open_requests:'Open shop requests',post_job_short:'📣 Post a job — no registration',services_t:'Integrated services — with the same Deal protection',svc_ads:'Sponsored ads management',svc_support:'Account problem solutions',campaigns_t:'Brand campaigns',new_campaign:'+ New campaign',opps_t:'Opportunities for you — auto-matched to your profile',bookings_t:'My bookings',footer:'Deal — the platform of all content creators · The official Deal seal 🛡️ Deal-Guaranteed booking',register:'Register',login:'Login',f_name:'Name',f_iam:'I am a…',role_creator:'Content creator',role_provider:'Service provider',role_shop:'Shop',role_brand:'Brand',f_provcat:'Service category',f_niche:'Niche / specialty',niche_ph:'Comedy, cooking, reviews…',f_city:'City',f_country:'Country',f_currency:'Currency',f_followers:'Follower count (for creators)',f_price:'Your listed price per video/service',f_links:'Your public account links (for verification)',f_contact:'Phone number or email (your login)',contact_ph:'01xxxxxxxxx or you@mail.com',continue_btn:'Continue',close:'Close',guest_title:'Post a job — no registration',g_biz:'Business / shop name',g_phone:'WhatsApp number (Egyptian mobile)',g_niche:'Ad type / niche',g_niche_ph:'Restaurants, clothes, real estate…',g_budget:'Approximate budget (EGP)',g_details:'Describe the job',g_details_ph:'I need an ad video about…',g_publish:'Publish request',g_done_t:'Your request is published ✓',g_done_d:'Creators can see it now and will contact you on WhatsApp. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',copy_link:'Copy link',camp_title:'New brand campaign',c_title:'Title',c_brief:'Brief',c_budget:'Budget',c_publish:'Publish campaign',req_title:'New shop request',req_niche:'Needed niche',req_details:'Details',edit_profile:'Edit profile',pf_photo:'Profile photo',pf_photo_hint:'Automatically cropped to a small square (≤256px).',pf_phone:'Phone number (WhatsApp)',pf_bio:'Bio',save_changes:'Save changes',shorts_title:'Shorts samples',shorts_hint:'Maximum 3 videos — shown as embedded playable videos on your public profile.',short_url:'Short video link (YouTube Shorts / Facebook / Instagram / TikTok)',short_title:'Sample title (optional)',short_add:'+ Add sample',notifications:'Notifications',support_title:'Deal Support — instant auto-replies',support_hint:'Pick a ready question or type yours — replies are instant from the FAQ base.',support_contact:'Contact (optional) — if you want the team to get back to you',support_ph:'Type your question here…',send:'Send',
 followers_w:'followers',completion_w:'Completion',positive_w:'positive',profile_btn:'Profile',book_btn:'Book',founder_seal:'👑 Deal Founder',founder_only:'Founder account — display only',pioneer_w:'City Pioneer',founder_member_w:'Founding Member',empty_market:'The market is still empty — be the first creator to register.',guest_chip:'Guest client request — no account',whatsapp:'💬 WhatsApp',wa_msg:'Hi, I saw your request on Deal and I can do it',start_booking:'Start booking',view_opps:'See your opportunities',shop_job_card:'+ Have a job?',publish_request:'Publish request',no_providers:'No providers in this category yet.',no_campaigns:'No open campaigns yet.',apply_btn:'Apply',applicants_btn:'Applicants',match_w:'Match',kind_campaign:'Brand campaign',kind_request:'Shop request',no_opps:'No opportunities match your profile right now — update your city, niche and minimum price from your dashboard.',no_bookings:'No bookings yet.',open_booking:'Open booking',notify_talent:'📱 Notify creator on WhatsApp',wa_booking_msg:'You have new work on Deal — booking #',guaranteed_chip:'🛡️ Deal-Guaranteed booking',client_w:'Client',talent_w:'Creator',total_w:'Total',fee_w:'fee',first_w:'first',net_two_w:'and the net in two payments',
 stage_pending_agreement:'Agreement',stage_awaiting_fee:'Deal fee first',stage_awaiting_deposit:'Creator deposit',stage_in_progress:'In progress',stage_proof_submitted:'Proof of delivery',stage_awaiting_rest:'Remaining payment',stage_completed:'Fully paid',stage_disputed:'Dispute open',stage_cancelled:'Cancelled',
 step1:'1) Agreement',step2:'2) Deal fee first',step3:'3) Creator deposit',step4:'4) Proof of delivery',step5:'5) Remaining payment',agreed_w:'✔ Agreed',waiting_w:'Waiting',agree_btn:'I agree',show_fee:'Show Deal fee account',fee_ref_ph:'Transfer reference',fee_confirm_btn:'I transferred it — auto-confirm',fee_confirmed:'Auto-confirmed ✓',dep_ref_ph:'Deposit transfer reference to the creator',paid_btn:'I transferred it',proof_ph:'Publicly published work link',proof_btn:'Submit proof (the app verifies it)',proof_w:'Proof',proof_verified:'✔ Verified and timestamped',receipt_t:'Confirm receipt',receipt_d:'If you do not respond within 48 hours of the proof, receipt is auto-confirmed to protect the creator.',receipt_btn:'I received it',completed_t:'Fully paid ✓',rv_pos:'Positive 👍',rv_neg:'Negative 👎',rv_comment_ph:'Comment (optional)',rv_send:'Submit rating (once, no edits)',rv_done:'You rated this booking ✓',dispute_btn:'Open dispute',dispute_prompt:'Dispute reason?',alternatives_t:'Deal Guarantee — verified alternatives from the same city and niche:',done_t:'Done',payment_saved:'Payment recorded',proof_done:'Proof timestamped ✓',review_saved:'Your rating was recorded',dispute_opened:'Dispute opened — admin will review it',booking_opened:'Booking opened #',ref_required:'Enter the transfer reference',bk_w:'Booking',bk_status:'Status',
@@ -393,7 +446,10 @@ auth_reg_t:'Create a new account',auth_login_t:'Login',welcome_t:'Welcome to Dea
 gp_request:'Your request on Deal',gp_published:'Published — creators can see it and will contact you on WhatsApp',gp_booked:'Booked — converting to a booking',gp_booking:'Your booking on Deal',gp_invalid:'Invalid follow-up link.',gp_working:'The creator is working on delivery…',
 m_support:'Support',m_language:'Language',m_profile:'My profile',notif_empty:'No notifications yet.',notif_login:'Log in to view your notifications',applied_t:'Applied ✓',camp_published:'Campaign published',req_published:'Request published',no_applicants:'No applicants yet',price_prompt:'Price for the client?',guest_booked_suffix:' — the client will complete their steps from their follow-up link',install_hint:'From the browser menu ⋮ choose "Install app" or "Add to Home screen"',short_added:'Sample added ✓',short_deleted:'Sample deleted',delete_w:'Delete',
 follow_btn:'Follow',following_btn:'Following ✓',followed_t:'You are now following',unfollowed_t:'Unfollowed',deal_followers:'Deal followers',social_t:'Following on Deal',my_followers:'My followers',my_following:'People I follow',no_followers_yet:'No followers yet.',no_following_yet:'You are not following anyone yet — follow creators from the market.',msg_btn:'Message',nav_messages:'Messages',messages_t:'My messages',msg_ph:'Type your message…',msg_empty:'No conversations yet.',msg_no_thread:'No messages yet — start the conversation.',msg_unread:'unread',back_btn:'Back',open_msgs:'Open messages',
-copy_profile_link:'🔗 Copy my profile link',featured_chip:'⭐ Featured creator',profile_locked_t:'This profile is not available to guests',profile_locked_d:'Some profiles (like the founder profile) are visible to registered creators and providers only — log in or browse the market.',ov_tagline:'Your work, payments, messages and opportunities — all in one place',ov_opps:'New matching opportunities',ov_bookings:'Active bookings',ov_msgs:'Unread messages',ov_followers:'Deal followers',ov_refs:'Verified referrals',referrals_t:'My invites — registered via my link',ref_total:'Total registered via my link',ref_verified:'Verified',ref_progress:'Your progress toward the "Deal Ambassador" badge',ref_empty:'No invites yet — share your profile link so creators register through you.',ref_state_verified:'Verified ✓',ref_state_pending:'Awaiting verification',ref_featured_active:'Your featured placement in the market is active ⭐',ref_share_hint:'Every creator who registers via your link and gets verified brings you closer to the Ambassador badge and activates your featured placement.'}
+copy_profile_link:'🔗 Copy my profile link',featured_chip:'⭐ Featured creator',profile_locked_t:'This profile is not available to guests',profile_locked_d:'Some profiles (like the founder profile) are visible to registered creators and providers only — log in or browse the market.',ov_tagline:'Your work, payments, messages and opportunities — all in one place',ov_opps:'New matching opportunities',ov_bookings:'Active bookings',ov_msgs:'Unread messages',ov_followers:'Deal followers',ov_refs:'Verified referrals',referrals_t:'My invites — registered via my link',ref_total:'Total registered via my link',ref_verified:'Verified',ref_progress:'Your progress toward the "Deal Ambassador" badge',ref_empty:'No invites yet — share your profile link so creators register through you.',ref_state_verified:'Verified ✓',ref_state_pending:'Awaiting verification',ref_featured_active:'Your featured placement in the market is active ⭐',ref_share_hint:'Every creator who registers via your link and gets verified brings you closer to the Ambassador badge and activates your featured placement.',
+founder_ribbon:'FOUNDER',bp_title:'My badges & progress',bp_closest:'Closest badge',bp_done_w:'You completed',bp_of_w:'of',bp_left_w:'left for you',bp_rate_now:'Your current rate',bp_pos_now:'Your current positivity',bp_age_now:'Your membership so far',bp_day_w:'days',
+bdg_perfect:'Perfect Completion',bdg_top_rated:'Top Rated',bdg_fast:'Fast Delivery',bdg_rising:'Rising Creator',bdg_ambassador:'Deal Ambassador',bdg_veteran:'Veteran',
+bp_cond_perfect:'Complete 10 deals with a 100% completion rate',bp_cond_top_rated:'Collect 10 ratings with 95%+ positivity',bp_cond_fast:'Submit delivery proof before the deadline in your last 5 completed deals',bp_cond_rising:'Complete 5 deals',bp_cond_ambassador:'5 verified creators registered via your profile link',bp_cond_veteran:'Complete 20 deals and 6 months of membership (180 days)'}
 };
 const t=k=>(DICT[LANG]&&DICT[LANG][k])||DICT.ar[k]||k;
 const ERR_EN={'سجل الدخول أولاً':'Log in first','حساب غير موجود':'Account not found','هذا الحساب محظور':'This account is banned','الاسم والدور ووسيلة التواصل مطلوبة':'Name, role and contact are required','دور غير صحيح':'Invalid role','وسيلة التواصل مسجلة من قبل — سجل الدخول':'This contact is already registered — please log in','لا يوجد حساب بهذه البيانات — سجل أولاً':'No account with these details — register first','غير موجود':'Not found','حدد سعراً صحيحاً':'Enter a valid price','لا يمكنك حجز نفسك':'You cannot book yourself','حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً':'Founder account — display only, no bookings or contact','هذا الطلب اتحجز خلاص — لا يمكن تحويله مرتين':'This request is already booked — it cannot be converted twice','طلب ضيف غير موجود':'Guest request not found','اكتب مرجع العملية':'Enter the transfer reference','مرجع العملية مطلوب':'Transfer reference is required','رابط فيديو غير مدعوم — الصق رابط شورتس من يوتيوب أو فيسبوك أو إنستجرام أو تيك توك':'Unsupported video link — paste a shorts link from YouTube, Facebook, Instagram or TikTok','وصلت إلى الحد الأقصى: 3 فيديوهات شورتس — احذف واحداً أولاً':'You reached the maximum: 3 shorts videos — delete one first','الصورة أكبر من 200KB — صغّرها وحاول مجدداً':'Image is larger than 200KB — shrink it and try again','رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian mobile number is required (01xxxxxxxxx)','رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian phone number is required (01xxxxxxxxx)','المدينة مطلوبة':'City is required','اسم النشاط مطلوب':'Business name is required','اوصف الشغلانة المطلوبة':'Describe the job','خطأ في الخادم':'Server error','خطأ':'Error','لا يمكنك متابعة نفسك':'You cannot follow yourself','هذا الحساب غير متاح للمتابعة حالياً':'This account is not available for following right now','لا يمكنك مراسلة نفسك':'You cannot message yourself','حساب المؤسس خارج المراسلة — عرضه ومتابعته فقط':'The founder account is outside messaging — display and follow only','هذا الحساب غير متاح للمراسلة حالياً':'This account is not available for messaging right now','اكتب رسالة أولاً':'Write a message first','الرسالة أطول من الحد الأقصى (1000 حرف)':'Message exceeds the maximum length (1000 characters)'};
@@ -415,10 +471,14 @@ $('#langBtn').onclick=()=>setLang(LANG==='ar'?'en':'ar');
 
 <script>
 /* ================= البطاقات والسوق ================= */
-function seal(u){if(u.is_platform_founder)return ` <span class="founder-seal">${t('founder_seal')}</span>`;
+function seal(u,variant){if(u.is_platform_founder)return ` <span class="founder-seal${variant?' '+variant:''}">${t('founder_seal')}</span>`;
   if(u.verified)return ' <span title="Deal Verified" style="color:var(--gold)">✔️</span>';return ''}
 function badgeDots(u){return (u.badges||[]).map(k=>`<span class="badge-ic" style="background:#1c4d3a" title="${k}">🏅</span>`).join(' ')}
-function avatarHtml(u,big=false){if(u.avatar)return `<img class="avatar${big?' big':''}" src="${u.avatar}" alt="">`;
+function avatarHtml(u,big=false){
+  /* صورة المؤسس العامة محجوبة من الخادم أصلاً — ميداليته الذهبية بإطارها المزدوج
+     هي «صورته» العلنية في كل مكان، ولا يحصل عليها أي حساب آخر. */
+  if(u.is_platform_founder)return `<span class="founder-ava${big?' big':''}">👑</span>`;
+  if(u.avatar)return `<img class="avatar${big?' big':''}" src="${u.avatar}" alt="">`;
   return `<span class="avatar-fb${big?' big':''}">${esc((u.name||'?').trim().charAt(0)||'?')}</span>`}
 /* زر المتابعة: يظهر لكل صانع (والمؤسس استثناءً وحيداً مسموحاً على بطاقته) —
    للضيف يفتح الدخول، وللمسجل يبدّل الحالة في مكانه بلا إعادة تحميل الصفحة. */
@@ -447,8 +507,9 @@ function msgBtn(u){
 }
 function talentCard(u){
   if(u.is_platform_founder)return `<div class="card founder-card">
-    <div class="row"><h3 style="margin:0">${esc(u.name)}</h3>${seal(u)}</div>
-    <div class="mut" style="margin-top:6px">${esc(u.niche||'')} · ${esc(u.city)} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
+    <div class="founder-ribbon">${t('founder_ribbon')}</div>
+    <div class="row">${avatarHtml(u)}<h3 style="margin:0">${esc(u.name)}</h3>${seal(u,'big')}</div>
+    <div class="mut" style="margin-top:6px">${esc(u.niche||'')}${u.city?` · ${esc(u.city)}`:''} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
     <div class="row" style="margin-top:10px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span><div class="sp"></div>
     ${followBtn(u)}
     <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button></div></div>`;
@@ -531,7 +592,7 @@ async function viewApps(btn,id){
     hideErr('appsErr');
     try{
       const d=await api(`/api/campaigns/${id}/applications`);
-      $('#appsBody').innerHTML=d.items.length?d.items.map(a=>`<div class="step">${esc(a.creator.name)} — ${esc(a.status)}</div>`).join(''):`<div class="mut">${t('no_applicants')}</div>`;
+      $('#appsBody').innerHTML=d.items.length?d.items.map(a=>`<div class="step">${esc(a.creator.name)}${seal(a.creator,'sm')} — ${esc(a.status)}</div>`).join(''):`<div class="mut">${t('no_applicants')}</div>`;
     }catch(e){
       $('#appsBody').innerHTML='';
       showErr('appsErr',errT(e.message));
@@ -654,10 +715,12 @@ async function openTalent(btn,id){
     const d=await api('/api/talent/'+id);const u=d.user;
     if(u.is_platform_founder){
       $('#talentBody').innerHTML=`<div class="founder-card" style="border-radius:16px;padding:22px;text-align:center">
-      <div style="font-size:44px">👑</div>
-      <h3 style="margin:6px 0">${esc(u.name)}</h3>
-      <div>${seal(u)}</div>
-      <div class="mut" style="margin-top:8px">${esc(u.niche||'')} · ${esc(u.city)} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
+      <div class="founder-ribbon">${t('founder_ribbon')}</div>
+      <div class="founder-hero" style="margin:-22px -22px 14px;padding:26px 16px 18px;border-radius:16px 16px 0 0">
+      <div>${avatarHtml(u,true)}</div>
+      <h3 style="margin:8px 0 4px">${esc(u.name)}</h3>
+      <div>${seal(u,'big')}</div></div>
+      <div class="mut" style="margin-top:8px">${esc(u.niche||'')}${u.city?` · ${esc(u.city)}`:''} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
       <div style="margin-top:12px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span></div>
       <div class="row" style="margin-top:12px;justify-content:center">${followBtn(u)}</div>
       </div>
@@ -700,31 +763,52 @@ async function loadDash(){
   try{ ov=await api('/api/me/overview'); }catch(e){ /* شريط الملخص إضافي */ }
   let refs={items:[],total:0,verified_count:0,ambassador_target:5,featured:false,featured_until:0};
   try{ refs=await api('/api/me/referrals'); }catch(e){ /* قسم الدعوات إضافي */ }
+  let bdg={items:[]};
+  try{ bdg=await api('/api/me/badges-progress'); }catch(e){ /* قسم الشارات إضافي */ }
   const ovCard=(n,label,fn)=>`<div class="card" style="cursor:pointer" onclick="${fn}"><div class="n">${n}</div><div class="mut">${label}</div></div>`;
-  const ovStrip=ov?`<div class="card" style="margin-bottom:12px"><div style="font-size:16px">✨ ${t('ov_tagline')}</div>
+  /* «أقرب شارة»: أعلى نسبة تقدم غير مكتملة من نفس بيانات /api/me/badges-progress. */
+  const unearned=(bdg.items||[]).filter(b=>!b.earned);
+  const closest=unearned.length?unearned.reduce((a,b)=>b.pct>a.pct?b:a,unearned[0]):null;
+  const closestHtml=closest&&closest.pct>0?`<div class="row" style="margin-top:10px"><span class="chip" style="border-color:var(--gold);color:var(--gold);cursor:pointer" onclick="document.getElementById('dashBadges').scrollIntoView({behavior:'smooth'})">🏅 ${t('bp_closest')}: ${esc(t('bdg_'+closest.key))} — ${closest.pct}%</span></div>`:'';
+  const ovStrip=ov?`<div class="card ov-strip" style="margin-bottom:12px"><div style="font-size:16px">✨ ${t('ov_tagline')}</div>
     <div class="kpi" style="margin-top:10px">
     ${ovCard(ov.opportunities,t('ov_opps'),"showTab('opps')")}
     ${ovCard(ov.active_bookings,t('ov_bookings'),"showTab('bookings')")}
     ${ovCard(ov.unread_messages,t('ov_msgs'),"showTab('messages')")}
     ${ovCard(ov.followers,t('ov_followers'),"document.getElementById('dashSocial').scrollIntoView({behavior:'smooth'})")}
     ${ovCard(ov.verified_referrals,t('ov_refs'),"document.getElementById('dashReferrals').scrollIntoView({behavior:'smooth'})")}
-    </div></div>`:'';
+    </div>${closestHtml}</div>`:'';
   const refPct=Math.min(100,Math.round((refs.verified_count/(refs.ambassador_target||5))*100));
-  const refRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}<div class="mut">${esc(x.niche||'')} · ${esc(x.city||'')} · ${new Date(x.created_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div></span><span class="chip" ${x.verified?'style="border-color:var(--em);color:var(--em)"':''}>${x.verified?t('ref_state_verified'):t('ref_state_pending')}</span><button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
+  const refRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x,'sm')}<div class="mut">${esc(x.niche||'')}${x.city?` · ${esc(x.city)}`:''} · ${new Date(x.created_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div></span><span class="chip" ${x.verified?'style="border-color:var(--em);color:var(--em)"':''}>${x.verified?t('ref_state_verified'):t('ref_state_pending')}</span><button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
   const refsCard=`<div class="card" id="dashReferrals" style="margin-top:12px"><h3>${t('referrals_t')}</h3>
     <div class="mut">${t('ref_share_hint')}</div>
     <div class="row" style="margin-top:8px"><span class="chip">${refs.total} ${t('ref_total')}</span><span class="chip">${refs.verified_count} ${t('ref_verified')}</span>
     <div class="sp"></div><button class="btn ghost sm" onclick="copyProfileLink(this,${u.id})">${t('copy_profile_link')}</button></div>
     <div style="margin-top:10px"><div class="row"><span class="mut">${t('ref_progress')} (${refs.verified_count}/${refs.ambassador_target||5})</span><div class="sp"></div><span class="mut">${refPct}%</span></div>
-    <div style="background:var(--bg);border:1px solid var(--line);border-radius:99px;height:10px;margin-top:5px"><div style="width:${refPct}%;background:var(--grad);height:100%;border-radius:99px"></div></div></div>
+    <div class="bdg-bar"><div class="bdg-fill" style="width:${refPct}%"></div></div></div>
     ${refs.featured?`<div style="margin-top:8px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('ref_featured_active')}</span></div>`:''}
     <div style="margin-top:10px">${refs.items.length?refs.items.map(refRow).join(''):`<div class="mut">${t('ref_empty')}</div>`}</div>
   </div>`;
-  const socialRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x)}<div class="mut">${esc(x.niche||'')} · ${esc(x.city||'')}</div></span>${followBtn(x)}${msgBtn(x)}<button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
-  $('#dashBody').innerHTML=`${ovStrip}<div class="card">
+  /* قسم «شاراتي وتقدّمي»: المحصّلة مضيئة بختمها، والجارية بشريط تقدم ونص
+     «أنجزت X من Y — باقي لك Z»، وغير المبدوءة بشرطها واضحاً في سطر الشرط. */
+  const bdgCond=(b)=>{
+    const d=b.detail||{}; let c=t('bp_cond_'+b.key);
+    if(b.key==='perfect'&&d.completion_rate!=null)c+=` · ${t('bp_rate_now')}: ${d.completion_rate}%`;
+    if(b.key==='top_rated'&&d.positive_pct!=null)c+=` · ${t('bp_pos_now')}: ${d.positive_pct}%`;
+    if(b.key==='veteran'&&d.age_days!=null)c+=` · ${t('bp_age_now')}: ${d.age_days} ${t('bp_day_w')}`;
+    return c;
+  };
+  const bdgRow=(b)=>b.earned
+    ?`<div class="step done" style="margin-bottom:8px"><div class="row"><span class="badge-ic" style="background:${b.color}">🏅</span><b>${esc(t('bdg_'+b.key))}</b><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('badge_earned')}</span></div><div class="mut" style="margin-top:3px">${esc(bdgCond(b))}</div></div>`
+    :`<div class="step" style="margin-bottom:8px"><div class="row"><span class="badge-ic" style="background:#444">🏅</span><b>${esc(t('bdg_'+b.key))}</b><div class="sp"></div><span class="mut">${b.pct}%</span></div>
+      <div class="bdg-bar"><div class="bdg-fill" style="width:${b.pct}%"></div></div>
+      <div class="mut" style="margin-top:4px">${t('bp_done_w')} ${b.current} ${t('bp_of_w')} ${b.target} — ${t('bp_left_w')} ${b.remaining} · ${esc(bdgCond(b))}</div></div>`;
+  const badgesCard=(bdg.items&&bdg.items.length)?`<div class="card" id="dashBadges" style="margin-top:12px"><h3>🏅 ${t('bp_title')}</h3>${bdg.items.map(bdgRow).join('')}</div>`:'';
+  const socialRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x,'sm')}<div class="mut">${esc(x.niche||'')}${x.city?` · ${esc(x.city)}`:''}</div></span>${followBtn(x)}${msgBtn(x)}<button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
+  $('#dashBody').innerHTML=`${ovStrip}<div class="card${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
     <div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}${u.is_platform_founder?'':` · <span class="price">${u.price} ${u.currency}</span>`}</div>
-    <div class="row" style="margin-top:5px">${u.is_platform_founder?`<span class="founder-seal">${t('founder_seal')}</span>`:''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}
+    <div class="row" style="margin-top:5px">${u.is_platform_founder?seal(u,'big'):''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}
     <span class="chip">${t('status_w')}: ${u.penalty_level==='none'?t('status_ok'):u.penalty_level}${u.frozen?' · '+t('frozen_w'):''}</span></div></div>
     <div class="sp"></div><button class="btn ghost sm" onclick="copyProfileLink(this,${u.id})">${t('copy_profile_link')}</button><button class="btn sm" onclick="openProfile(this)">${t('edit_profile')}</button></div>
     ${u.bio?`<p style="margin:10px 0 0">${esc(u.bio)}</p>`:''}
@@ -743,6 +827,7 @@ async function loadDash(){
     <h4>${t('my_following')}</h4>${social.following.length?social.following.map(socialRow).join(''):`<div class="mut">${t('no_following_yet')}</div>`}
   </div>
   ${refsCard}
+  ${badgesCard}
   <div class="card" style="margin-top:12px"><h3>${t('verify_t')}</h3><div class="mut">${t('verify_status')}: ${me.verify_status}</div>
     ${me.verify_status!=='verified'?`<button class="btn sm" onclick="vReq(this)">${t('v_req')}</button>
     <div id="vCode" class="mut" style="margin:6px 0">${me.verify_code?`${t('v_code_cur')}: <b>${me.verify_code}</b> — ${t('v_code_hint')}`:''}</div>
@@ -927,7 +1012,7 @@ async function loadConversations(){
   try{
     const d=await api('/api/messages'); MSG_UNREAD=d.unread_total||0; buildMenu();
     $('#convList').innerHTML=d.items.length?d.items.map(c=>`<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openThread(null,${c.user.id})">
-      <div class="row">${avatarHtml(c.user)}<div style="flex:1"><b>${esc(c.user.name)}</b>${seal(c.user)}
+      <div class="row">${avatarHtml(c.user)}<div style="flex:1"><b>${esc(c.user.name)}</b>${seal(c.user,'sm')}
       <div class="mut">${c.last.mine?'↩ ':''}${esc(c.last.body.slice(0,80))}</div></div>
       ${c.unread?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${c.unread} ${t('msg_unread')}</span>`:''}
       <span class="mut">${new Date(c.last.created_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</span></div></div>`).join('')
@@ -1156,10 +1241,12 @@ function profilePageHtml(d){
   const backRow=`<div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="showTab('market')">${t('browse_market')}</button></div>`;
   if(u.is_platform_founder){
     return `<div class="card founder-card" style="text-align:center;padding:26px">
-    <div style="font-size:44px">👑</div>
-    <h3 style="margin:6px 0">${esc(u.name)}</h3>
-    <div>${seal(u)}</div>
-    <div class="mut" style="margin-top:8px">${esc(u.niche||'')} · ${esc(u.city)} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
+    <div class="founder-ribbon">${t('founder_ribbon')}</div>
+    <div class="founder-hero" style="margin:-26px -26px 14px;padding:30px 16px 20px;border-radius:20px 20px 0 0">
+    <div>${avatarHtml(u,true)}</div>
+    <h3 style="margin:8px 0 4px">${esc(u.name)}</h3>
+    <div>${seal(u,'big')}</div></div>
+    <div class="mut" style="margin-top:8px">${esc(u.niche||'')}${u.city?` · ${esc(u.city)}`:''} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
     <div style="margin-top:12px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span></div>
     <div class="row" style="margin-top:12px;justify-content:center">${followBtn(u)}${copyBtn}</div></div>${backRow}`;
   }

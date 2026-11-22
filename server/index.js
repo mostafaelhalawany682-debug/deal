@@ -286,7 +286,7 @@ async function applyPenalties(userId) {
     const frozen = level === 'suspended' ? 1 : u.frozen;
     await db.prepare('UPDATE users SET penalty_level=?, frozen=? WHERE id=?').run(level, frozen, userId);
     if (level === 'warning') await notify(userId, 'penalty', 'تنبيه: تراكمت لديك 3 تقييمات سلبية', '');
-    if (level === 'suspended') await notify(userId, 'penalty', 'تم تعليق حسابك وتجميد رصيدك داخل التطبيق بسبب 5 تقييمات سلبية', '');
+    if (level === 'suspended') await notify(userId, 'penalty', 'تم تعليق حسابك وتجميد رصيدك داخل المنصة بسبب 5 تقييمات سلبية', '');
   }
 }
 
@@ -934,7 +934,7 @@ app.get('/api/bookings/:id/fee-info', auth, async (req, res) => {
   const b = await getBooking(+req.params.id);
   if (!b || b.client_id !== req.user.id) return res.status(403).json({ error: 'غير متاح' });
   if (b.status !== 'awaiting_fee' || b.fee_status === 'confirmed') return res.status(400).json({ error: 'خطوة العمولة غير مفتوحة الآن' });
-  res.json({ label: 'Deal — حساب عمولات التطبيق', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency });
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency });
 });
 
 app.post('/api/bookings/:id/pay', auth, async (req, res) => {
@@ -1180,7 +1180,7 @@ app.get('/api/guest/:token/fee-info', async (req, res) => {
   const b = await guestBookingByToken(req.params.token);
   if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
   if (b.status !== 'awaiting_fee' || b.fee_status === 'confirmed') return res.status(400).json({ error: 'خطوة العمولة غير مفتوحة الآن' });
-  res.json({ label: 'Deal — حساب عمولات التطبيق', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency });
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency });
 });
 
 app.post('/api/guest/:token/agree', async (req, res) => {
@@ -1290,8 +1290,8 @@ app.post('/api/notifications/read', auth, async (req, res) => {
 const SUPPORT_KB = [
   { id: 'what', q_ar: 'ما هو Deal وكيف يعمل؟', q_en: 'What is Deal and how does it work?',
     keys: ['ما هو', 'ازاي بيشتغل', 'كيف يعمل', 'يعني ايه', 'what is deal', 'how does it work', 'how it works', 'about deal'],
-    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل ينشر شغلانة أو يحجز صانعاً مباشرة، والدفع يتم بين الطرفين على مراحل بحماية «ضمان Deal» — التطبيق ينظّم الخطوات ويوثّقها ولا يمسك فلوس حد.',
-    a_en: 'Deal — the platform of all content creators: creators register a profile (niche, city, price), clients post a job or book a creator directly, and payment happens between the two sides in protected stages under the Deal Guarantee — the app organizes and documents the steps and never holds anyone\'s money.' },
+    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل ينشر شغلانة أو يحجز صانعاً مباشرة، والدفع يتم بين الطرفين على مراحل بحماية «ضمان Deal» — المنصة تنظّم الخطوات وتوثّقها ولا تمسك فلوس حد.',
+    a_en: 'Deal — the platform for all content creators: creators register a profile (niche, city, price), clients post a job or book a creator directly, and payment happens between the two sides in protected stages under the Deal Guarantee — the platform organizes and documents the steps and never holds anyone\'s money.' },
   { id: 'register', q_ar: 'كيف أسجّل كصانع محتوى؟', q_en: 'How do I register as a creator?',
     keys: ['تسجيل', 'اسجل', 'حساب جديد', 'انشاء حساب', 'register', 'sign up', 'create account', 'join as creator'],
     a_ar: 'من زر «دخول / تسجيل» اختر «صانع محتوى» واملأ الاسم والمجال والمدينة وعدد المتابعين وسعرك ووسيلة تواصل واحدة (رقم هاتف أو إيميل) — التسجيل مجاني ووسيلة التواصل هي وسيلة دخولك بعد ذلك.',
@@ -1318,12 +1318,12 @@ const SUPPORT_KB = [
     a_en: 'After the 10% fee, the client pays 45% of the price directly to the creator as a deposit so work starts, and after proof of delivery and receipt confirmation pays the remaining 45% — the creator receives the full net (90%) and neither side is exposed: the client never pays the rest before delivery, and the creator never delivers before the deposit.' },
   { id: 'guarantee', q_ar: 'ما هو ضمان Deal؟', q_en: 'What is the Deal Guarantee?',
     keys: ['ضمان', 'حماية', 'امان', 'أمان', 'guarantee', 'protection', 'safe', 'trust'],
-    a_ar: '«حجز محمي بضمان Deal» يعني: دفع مرحلي موثّق داخل الحجز، عمولة مؤكدة أولاً، إثبات تنفيذ يتحقق منه التطبيق ويُختم بوقته، إمكانية فتح نزاع يجمّد الحجز حتى تراجعه الإدارة، وعند إخلال المنفذ يقترح التطبيق بدائل موثّقة من نفس مدينتك ومجالك.',
-    a_en: 'A "Deal-Guaranteed booking" means: staged payments documented inside the booking, the fee confirmed first, a proof of delivery that the app verifies and timestamps, the ability to open a dispute that freezes the booking until admin review, and — if the creator defaults — verified alternatives from your own city and niche suggested by the app.' },
+    a_ar: '«حجز محمي بضمان Deal» يعني: دفع مرحلي موثّق داخل الحجز، عمولة مؤكدة أولاً، إثبات تنفيذ تتحقق منه المنصة ويُختم بوقته، إمكانية فتح نزاع يجمّد الحجز حتى تراجعه الإدارة، وعند إخلال المنفذ تقترح المنصة بدائل موثّقة من نفس مدينتك ومجالك.',
+    a_en: 'A "Deal-Guaranteed booking" means: staged payments documented inside the booking, the fee confirmed first, a proof of delivery that the platform verifies and timestamps, the ability to open a dispute that freezes the booking until admin review, and — if the creator defaults — verified alternatives from your own city and niche suggested by the platform.' },
   { id: 'proof', q_ar: 'ما هو إثبات التنفيذ وكيف يعمل؟', q_en: 'What is proof of delivery and how does it work?',
     keys: ['اثبات', 'إثبات', 'رابط العمل', 'proof', 'delivery proof', 'published work link'],
-    a_ar: 'بعد التنفيذ يرسل الصانع رابط العمل المنشور علناً (الفيديو/المنشور) داخل الحجز؛ التطبيق يتحقق آلياً أن الرابط يعمل وعلني ويختمه بوقت الإرسال. الدفعة الأخيرة لا تُفتح إلا بإثبات سليم، والإثبات يُحفظ تلقائياً في معرض أعمال الصانع.',
-    a_en: 'After delivery, the creator submits the publicly published work link inside the booking; the app automatically verifies the link is live and public and timestamps it. The final payment only unlocks with a valid proof, and the proof is automatically saved to the creator\'s portfolio.' },
+    a_ar: 'بعد التنفيذ يرسل الصانع رابط العمل المنشور علناً (الفيديو/المنشور) داخل الحجز؛ المنصة تتحقق آلياً أن الرابط يعمل وعلني ويختمه بوقت الإرسال. الدفعة الأخيرة لا تُفتح إلا بإثبات سليم، والإثبات يُحفظ تلقائياً في معرض أعمال الصانع.',
+    a_en: 'After delivery, the creator submits the publicly published work link inside the booking; the platform automatically verifies the link is live and public and timestamps it. The final payment only unlocks with a valid proof, and the proof is automatically saved to the creator\'s portfolio.' },
   { id: 'auto_confirm', q_ar: 'ما هو التأكيد التلقائي بعد 48 ساعة؟', q_en: 'What is the 48-hour auto-confirmation?',
     keys: ['48', '٤٨', 'تأكيد تلقائي', 'سكوت', 'ما رديتش', 'auto confirm', '48 hours', 'automatic confirmation', 'no response'],
     a_ar: 'لو قدّم الصانع إثبات تنفيذ سليماً ولم يؤكد العميل الاستلام يدوياً خلال 48 ساعة من الإثبات، يؤكَّد الاستلام تلقائياً وتُفتح الدفعة الأخيرة — حمايةً للصانع من التأخير، وحق العميل في النزاع يبقى قائماً عند وجود مشكلة حقيقية.',
@@ -1346,8 +1346,8 @@ const SUPPORT_KB = [
     a_en: 'From inside the booking, tap "Open dispute" and state the reason: the booking freezes immediately at its current stage (no new payments) while the admin reviews it, then the dispute is resolved either by restoring the booking to its track or cancelling it — all documented inside the booking itself.' },
   { id: 'penalties', q_ar: 'ما هي العقوبات والتجميد؟', q_en: 'What are the penalties and freezing rules?',
     keys: ['عقوبات', 'تجميد', 'تعليق', 'حظر', 'تقييمات سلبية', 'penalties', 'penalty', 'frozen', 'suspended', 'banned', 'negative reviews'],
-    a_ar: 'العقوبات متدرجة وتلقائية من التقييمات السلبية: عند 3 تقييمات سلبية تنبيه رسمي، وعند 5 يُعلَّق الحساب ويُجمَّد رصيده داخل التطبيق ولا يستقبل حجوزات جديدة، والاحتيال يؤدي للحظر بعد مراجعة الإدارة. أموالك في محفظتك الخارجية لا يستطيع التطبيق تجميدها — التجميد داخل نظام Deal فقط.',
-    a_en: 'Penalties are graduated and automatic from negative ratings: at 3 negative ratings an official warning, at 5 the account is suspended and its in-app balance frozen and it receives no new bookings, and fraud leads to a ban after admin review. Money in your external wallet cannot be frozen by the app — freezing applies inside the Deal system only.' },
+    a_ar: 'العقوبات متدرجة وتلقائية من التقييمات السلبية: عند 3 تقييمات سلبية تنبيه رسمي، وعند 5 يُعلَّق الحساب ويُجمَّد رصيده داخل المنصة ولا يستقبل حجوزات جديدة، والاحتيال يؤدي للحظر بعد مراجعة الإدارة. أموالك في محفظتك الخارجية لا تستطيع المنصة تجميدها — التجميد داخل نظام Deal فقط.',
+    a_en: 'Penalties are graduated and automatic from negative ratings: at 3 negative ratings an official warning, at 5 the account is suspended and its balance inside the platform frozen and it receives no new bookings, and fraud leads to a ban after admin review. Money in your external wallet cannot be frozen by the platform — freezing applies inside the Deal system only.' },
   { id: 'edit_profile', q_ar: 'كيف أعدّل ملفي أو أضيف صورة شخصية؟', q_en: 'How do I edit my profile or add a profile photo?',
     keys: ['تعديل الملف', 'اعدل', 'صورة شخصية', 'اضيف صورة', 'تغيير السعر', 'edit profile', 'profile photo', 'avatar', 'change price', 'update profile'],
     a_ar: 'من «لوحتي» افتح «ملفي الشخصي» ثم «تعديل الملف»: يمكنك تعديل الاسم والمجال والمدينة وعدد المتابعين والسعر والنبذة ورقم الهاتف، ورفع صورة شخصية (تُصغَّر تلقائياً لمربع صغير) تظهر في بطاقتك بالسوق وفي ملفك وفي الهيدر.',
@@ -1360,7 +1360,7 @@ const SUPPORT_KB = [
     keys: ['حساب المؤسس', 'مؤسس Deal', 'عرض فقط', 'founder account', 'display only', 'platform founder'],
     a_ar: 'حساب «مؤسس Deal» هو حساب مالك المنصة بهويته الرسمية الفريدة (ختم داكن وتاج ذهبي): يظهر للصناع المسجلين فقط كنموذج ومعرض هوية، وهو «عرض فقط» — بلا سعر وبلا تواصل وبلا حجوزات وبلا نماذج شورتس، ولا يمكن لأي حساب عادي الحصول على شكله.',
     a_en: 'The "Deal Founder" account is the platform owner\'s official unique identity (dark seal and gold crown): it is visible to registered creators only as an identity showcase, and it is "display only" — no price, no contact, no bookings and no shorts samples, and no regular account can obtain its design.' },
-  { id: 'language', q_ar: 'كيف أبدّل لغة التطبيق؟', q_en: 'How do I switch the app language?',
+  { id: 'language', q_ar: 'كيف أبدّل لغة المنصة؟', q_en: 'How do I switch the platform language?',
     keys: ['لغة', 'انجليزي', 'english', 'language', 'switch language', 'عربي'],
     a_ar: 'من زر EN / عربي في الهيدر أو من «القائمة الرئيسية»: يتبدل كل نص في الواجهة بين العربية والإنجليزية مع اتجاه الصفحة، ويُحفظ اختيارك لزيارتك القادمة. المحتوى الذي يكتبه المستخدمون (أسماء، عناوين طلبات) يبقى كما هو بلغته الأصلية.',
     a_en: 'Use the EN / عربي button in the header or the main menu: every interface text switches between Arabic and English along with the page direction, and your choice is saved for your next visit. User-written content (names, request titles) stays in its original language.' },
@@ -1586,7 +1586,7 @@ app.get('/api/star/payment-info', auth, async (req, res) => {
   const st = await myStarState(req.user.id);
   if (st.state === 'active') return res.status(400).json({ error: 'اشتراكك في نجم Deal نشط بالفعل' });
   if (st.state === 'pending') return res.status(400).json({ error: 'عندك اشتراك قيد التحقق بالفعل — استنى تأكيد الاستلام' });
-  res.json({ label: 'Deal — حساب عمولات التطبيق', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: STAR_PRICE, currency: STAR_CURRENCY });
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: STAR_PRICE, currency: STAR_CURRENCY });
 });
 app.post('/api/star/subscribe', auth, async (req, res) => {
   const u = req.user;

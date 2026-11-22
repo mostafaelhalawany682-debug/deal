@@ -8,7 +8,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
-const { db, init } = require('./db');
+const { db, pool, init, normalizeContact } = require('./db');
 
 const PORT = process.env.PORT || 3000;
 const COMMISSION_RATE = 0.10;
@@ -38,11 +38,18 @@ async function getUser(id) { return await db.prepare('SELECT * FROM users WHERE 
 async function publicUser(u, viewerId = null) {
   if (!u) return null;
   const stats = await talentStats(u.id);
+  const founder = !!u.is_platform_founder;
+  // حساب المؤسس عرض فقط: بلا سعر وبلا معرض أعمال وبلا أي وسيلة تواصل في أي رد عام.
+  // (contact/phone لا يخرجان من publicUser أصلاً لأي مستخدم — والمؤسس تحديداً لا
+  // يظهر سعره ولا أعماله، وسعره يُحجب حتى عن الحقول الرقمية.)
   return {
     id: u.id, name: u.name, role: u.role, niche: u.niche,
     provider_category: u.provider_category, city: u.city, country: u.country,
-    currency: u.currency, followers: u.followers, price: u.price, bio: u.bio,
-    is_platform_founder: !!u.is_platform_founder,
+    currency: u.currency, followers: u.followers,
+    price: founder ? null : u.price,
+    bio: founder ? '' : u.bio,
+    avatar: founder ? '' : (u.avatar || ''),
+    is_platform_founder: founder,
     is_founder_member: !!u.is_founder_member,
     verified: !!u.verified, pioneer: !!u.pioneer,
     boost_active: u.boost_until > now() && u.penalty_level !== 'suspended',
@@ -52,7 +59,7 @@ async function publicUser(u, viewerId = null) {
     positive_pct: stats.positive_pct,
     avg_stars: stats.avg_stars,
     badges: (await computeBadges(u.id)).filter(b => b.earned).slice(0, 3).map(b => b.key),
-    portfolio: await portfolioOf(u.id),
+    portfolio: founder ? [] : await portfolioOf(u.id),
     frozen: !!u.frozen, penalty_level: u.penalty_level,
   };
 }
@@ -63,16 +70,24 @@ async function portfolioOf(userId) {
 }
 
 async function talentStats(userId) {
-  const total = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND status NOT IN ('cancelled')`).get(userId)).c;
-  const completed = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND status='completed'`).get(userId)).c;
-  const rev = await db.prepare(`SELECT COUNT(*) c, SUM(CASE WHEN sentiment='positive' THEN 1 ELSE 0 END) pos, AVG(stars) avg FROM reviews WHERE reviewee_id=?`).get(userId);
+  // استعلام واحد مجمّع (لقطة متّسقة واحدة من القاعدة) بدل ثلاثة استعلامات منفصلة
+  // كانت تُقرأ في لحظات مختلفة فتتذبذب القيم (نسبة الإتمام 100 ثم 0) بين تحميلين.
+  const r = await db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM bookings WHERE talent_id=? AND status NOT IN ('cancelled')) AS total,
+      (SELECT COUNT(*) FROM bookings WHERE talent_id=? AND status='completed') AS completed,
+      (SELECT COUNT(*) FROM reviews WHERE reviewee_id=?) AS rc,
+      (SELECT COALESCE(SUM(CASE WHEN sentiment='positive' THEN 1 ELSE 0 END),0) FROM reviews WHERE reviewee_id=?) AS pos,
+      (SELECT AVG(stars) FROM reviews WHERE reviewee_id=?) AS avg_s
+  `).get(userId, userId, userId, userId, userId);
+  const total = r.total || 0, completed = r.completed || 0, rc = r.rc || 0;
   return {
     total_deals: total,
     completed_deals: completed,
     completion_rate: total ? Math.round((completed / total) * 100) : 100,
-    positive_pct: rev.c ? Math.round((rev.pos / rev.c) * 100) : null,
-    avg_stars: rev.avg ? Math.round(rev.avg * 10) / 10 : null,
-    reviews_count: rev.c,
+    positive_pct: rc ? Math.round(((r.pos || 0) / rc) * 100) : null,
+    avg_stars: r.avg_s ? Math.round(r.avg_s * 10) / 10 : null,
+    reviews_count: rc,
   };
 }
 
@@ -147,7 +162,11 @@ async function makeSession(userId) {
 }
 
 app.post('/api/auth/register', async (req, res) => {
-  const { name, role, niche = '', provider_category = null, city = '', country = 'EG', currency = 'EGP', contact, phone = '', followers = 0, price = 0, bio = '', links = '' } = req.body || {};
+  const { name, role, niche = '', provider_category = null, city = '', country = 'EG', currency = 'EGP', followers = 0, price = 0, bio = '', links = '' } = req.body || {};
+  // تسجيل واحد فقط لكل شخص: وسيلة التواصل تُطبَّع قبل أي فحص أو حفظ،
+  // فلا يفلت تسجيل مكرر بتغيير صيغة الرقم (+20 مقابل 0) أو حالة حروف الإيميل.
+  const contact = normalizeContact(req.body && req.body.contact);
+  const phone = normalizeContact(req.body && req.body.phone) || contact;
   if (!name || !role || !contact) return res.status(400).json({ error: 'الاسم والدور ووسيلة التواصل مطلوبة' });
   if (!['creator', 'provider', 'shop', 'brand'].includes(role)) return res.status(400).json({ error: 'دور غير صحيح' });
   if (role === 'provider' && !['ads', 'support'].includes(provider_category)) return res.status(400).json({ error: 'اختر فئة الخدمة: إعلانات ممولة أو حلول حسابات' });
@@ -159,13 +178,13 @@ app.post('/api/auth/register', async (req, res) => {
   const isFounderMember = role === 'creator' && creatorsCount < 100 ? 1 : 0;
   const info = await db.prepare(`INSERT INTO users (name,role,niche,provider_category,city,country,currency,contact,phone,followers,price,bio,links,is_platform_founder,is_founder_member,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(name, role, niche, provider_category, city, country, currency, contact, phone || contact, followers, price, bio, links, isFounder, isFounderMember, now());
+    .run(name, role, niche, provider_category, city, country, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, now());
   const user = await getUser(info.lastInsertRowid);
   res.json({ token: await makeSession(user.id), user: await publicUser(user) });
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const { contact } = req.body || {};
+  const contact = normalizeContact(req.body && req.body.contact);
   const user = contact && await db.prepare('SELECT * FROM users WHERE contact=?').get(contact);
   if (!user) return res.status(404).json({ error: 'لا يوجد حساب بهذه البيانات — سجل أولاً' });
   if (user.banned) return res.status(403).json({ error: 'هذا الحساب محظور' });
@@ -174,7 +193,116 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/me', auth, async (req, res) => {
   await syncBadges(req.user.id);
-  res.json({ user: await publicUser(req.user, req.user.id), verify_status: req.user.verify_status, verify_code: req.user.verify_code });
+  const user = await publicUser(req.user, req.user.id);
+  // بيانات التواصل الخاصة تظهر لصاحب الحساب نفسه فقط (لتعبئة نموذج تعديل ملفه) —
+  // ولا تخرج في الدليل أو ملف أي مستخدم آخر، والمؤسس تحديداً لا يراها أحد غيره.
+  user.contact = req.user.contact;
+  user.phone = req.user.phone || '';
+  user.links = req.user.links || '';
+  res.json({ user, verify_status: req.user.verify_status, verify_code: req.user.verify_code });
+});
+
+/* ---------------- ملفي الشخصي: تعديل + صورة + نماذج شورتس ---------------- */
+const AVATAR_MAX_BYTES = 200 * 1024;
+app.patch('/api/me/profile', auth, async (req, res) => {
+  const b = req.body || {};
+  // قائمة بيضاء صارمة: حقول الملف فقط. أي حقل امتياز (is_platform_founder،
+  // verified، pioneer، frozen...) يُتجاهل تماماً فلا طريق لتفعيل شكل المؤسس.
+  const sets = [], args = [];
+  const setStr = (col, val, max = 300) => { if (val !== undefined) { sets.push(`${col}=?`); args.push(String(val).slice(0, max)); } };
+  if (b.name !== undefined) {
+    if (!String(b.name).trim()) return res.status(400).json({ error: 'الاسم لا يمكن أن يكون فارغاً' });
+    setStr('name', String(b.name).trim(), 120);
+  }
+  setStr('niche', b.niche, 120);
+  setStr('city', b.city, 120);
+  setStr('bio', b.bio, 600);
+  setStr('links', b.links, 600);
+  if (b.followers !== undefined) {
+    const f = +b.followers;
+    if (!isFinite(f) || f < 0) return res.status(400).json({ error: 'عدد متابعين غير صحيح' });
+    sets.push('followers=?'); args.push(Math.round(f));
+  }
+  if (b.price !== undefined) {
+    const p = +b.price;
+    if (!isFinite(p) || p < 0) return res.status(400).json({ error: 'سعر غير صحيح' });
+    sets.push('price=?'); args.push(p);
+  }
+  if (b.phone !== undefined) {
+    const ph = String(b.phone).trim();
+    if (ph) {
+      const norm = normEgPhone(ph);
+      if (!norm) return res.status(400).json({ error: 'رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)' });
+      sets.push('phone=?'); args.push(norm);
+    } else { sets.push('phone=?'); args.push(''); }
+  }
+  if (b.avatar !== undefined) {
+    const av = String(b.avatar || '');
+    if (av) {
+      const m = /^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\s]+)$/.exec(av);
+      if (!m) return res.status(400).json({ error: 'صورة غير صالحة — أرسل صورة JPEG/PNG كـ data URL' });
+      const bytes = Buffer.from(m[2], 'base64').length;
+      if (bytes > AVATAR_MAX_BYTES) return res.status(400).json({ error: 'الصورة أكبر من 200KB — صغّرها وحاول مجدداً' });
+      sets.push('avatar=?'); args.push(av);
+    } else { sets.push('avatar=?'); args.push(''); }
+  }
+  // لا حقول قابلة للتعديل في الطلب (مثلاً حقول امتياز متجاهَلة فقط): نعيد المستخدم
+  // الحالي كما هو دون تغيير — فلا طريق أبداً لتفعيل أي امتياز عبر هذا المسار.
+  if (!sets.length) {
+    const cur = await publicUser(req.user, req.user.id);
+    cur.contact = req.user.contact; cur.phone = req.user.phone || ''; cur.links = req.user.links || '';
+    return res.json({ user: cur });
+  }
+  await db.prepare(`UPDATE users SET ${sets.join(',')} WHERE id=?`).run(...args, req.user.id);
+  const fresh = await getUser(req.user.id);
+  const user = await publicUser(fresh, fresh.id);
+  user.contact = fresh.contact; user.phone = fresh.phone || ''; user.links = fresh.links || '';
+  res.json({ user });
+});
+
+/* استخراج رابط التضمين الرسمي من رابط فيديو قصير — يوتيوب/تيك توك/إنستجرام/فيسبوك. */
+function parseVideoEmbed(raw) {
+  const url = String(raw || '').trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+  let m;
+  if ((m = /(?:youtube\.com\/(?:shorts\/|watch\?v=|embed\/)|youtu\.be\/)([\w-]{6,})/.exec(url))) {
+    return { platform: 'youtube', video_id: m[1], embed_url: `https://www.youtube.com/embed/${m[1]}` };
+  }
+  if ((m = /tiktok\.com\/(?:@[^/]+\/video\/|embed\/v2\/|v\/)(\d{6,})/.exec(url))) {
+    return { platform: 'tiktok', video_id: m[1], embed_url: `https://www.tiktok.com/embed/v2/${m[1]}` };
+  }
+  if ((m = /instagram\.com\/(reel|reels|p)\/([\w-]{5,})/.exec(url))) {
+    const kind = m[1] === 'p' ? 'p' : 'reel';
+    return { platform: 'instagram', video_id: m[2], embed_url: `https://www.instagram.com/${kind}/${m[2]}/embed` };
+  }
+  if (/facebook\.com|fb\.watch/.test(url) && /(reel|watch|videos|share\/v)/.test(url)) {
+    const idm = /(?:reel\/|videos\/|v=|watch\?v=)(\d{5,})/.exec(url);
+    return { platform: 'facebook', video_id: idm ? idm[1] : '', embed_url: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false` };
+  }
+  return null;
+}
+const SHORTS_MAX = 3;
+async function shortsOf(userId) {
+  return await db.prepare('SELECT id,platform,embed_url,title,created_at FROM portfolio_items WHERE user_id=? ORDER BY created_at ASC, id ASC').all(userId);
+}
+app.get('/api/me/portfolio', auth, async (req, res) => {
+  res.json({ items: await shortsOf(req.user.id) });
+});
+app.post('/api/me/portfolio', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس عرض فقط — لا نماذج شورتس' });
+  if (req.user.role !== 'creator') return res.status(400).json({ error: 'نماذج الشورتس للصناع فقط' });
+  const { url, title = '' } = req.body || {};
+  const parsed = parseVideoEmbed(url);
+  if (!parsed) return res.status(400).json({ error: 'رابط فيديو غير مدعوم — الصق رابط شورتس من يوتيوب أو فيسبوك أو إنستجرام أو تيك توك' });
+  const count = (await db.prepare('SELECT COUNT(*) c FROM portfolio_items WHERE user_id=?').get(req.user.id)).c;
+  if (count >= SHORTS_MAX) return res.status(400).json({ error: 'وصلت إلى الحد الأقصى: 3 فيديوهات شورتس — احذف واحداً أولاً' });
+  const info = await db.prepare('INSERT INTO portfolio_items (user_id,platform,video_id,embed_url,source_url,title,created_at) VALUES (?,?,?,?,?,?,?)')
+    .run(req.user.id, parsed.platform, parsed.video_id, parsed.embed_url, String(url).trim(), String(title || '').slice(0, 120), now());
+  res.json({ item: { id: info.lastInsertRowid, platform: parsed.platform, embed_url: parsed.embed_url, title: String(title || '').slice(0, 120) }, items: await shortsOf(req.user.id) });
+});
+app.delete('/api/me/portfolio/:id', auth, async (req, res) => {
+  await db.prepare('DELETE FROM portfolio_items WHERE id=? AND user_id=?').run(+req.params.id, req.user.id);
+  res.json({ items: await shortsOf(req.user.id) });
 });
 
 app.post('/api/me/prefs', auth, async (req, res) => {
@@ -185,10 +313,24 @@ app.post('/api/me/prefs', auth, async (req, res) => {
 });
 
 /* ---------------- directory / market ---------------- */
+/* جلسة اختيارية من الترويسة (للمسارات العامة التي يتغير ردها حسب المشاهد). */
+async function optionalViewer(req) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return null;
+  const s = await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
+  return s ? await getUser(s.user_id) : null;
+}
+/* حساب المؤسس يظهر للصناع ومقدمي الخدمة المسجلين فقط — لا يراه زائر ولا ضيف ولا محل. */
+function canSeeFounder(viewer) {
+  return !!viewer && ['creator', 'provider'].includes(viewer.role);
+}
+
 app.get('/api/directory', async (req, res) => {
+  const viewer = await optionalViewer(req);
   const { role, niche, city, q } = req.query;
   let sql = `SELECT * FROM users WHERE role IN ('creator','provider') AND banned=0`;
   const args = [];
+  if (!canSeeFounder(viewer)) sql += ' AND is_platform_founder=0';
   if (role) { sql += ' AND role=?'; args.push(role); }
   if (niche) { sql += ' AND niche=?'; args.push(niche); }
   if (city) { sql += ' AND city=?'; args.push(city); }
@@ -199,7 +341,8 @@ app.get('/api/directory', async (req, res) => {
   const t = now();
   rows.sort((a, b) => {
     const boost = (x) => (x.boost_until > t && x.penalty_level !== 'suspended') ? 1 : 0;
-    return (b.verified - a.verified) || (boost(b) - boost(a)) || ((dealsMap[b.id] || 0) - (dealsMap[a.id] || 0));
+    // ترتيب ثابت تماماً: كاسر تعادل أخير بالمعرّف حتى لا «تظهر وتختفي» البطاقات بين تحميلين.
+    return (b.verified - a.verified) || (boost(b) - boost(a)) || ((dealsMap[b.id] || 0) - (dealsMap[a.id] || 0)) || (a.id - b.id);
   });
   res.json({ items: await Promise.all(rows.map(u => publicUser(u))) });
 });
@@ -207,12 +350,22 @@ app.get('/api/directory', async (req, res) => {
 app.get('/api/talent/:id', async (req, res) => {
   const u = await getUser(+req.params.id);
   if (!u) return res.status(404).json({ error: 'غير موجود' });
-  const token = (req.headers.authorization || '').replace('Bearer ', '');
-  const s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
-  const viewerId = s ? s.user_id : null;
+  const viewer = await optionalViewer(req);
+  const viewerId = viewer ? viewer.id : null;
+  // ملف المؤسس: للصناع/المقدمين المسجلين وللمؤسس نفسه فقط — غيرهم كأنه غير موجود.
+  if (u.is_platform_founder && viewerId !== u.id && !canSeeFounder(viewer)) {
+    return res.status(404).json({ error: 'غير موجود' });
+  }
   if (viewerId !== u.id) await db.prepare('INSERT INTO profile_views (talent_id,viewer_id,created_at) VALUES (?,?,?)').run(u.id, viewerId, now());
   const reviews = await db.prepare(`SELECT r.*, COALESCE(u2.name, 'عميل') reviewer_name FROM reviews r LEFT JOIN users u2 ON u2.id=r.reviewer_id WHERE r.reviewee_id=? ORDER BY r.created_at DESC LIMIT 10`).all(u.id);
-  res.json({ user: await publicUser(u), stats: await talentStats(u.id), badges: await computeBadges(u.id), reviews });
+  res.json({
+    user: await publicUser(u),
+    stats: await talentStats(u.id),
+    badges: await computeBadges(u.id),
+    reviews,
+    // نماذج الشورتس المضمّنة (حد أقصى 3) — المؤسس بلا نماذج إطلاقاً بمواصفة المالك.
+    shorts: u.is_platform_founder ? [] : await shortsOf(u.id),
+  });
 });
 
 /* ---------------- automatic verification ---------------- */
@@ -296,6 +449,7 @@ app.post('/api/bookings', auth, async (req, res) => {
   const { talent_id, title = '', price, source = 'direct', ref_id = null, deadline_days = 7 } = req.body || {};
   const talent = await getUser(+talent_id);
   if (!talent || !['creator', 'provider'].includes(talent.role)) return res.status(400).json({ error: 'المنفذ غير صحيح' });
+  if (talent.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً' });
   if (talent.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك حجز نفسك' });
   if (talent.penalty_level === 'suspended' || talent.frozen) return res.status(403).json({ error: 'هذا الحساب معلّق حالياً ولا يستقبل حجوزات' });
   const p = price != null ? +price : talent.price;
@@ -519,21 +673,43 @@ app.post('/api/guest-requests', async (req, res) => {
   res.json({ id: info.lastInsertRowid, token, follow: `/#/g/${token}` });
 });
 
-/* صانع مسجل يحوّل طلب الضيف إلى حجز رسمي بنفس آلة الحالات — العميل طرفه الضيف. */
+/* صانع مسجل يحوّل طلب الضيف إلى حجز رسمي بنفس آلة الحالات — العميل طرفه الضيف.
+   التحويل معاملة واحدة ذرّية: قفل صف الطلب، إدراج الحجز، تحديث حالة الطلب،
+   وإشعار الصانع — كلها تنجح معاً أو تتراجع معاً، فلا «إشعار نجاح» بلا حجز فعلي،
+   ولا تحويل مكرر لنفس الطلب أبداً. */
 app.post('/api/guest-requests/:id/book', auth, async (req, res) => {
   if (!['creator', 'provider'].includes(req.user.role)) return res.status(400).json({ error: 'تحويل الطلبات للصناع ومقدمي الخدمة فقط' });
-  const rq = await db.prepare('SELECT * FROM shop_requests WHERE id=? AND is_guest=1').get(+req.params.id);
-  if (!rq) return res.status(404).json({ error: 'طلب ضيف غير موجود' });
-  if (rq.status !== 'open') return res.status(400).json({ error: 'هذا الطلب اتحجز خلاص' });
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً' });
   if (req.user.penalty_level === 'suspended' || req.user.frozen) return res.status(403).json({ error: 'حسابك معلّق حالياً ولا يستقبل حجوزات' });
   const { price, deadline_days = 7 } = req.body || {};
-  const p = price != null ? +price : (rq.budget || req.user.price);
-  if (!p || p <= 0) return res.status(400).json({ error: 'حدد سعراً صحيحاً' });
-  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,created_at) VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(req.user.id, 'guest_request', rq.id, rq.title, p, rq.currency, now() + deadline_days * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, now());
-  await db.prepare(`UPDATE shop_requests SET status='booked' WHERE id=?`).run(rq.id);
-  await notify(req.user.id, 'booking_new', `حوّلت طلب عميل «${rq.guest_name}» إلى حجز #${info.lastInsertRowid} — العميل هيكمل خطواته من رابط متابعته`, `booking:${info.lastInsertRowid}`);
-  res.json({ booking: await bookingView(await getBooking(info.lastInsertRowid), req.user), follow: `/#/g/${rq.guest_token}` });
+  const client = await pool.connect();
+  let bookingId = null, guestToken = '';
+  try {
+    await client.query('BEGIN');
+    const rqRes = await client.query('SELECT * FROM shop_requests WHERE id=$1 AND is_guest=1 FOR UPDATE', [+req.params.id]);
+    const rq = rqRes.rows[0];
+    if (!rq) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'طلب ضيف غير موجود' }); }
+    if (rq.status !== 'open') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'هذا الطلب اتحجز خلاص — لا يمكن تحويله مرتين' }); }
+    const p = price != null ? +price : (rq.budget || req.user.price);
+    if (!p || p <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'حدد سعراً صحيحاً' }); }
+    const ins = await client.query(
+      `INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,created_at)
+       VALUES (NULL,$1,'guest_request',$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [req.user.id, rq.id, rq.title, p, rq.currency, now() + deadline_days * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, now()]);
+    bookingId = ins.rows[0].id;
+    guestToken = rq.guest_token;
+    await client.query(`UPDATE shop_requests SET status='booked' WHERE id=$1`, [rq.id]);
+    // الإشعار داخل نفس المعاملة: لا يُحفظ إلا إذا حُفظ الحجز نفسه.
+    await client.query('INSERT INTO notifications (user_id,type,text,ref,created_at) VALUES ($1,$2,$3,$4,$5)',
+      [req.user.id, 'booking_new', `حوّلت طلب عميل «${rq.guest_name}» إلى حجز #${bookingId} — العميل هيكمل خطواته من رابط متابعته`, `booking:${bookingId}`, now()]);
+    await client.query('COMMIT');
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) { /* تجاهل */ }
+    throw e;
+  } finally {
+    client.release();
+  }
+  res.json({ booking: await bookingView(await getBooking(bookingId), req.user), follow: `/#/g/${guestToken}` });
 });
 
 async function guestBookingByToken(token) {
@@ -647,6 +823,8 @@ app.post('/api/applications/:id/accept', auth, async (req, res) => {
   const c = await db.prepare('SELECT * FROM campaigns WHERE id=?').get(a.campaign_id);
   if (!c || c.brand_user_id !== req.user.id) return res.status(403).json({ error: 'ليست حملتك' });
   if (a.status !== 'pending') return res.status(400).json({ error: 'تم البت في هذا التقديم' });
+  const applicant = await getUser(a.creator_id);
+  if (applicant && applicant.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً' });
   const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,created_at) VALUES (?,?,?,?,?,?,?,?,?)`)
     .run(req.user.id, a.creator_id, 'campaign', c.id, c.title, c.budget || (await getUser(a.creator_id)).price, c.currency, now() + 7 * 24 * 3600 * 1000, now());
   await db.prepare(`UPDATE campaign_applications SET status='accepted', booking_id=? WHERE id=?`).run(info.lastInsertRowid, a.id);
@@ -663,6 +841,143 @@ app.get('/api/notifications', auth, async (req, res) => {
 app.post('/api/notifications/read', auth, async (req, res) => {
   await db.prepare('UPDATE notifications SET is_read=1 WHERE user_id=?').run(req.user.id);
   res.json({ ok: true });
+});
+
+/* ---------------- الدعم بالرد التلقائي (قاعدة أسئلة شائعة منسّقة) ----------------
+   مطابقة بكلمات مفتاحية بعد تطبيع النص العربي/الإنجليزي. سؤال معروف → إجابته
+   فوراً. سؤال خارج القاعدة → رد احتياطي مهذب + حفظ السؤال في support_messages
+   ليطّلع عليه المالك من لوحته. */
+const SUPPORT_KB = [
+  { id: 'what', q_ar: 'ما هو Deal وكيف يعمل؟', q_en: 'What is Deal and how does it work?',
+    keys: ['ما هو', 'ازاي بيشتغل', 'كيف يعمل', 'يعني ايه', 'what is deal', 'how does it work', 'how it works', 'about deal'],
+    a_ar: 'Deal سوق محلي يربط صناع المحتوى الصغار بمحلات وبراندات مدينتهم: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل ينشر شغلانة أو يحجز صانعاً مباشرة، والدفع يتم بين الطرفين على مراحل بحماية «ضمان Deal» — التطبيق ينظّم الخطوات ويوثّقها ولا يمسك فلوس حد.',
+    a_en: 'Deal is a local marketplace connecting small content creators with shops and brands in their city: creators register a profile (niche, city, price), clients post a job or book a creator directly, and payment happens between the two sides in protected stages under the Deal Guarantee — the app organizes and documents the steps and never holds anyone\'s money.' },
+  { id: 'register', q_ar: 'كيف أسجّل كصانع محتوى؟', q_en: 'How do I register as a creator?',
+    keys: ['تسجيل', 'اسجل', 'حساب جديد', 'انشاء حساب', 'register', 'sign up', 'create account', 'join as creator'],
+    a_ar: 'من زر «دخول / تسجيل» اختر «صانع محتوى» واملأ الاسم والمجال والمدينة وعدد المتابعين وسعرك ووسيلة تواصل واحدة (رقم هاتف أو إيميل) — التسجيل مجاني ووسيلة التواصل هي وسيلة دخولك بعد ذلك.',
+    a_en: 'Tap "Login / Register", choose "Content creator" and fill in your name, niche, city, follower count, price and one contact (phone or email) — registration is free, and that contact becomes your login afterwards.' },
+  { id: 'one_account', q_ar: 'لماذا لا أستطيع التسجيل مرتين؟', q_en: 'Why can\'t I register twice?',
+    keys: ['مرتين', 'حسابين', 'ملفين', 'مسجلة من قبل', 'تسجيل مكرر', 'two accounts', 'register twice', 'duplicate', 'already registered'],
+    a_ar: 'كل شخص له حساب واحد فقط على Deal — وسيلة التواصل الواحدة = ملف واحد، حتى تبقى التقييمات والسمعة مرتبطة بشخص حقيقي واحد ولا تتشتت. لو سجلت من قبل، استخدم «دخول» بنفس الرقم أو الإيميل (بأي صيغة: +20 أو 0 — النظام يوحّدها).',
+    a_en: 'Each person gets exactly one Deal account — one contact = one profile, so ratings and reputation stay tied to a single real person. If you registered before, just log in with the same number or email (any format: +20 or 0 — the system normalizes it).' },
+  { id: 'guest_post', q_ar: 'كيف أنشر شغلانة كعميل دون تسجيل؟', q_en: 'How do I post a job as a client without registering?',
+    keys: ['ضيف', 'دون تسجيل', 'بدون تسجيل', 'بدون حساب', 'انشر شغلانة', 'نشر طلب', 'عندي محل', 'guest', 'without registering', 'without account', 'post a job', 'post job'],
+    a_ar: 'من زر «📣 انشر شغلانة» في الواجهة: اكتب اسم نشاطك ورقم واتسابك والمدينة ونوع الإعلان والميزانية ووصف الشغلانة — بدون أي حساب. طلبك يظهر للصناع فوراً ويتواصلون معك واتساب، وستحصل على رابط متابعة خاص تكمل منه خطوات الحجز والدفع والتقييم.',
+    a_en: 'Use the "📣 Post a job" button on the home page: enter your business name, WhatsApp number, city, ad type, budget and a description — no account needed. Creators see your request instantly and contact you on WhatsApp, and you get a private follow-up link to complete booking, payment and rating steps.' },
+  { id: 'fee_why', q_ar: 'ما هي عمولة Deal ولماذا تُدفع أولاً؟', q_en: 'What is the Deal fee and why is it paid first?',
+    keys: ['عمولة', 'ليه العمولة', 'لماذا العمولة', '10%', '١٠', 'fee', 'commission', 'why fee first', '10 percent'],
+    a_ar: 'عمولة Deal هي 10% من قيمة الشغلانة، وتُدفع أولاً قبل أي مبلغ للصانع: بها يتأكد جدية الحجز ويُفتح باقي خطوات الدفع المحمي، وهي مصدر تشغيل المنصة وخدمة الضمان والتوثيق. العميل يدفع السعر المعلن بالضبط — العمولة جزء منه وتُخصم من حصة الصانع (صافي الصانع 90%).',
+    a_en: 'The Deal fee is 10% of the job value, paid first before any money reaches the creator: it confirms the booking is serious and unlocks the protected payment stages, and it funds the platform, guarantee and verification services. The client pays exactly the listed price — the fee is part of it and comes out of the creator\'s share (the creator nets 90%).' },
+  { id: 'fee_how', q_ar: 'كيف أدفع العمولة؟', q_en: 'How do I pay the fee?',
+    keys: ['ادفع العمولة ازاي', 'كيف ادفع', 'فودافون كاش', 'انستاباي', 'مرجع التحويل', 'رقم التحويلة', 'how to pay', 'vodafone cash', 'instapay', 'transfer reference', 'payment reference'],
+    a_ar: 'داخل خطوة «عمولة Deal أولاً» في حجزك اضغط «إظهار حساب عمولات Deal» وسيظهر رقم حساب العمولات (يظهر فقط للعميل الدافع وداخل هذه الخطوة فقط). حوّل مبلغ العمولة إليه من محفظتك (فودافون كاش أو إنستاباي)، ثم اكتب مرجع عملية التحويل في الحجز واضغط تأكيد — التأكيد تلقائي.',
+    a_en: 'Inside the "Deal fee first" step of your booking, tap "Show Deal fee account" — the fee account number appears only to the paying client and only at this step. Transfer the fee amount from your wallet (Vodafone Cash or InstaPay), then enter the transfer reference in the booking and confirm — confirmation is automatic.' },
+  { id: 'stages', q_ar: 'كيف يتم الدفع على مراحل (45/45)؟', q_en: 'How does the staged payment (45/45) work?',
+    keys: ['مراحل', '45', '٤٥', 'عربون', 'الباقي', 'دفعتين', 'staged', 'deposit', 'stages', 'two payments', 'installments'],
+    a_ar: 'بعد العمولة (10%)، يدفع العميل 45% من السعر عربوناً للصانع مباشرة فيبدأ التنفيذ، وبعد تقديم إثبات التنفيذ وتأكيد الاستلام يدفع الـ45% الباقية — فيصل للصانع صافيه كاملاً (90%) ولا يخسر أي طرف: العميل لا يدفع الباقي قبل ما يستلم، والصانع لا يسلّم قبل العربون.',
+    a_en: 'After the 10% fee, the client pays 45% of the price directly to the creator as a deposit so work starts, and after proof of delivery and receipt confirmation pays the remaining 45% — the creator receives the full net (90%) and neither side is exposed: the client never pays the rest before delivery, and the creator never delivers before the deposit.' },
+  { id: 'guarantee', q_ar: 'ما هو ضمان Deal؟', q_en: 'What is the Deal Guarantee?',
+    keys: ['ضمان', 'حماية', 'امان', 'أمان', 'guarantee', 'protection', 'safe', 'trust'],
+    a_ar: '«حجز محمي بضمان Deal» يعني: دفع مرحلي موثّق داخل الحجز، عمولة مؤكدة أولاً، إثبات تنفيذ يتحقق منه التطبيق ويُختم بوقته، إمكانية فتح نزاع يجمّد الحجز حتى تراجعه الإدارة، وعند إخلال المنفذ يقترح التطبيق بدائل موثّقة من نفس مدينتك ومجالك.',
+    a_en: 'A "Deal-Guaranteed booking" means: staged payments documented inside the booking, the fee confirmed first, a proof of delivery that the app verifies and timestamps, the ability to open a dispute that freezes the booking until admin review, and — if the creator defaults — verified alternatives from your own city and niche suggested by the app.' },
+  { id: 'proof', q_ar: 'ما هو إثبات التنفيذ وكيف يعمل؟', q_en: 'What is proof of delivery and how does it work?',
+    keys: ['اثبات', 'إثبات', 'رابط العمل', 'proof', 'delivery proof', 'published work link'],
+    a_ar: 'بعد التنفيذ يرسل الصانع رابط العمل المنشور علناً (الفيديو/المنشور) داخل الحجز؛ التطبيق يتحقق آلياً أن الرابط يعمل وعلني ويختمه بوقت الإرسال. الدفعة الأخيرة لا تُفتح إلا بإثبات سليم، والإثبات يُحفظ تلقائياً في معرض أعمال الصانع.',
+    a_en: 'After delivery, the creator submits the publicly published work link inside the booking; the app automatically verifies the link is live and public and timestamps it. The final payment only unlocks with a valid proof, and the proof is automatically saved to the creator\'s portfolio.' },
+  { id: 'auto_confirm', q_ar: 'ما هو التأكيد التلقائي بعد 48 ساعة؟', q_en: 'What is the 48-hour auto-confirmation?',
+    keys: ['48', '٤٨', 'تأكيد تلقائي', 'سكوت', 'ما رديتش', 'auto confirm', '48 hours', 'automatic confirmation', 'no response'],
+    a_ar: 'لو قدّم الصانع إثبات تنفيذ سليماً ولم يؤكد العميل الاستلام يدوياً خلال 48 ساعة من الإثبات، يؤكَّد الاستلام تلقائياً وتُفتح الدفعة الأخيرة — حمايةً للصانع من التأخير، وحق العميل في النزاع يبقى قائماً عند وجود مشكلة حقيقية.',
+    a_en: 'If the creator submits a valid proof of delivery and the client does not manually confirm receipt within 48 hours of the proof, receipt is auto-confirmed and the final payment unlocks — protecting the creator from delays, while the client\'s right to dispute a real problem remains.' },
+  { id: 'reviews', q_ar: 'متى أستطيع تقييم الطرف الآخر؟', q_en: 'When can I rate the other side?',
+    keys: ['تقييم', 'نجوم', 'رأيي', 'review', 'rating', 'rate', 'stars'],
+    a_ar: 'التقييم يفتح فقط بعد «اكتمال القبض» (انتهاء كل مراحل الدفع)، مرة واحدة لكل طرف ولكل حجز، ولا يمكن تعديله بعد إرساله — هكذا تبقى التقييمات مرتبطة بصفقات حقيقية مكتملة فعلاً.',
+    a_en: 'Rating unlocks only after "full payment completion" (all payment stages done), once per side per booking, and cannot be edited after submission — keeping ratings tied to real, completed deals.' },
+  { id: 'verification', q_ar: 'كيف أوثّق حسابي وما هي الشارات؟', q_en: 'How do I verify my account and what are the badges?',
+    keys: ['توثيق', 'موثق', 'شارة', 'شارات', 'كود الملكية', 'verify', 'verified', 'badge', 'badges', 'verification'],
+    a_ar: 'من لوحتك اطلب «كود الملكية» وضعه في بايو أحد حساباتك العلنية أو منشور مثبت، ثم أرسل رابط الحساب للفحص: التطابق يعني توثيقاً فورياً بشارة «موثّق Deal»، وأول موثّق في كل مدينة+مجال يأخذ لقب «رائد المدينة». توجد أيضاً شارات إنجاز تُمنح وتُسحب تلقائياً من سجلك (إتمام مثالي، الأعلى تقييماً، تنفيذ سريع، صانع صاعد، سفير Deal، مخضرم).',
+    a_en: 'From your dashboard, request an "ownership code", place it in the bio of one of your public accounts or a pinned post, then submit the account link for checking: a match means instant verification with the "Deal Verified" badge, and the first verified creator in each city+niche earns "City Pioneer". Achievement badges (Perfect Completion, Top Rated, Fast Delivery, Rising Creator, Deal Ambassador, Veteran) are granted and revoked automatically from your record.' },
+  { id: 'founder_member', q_ar: 'ما هي شارة «عضو مؤسس»؟', q_en: 'What is the "Founding Member" badge?',
+    keys: ['عضو مؤسس', 'مؤسس', 'اول 100', 'أول ١٠٠', 'founding member', 'first 100', 'founder member'],
+    a_ar: 'أول 100 صانع محتوى يسجلون على Deal يحصلون على شارة «عضو مؤسس» الدائمة في ملفهم — تمييز مبكر لا يُمنح لمن يسجل بعد اكتمال العدد.',
+    a_en: 'The first 100 creators to register on Deal receive a permanent "Founding Member" badge on their profile — an early distinction that is not granted once the first hundred is complete.' },
+  { id: 'disputes', q_ar: 'كيف أفتح نزاعاً على حجز؟', q_en: 'How do I open a dispute on a booking?',
+    keys: ['نزاع', 'مشكلة في حجز', 'اشتكي', 'شكوى', 'dispute', 'complaint', 'problem with booking'],
+    a_ar: 'من داخل الحجز اضغط «فتح نزاع» واكتب السبب: يتجمّد الحجز فوراً في مرحلته الحالية (لا دفعات جديدة) وتراجع الإدارة الحالة، ثم يُحل النزاع إما بإرجاع الحجز لمساره أو إلغائه — وكل ذلك موثّق داخل الحجز نفسه.',
+    a_en: 'From inside the booking, tap "Open dispute" and state the reason: the booking freezes immediately at its current stage (no new payments) while the admin reviews it, then the dispute is resolved either by restoring the booking to its track or cancelling it — all documented inside the booking itself.' },
+  { id: 'penalties', q_ar: 'ما هي العقوبات والتجميد؟', q_en: 'What are the penalties and freezing rules?',
+    keys: ['عقوبات', 'تجميد', 'تعليق', 'حظر', 'تقييمات سلبية', 'penalties', 'penalty', 'frozen', 'suspended', 'banned', 'negative reviews'],
+    a_ar: 'العقوبات متدرجة وتلقائية من التقييمات السلبية: عند 3 تقييمات سلبية تنبيه رسمي، وعند 5 يُعلَّق الحساب ويُجمَّد رصيده داخل التطبيق ولا يستقبل حجوزات جديدة، والاحتيال يؤدي للحظر بعد مراجعة الإدارة. أموالك في محفظتك الخارجية لا يستطيع التطبيق تجميدها — التجميد داخل نظام Deal فقط.',
+    a_en: 'Penalties are graduated and automatic from negative ratings: at 3 negative ratings an official warning, at 5 the account is suspended and its in-app balance frozen and it receives no new bookings, and fraud leads to a ban after admin review. Money in your external wallet cannot be frozen by the app — freezing applies inside the Deal system only.' },
+  { id: 'edit_profile', q_ar: 'كيف أعدّل ملفي أو أضيف صورة شخصية؟', q_en: 'How do I edit my profile or add a profile photo?',
+    keys: ['تعديل الملف', 'اعدل', 'صورة شخصية', 'اضيف صورة', 'تغيير السعر', 'edit profile', 'profile photo', 'avatar', 'change price', 'update profile'],
+    a_ar: 'من «لوحتي» افتح «ملفي الشخصي» ثم «تعديل الملف»: يمكنك تعديل الاسم والمجال والمدينة وعدد المتابعين والسعر والنبذة ورقم الهاتف، ورفع صورة شخصية (تُصغَّر تلقائياً لمربع صغير) تظهر في بطاقتك بالسوق وفي ملفك وفي الهيدر.',
+    a_en: 'From "My dashboard" open "My profile" then "Edit profile": you can edit your name, niche, city, follower count, price, bio and phone number, and upload a profile photo (auto-cropped to a small square) that appears on your market card, your profile and the header.' },
+  { id: 'shorts', q_ar: 'كيف أضيف نماذج شورتس لملفي؟', q_en: 'How do I add shorts samples to my profile?',
+    keys: ['شورتس', 'نماذج', 'نماذج شغل', 'اضيف فيديو', 'معرض اعمال', 'shorts', 'samples', 'portfolio videos', 'add video', 'work samples'],
+    a_ar: 'من «تعديل الملف» في قسم «نماذج الشورتس»: الصق رابط فيديو قصير (يوتيوب Shorts أو Facebook Reel أو Instagram Reel أو TikTok) مع عنوان اختياري — بحد أقصى 3 فيديوهات، وتظهر في ملفك العام كمقاطع مضمّنة شغالة داخل الملف نفسه لا كروابط. (روابط إثباتات التنفيذ من حجوزاتك المكتملة تظهر أيضاً أسفلها تلقائياً.)',
+    a_en: 'From "Edit profile", in the "Shorts samples" section: paste a short video link (YouTube Shorts, Facebook Reel, Instagram Reel or TikTok) with an optional title — a maximum of 3 videos, shown on your public profile as embedded playable videos inside the profile, not as links. (Proof links from your completed bookings also appear below them automatically.)' },
+  { id: 'founder_account', q_ar: 'ما هو حساب المؤسس ولماذا هو «عرض فقط»؟', q_en: 'What is the founder account and why is it "display only"?',
+    keys: ['حساب المؤسس', 'مؤسس Deal', 'عرض فقط', 'founder account', 'display only', 'platform founder'],
+    a_ar: 'حساب «مؤسس Deal» هو حساب مالك المنصة بهويته الرسمية الفريدة (ختم داكن وتاج ذهبي): يظهر للصناع المسجلين فقط كنموذج ومعرض هوية، وهو «عرض فقط» — بلا سعر وبلا تواصل وبلا حجوزات وبلا نماذج شورتس، ولا يمكن لأي حساب عادي الحصول على شكله.',
+    a_en: 'The "Deal Founder" account is the platform owner\'s official unique identity (dark seal and gold crown): it is visible to registered creators only as an identity showcase, and it is "display only" — no price, no contact, no bookings and no shorts samples, and no regular account can obtain its design.' },
+  { id: 'language', q_ar: 'كيف أبدّل لغة التطبيق؟', q_en: 'How do I switch the app language?',
+    keys: ['لغة', 'انجليزي', 'english', 'language', 'switch language', 'عربي'],
+    a_ar: 'من زر EN / عربي في الهيدر أو من «القائمة الرئيسية»: يتبدل كل نص في الواجهة بين العربية والإنجليزية مع اتجاه الصفحة، ويُحفظ اختيارك لزيارتك القادمة. المحتوى الذي يكتبه المستخدمون (أسماء، عناوين طلبات) يبقى كما هو بلغته الأصلية.',
+    a_en: 'Use the EN / عربي button in the header or the main menu: every interface text switches between Arabic and English along with the page direction, and your choice is saved for your next visit. User-written content (names, request titles) stays in its original language.' },
+  { id: 'booking_how', q_ar: 'كيف أحجز صانعاً أو يصلني شغل؟', q_en: 'How do I book a creator, or get work as a creator?',
+    keys: ['احجز', 'حجز صانع', 'يصلني شغل', 'فرص ليك', 'شغل يجيلي', 'book a creator', 'how to book', 'get work', 'opportunities'],
+    a_ar: 'العميل: من بطاقة الصانع في السوق اضغط «احجز» فيُفتح حجز محمي بضمان Deal بسعره المعلن. الصانع: الشغل يصلك من قسم «فرص ليك» الذي يطابق طلبات المحلات والحملات مع مدينتك ومجالك تلقائياً، ومن طلبات الضيوف التي تحوّلها لحجوزات بنفسك من السوق.',
+    a_en: 'Clients: tap "Book" on a creator\'s market card to open a Deal-Guaranteed booking at the listed price. Creators: work reaches you through "Opportunities for you", which automatically matches shop requests and campaigns to your city and niche, and through guest requests you can convert into bookings yourself from the market.' },
+  { id: 'campaigns', q_ar: 'ما هي الحملات وكيف أقدّم عليها؟', q_en: 'What are campaigns and how do I apply?',
+    keys: ['حملات', 'حملة', 'اقدم على', 'براند', 'campaign', 'campaigns', 'apply', 'brand'],
+    a_ar: 'الحملات شغلانات تنشرها البراندات من قسم «الحملات» ببريف وميزانية: الصانع يقدّم عليها من بطاقتها، وإذا قبل البراند تقديمه يُفتح حجز عادي تلقائياً بنفس حماية Deal ومراحل دفعها.',
+    a_en: 'Campaigns are jobs posted by brands in the "Campaigns" section with a brief and budget: creators apply from the campaign card, and if the brand accepts, a normal booking opens automatically with the same Deal protection and payment stages.' },
+];
+function normSupportText(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[\u064B-\u0652\u0640]/g, '')
+    .replace(/[إأآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+    .replace(/[^\p{L}\p{N}% ]/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+function supportMatch(q) {
+  const nq = ' ' + normSupportText(q) + ' ';
+  let best = null, bestScore = 0; const scored = [];
+  for (const item of SUPPORT_KB) {
+    let score = 0;
+    for (const k of item.keys) {
+      const nk = normSupportText(k);
+      if (nk && nq.includes(nk)) score += Math.max(2, nk.length >= 6 ? 3 : 2);
+    }
+    scored.push({ item, score });
+    if (score > bestScore) { bestScore = score; best = item; }
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return { best: bestScore >= 2 ? best : null, closest: scored.filter(s => s.score > 0).slice(0, 3).map(s => s.item) };
+}
+app.get('/api/support/topics', (req, res) => {
+  const lang = req.query.lang === 'en' ? 'en' : 'ar';
+  res.json({ items: SUPPORT_KB.map(x => ({ id: x.id, q: lang === 'en' ? x.q_en : x.q_ar })) });
+});
+app.post('/api/support/ask', async (req, res) => {
+  const { q, contact = '' } = req.body || {};
+  const lang = (req.body && req.body.lang) === 'en' ? 'en' : 'ar';
+  if (!q || !String(q).trim()) return res.status(400).json({ error: lang === 'en' ? 'Write your question first' : 'اكتب سؤالك أولاً' });
+  const { best, closest } = supportMatch(String(q));
+  if (best) {
+    return res.json({ fallback: false, topic: best.id, answer: lang === 'en' ? best.a_en : best.a_ar });
+  }
+  // سؤال خارج القاعدة: يُحفظ للمالك (مع حساب السائل إن كان مسجلاً) ويُرد باحتياط مهذب.
+  const viewer = await optionalViewer(req);
+  await db.prepare('INSERT INTO support_messages (user_id,question,contact,lang,created_at) VALUES (?,?,?,?,?)')
+    .run(viewer ? viewer.id : null, String(q).slice(0, 1000), String(contact || '').slice(0, 120), lang, now());
+  const topics = (closest.length ? closest : SUPPORT_KB.slice(0, 3)).map(x => lang === 'en' ? x.q_en : x.q_ar);
+  res.json({
+    fallback: true,
+    topics,
+    answer: lang === 'en'
+      ? 'Thanks for your question — I don\'t have a ready answer for it yet, so I saved it for the Deal team to review. You can leave a contact (optional) in the box below, or try one of the closest topics:'
+      : 'شكراً لسؤالك — لا توجد لديّ إجابة جاهزة عنه بعد، فحفظته لفريق Deal للمراجعة. يمكنك ترك وسيلة تواصل (اختياري) في الخانة بالأسفل، أو جرّب أحد أقرب المواضيع:',
+  });
 });
 
 /* ---------------- creator stats ---------------- */
@@ -708,6 +1023,16 @@ app.get('/api/owner/dashboard', auth, ownerOnly, async (req, res) => {
     completed: (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE status='completed'`).get()).c,
   };
   res.json({ commissions, disputes, exceptional, penalized, platform });
+});
+/* رسائل الدعم المحفوظة (أسئلة خارج قاعدة الرد التلقائي) — قراءة للمالك فقط. */
+app.get('/api/owner/support-messages', auth, ownerOnly, async (req, res) => {
+  const items = await db.prepare(`SELECT s.*, u.name AS user_name FROM support_messages s LEFT JOIN users u ON u.id=s.user_id ORDER BY s.created_at DESC LIMIT 100`).all();
+  const unread = (await db.prepare('SELECT COUNT(*) c FROM support_messages WHERE is_read=0').get()).c;
+  res.json({ items, unread });
+});
+app.post('/api/owner/support-messages/read', auth, ownerOnly, async (req, res) => {
+  await db.prepare('UPDATE support_messages SET is_read=1').run();
+  res.json({ ok: true });
 });
 app.post('/api/owner/disputes/:id/resolve', auth, ownerOnly, async (req, res) => {
   const d = await db.prepare('SELECT * FROM disputes WHERE id=?').get(+req.params.id);

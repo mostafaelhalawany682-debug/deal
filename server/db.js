@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS users (
   currency TEXT DEFAULT 'EGP',
   contact TEXT NOT NULL UNIQUE,
   phone TEXT DEFAULT '',
+  avatar TEXT DEFAULT '',
   followers INTEGER DEFAULT 0,
   price DOUBLE PRECISION DEFAULT 0,
   bio TEXT DEFAULT '',
@@ -207,6 +208,27 @@ CREATE TABLE IF NOT EXISTS badge_state (
   earned INTEGER DEFAULT 0,
   PRIMARY KEY(user_id, badge_key)
 );
+
+CREATE TABLE IF NOT EXISTS portfolio_items (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  platform TEXT NOT NULL,
+  video_id TEXT DEFAULT '',
+  embed_url TEXT NOT NULL,
+  source_url TEXT DEFAULT '',
+  title TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS support_messages (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER DEFAULT NULL,
+  question TEXT NOT NULL,
+  contact TEXT DEFAULT '',
+  lang TEXT DEFAULT 'ar',
+  is_read INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
 `;
 
 /* ترحيلات «طلب العميل كضيف»: آمنة للتكرار على قواعد قائمة (إنتاج Supabase)
@@ -225,7 +247,42 @@ ALTER TABLE reviews ALTER COLUMN reviewer_id DROP NOT NULL;
 ALTER TABLE reviews ALTER COLUMN reviewee_id DROP NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_shop_requests_guest_token ON shop_requests(guest_token) WHERE guest_token<>'';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_guest_token ON bookings(guest_token) WHERE guest_token<>'';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT DEFAULT '';
+CREATE TABLE IF NOT EXISTS portfolio_items (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  platform TEXT NOT NULL,
+  video_id TEXT DEFAULT '',
+  embed_url TEXT NOT NULL,
+  source_url TEXT DEFAULT '',
+  title TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS support_messages (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER DEFAULT NULL,
+  question TEXT NOT NULL,
+  contact TEXT DEFAULT '',
+  lang TEXT DEFAULT 'ar',
+  is_read INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_contact_norm ON users(contact);
 `;
+
+/* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
+   موحّدة (0xxxxxxxxxx) مهما كانت الصيغة المدخلة (+20 / 0020 / مسافات).
+   يُستخدم في التسجيل والدخول معاً حتى لا يتكرر حساب لنفس الشخص أبداً. */
+function normalizeContact(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return s;
+  if (s.includes('@')) return s.toLowerCase().replace(/\s+/g, '');
+  let d = s.replace(/[\s()-]/g, '');
+  if (d.startsWith('+')) d = d.slice(1);
+  if (d.startsWith('0020')) d = '0' + d.slice(4);
+  else if (d.startsWith('20') && d.length === 12) d = '0' + d.slice(2);
+  return d;
+}
 
 /* إنشاء الجداول مرة واحدة عند أول تشغيل (آمن للتكرار: IF NOT EXISTS). */
 let readyPromise = null;
@@ -234,6 +291,18 @@ function init() {
     readyPromise = (async () => {
       await pool.query(SCHEMA_SQL);
       await pool.query(MIGRATIONS_SQL);
+      // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
+      // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
+      try {
+        const rows = (await pool.query('SELECT id, contact FROM users')).rows;
+        for (const r of rows) {
+          const n = normalizeContact(r.contact);
+          if (n && n !== r.contact) {
+            try { await pool.query('UPDATE users SET contact=$1 WHERE id=$2', [n, r.id]); }
+            catch (e) { /* تعارض تفرّد — يُترك كما هو */ }
+          }
+        }
+      } catch (e) { /* تطبيع الصفوف القائمة لا يعطّل الإقلاع أبداً */ }
     })();
   }
   return readyPromise;
@@ -244,6 +313,7 @@ function init() {
 const ID_TABLES = new Set([
   'users', 'shop_requests', 'campaigns', 'campaign_applications', 'bookings',
   'payments', 'disputes', 'reviews', 'notifications', 'profile_views',
+  'portfolio_items', 'support_messages',
 ]);
 
 function toPgSql(sql) {
@@ -278,4 +348,4 @@ function prepare(sql) {
 
 const db = { prepare };
 
-module.exports = { db, pool, init, ready: init };
+module.exports = { db, pool, init, ready: init, normalizeContact };

@@ -192,6 +192,17 @@ async function setObligationStatus(ob, to, actor, note = '', patch = {}) {
   for (const k of allowed) if (patch[k] !== undefined) { sets.push(`${k}=?`); args.push(patch[k]); }
   await db.prepare(`UPDATE money_obligations SET ${sets.join(',')} WHERE id=?`).run(...args, ob.id);
   await moneyLedger(ob.id, ob.status, to, actor, note);
+  /* ختم المُحصّل (جولة السفير): انتقال التزام منصة إلى «مؤكد» يعني أن المال
+     وصل فعلاً إلى نقطة تحصيل — تُختم هوية المُحصّل (السفير النشط لنطاق
+     الالتزام وقتها، أو المالك نفسه) ورقمه ووقت التحصيل على الالتزام، فتبقى
+     نسبة التحصيل وحسابات التسوية ثابتة تاريخياً مهما تبدّل السفراء بعدها.
+     الختم توثيقي بحت: أي فشل فيه لا يعطّل تأكيداً مالياً أبداً. */
+  if ((to === 'confirmed' || to === 'auto_confirmed') && ob.payee === 'owner') {
+    try {
+      const fresh = await db.prepare('SELECT * FROM money_obligations WHERE id=?').get(ob.id);
+      if (fresh) await stampObligationCollector(fresh);
+    } catch (e) { /* توثيق المُحصّل لا يعطّل المال */ }
+  }
   return await db.prepare('SELECT * FROM money_obligations WHERE id=?').get(ob.id);
 }
 async function getObligation(id) { return await db.prepare('SELECT * FROM money_obligations WHERE id=?').get(id); }
@@ -212,7 +223,17 @@ async function payerObligationView(ob, countryCode) {
   v.method_label = c.payAr;
   v.method_label_en = c.payEn;
   if (ob.payee === 'owner') {
-    if (ob.status === 'open' && COMMISSION_PHONE) v.payee_phone = COMMISSION_PHONE;
+    /* رقم المستلم داخل خطوة الدفع: سفير فعّال لنطاق الالتزام (مدينة/دولة
+       الدافع) يقدّم رقمه المحلي بدل رقم المالك الافتراضي — بنفس بوابة الكشف
+       القائمة (الالتزام «مفتوح» فقط) وبنفس المرجع وبصمة الكسور حرفياً. */
+    if (ob.status === 'open') {
+      const col = await collectorForObligation(await stampObligationScope(ob));
+      if (col.phone) {
+        v.payee_phone = col.phone;
+        v.collector = col.via;
+        if (col.ambassador) { v.collector_city = col.ambassador.city; v.collector_country = col.ambassador.country; }
+      }
+    }
   } else if (ob.payee_user_id) {
     const pu = await getUser(ob.payee_user_id);
     if (pu && pu.contact) v.payee_phone = pu.contact;
@@ -276,10 +297,10 @@ async function getOrCreateObligation(f) {
     existing = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status IN ('open','claimed') ORDER BY id DESC LIMIT 1`).get(f.kind, f.booking_id);
   }
   if (existing) {
-    if (!existing.expires_at || existing.expires_at > now()) return existing;
+    if (!existing.expires_at || existing.expires_at > now()) return await stampObligationScope(existing);
     await setObligationStatus(existing, 'expired', 'system', 'انتهت صلاحية الالتزام المفتوح');
   }
-  return await createObligation(f);
+  return await stampObligationScope(await createObligation(f));
 }
 /* مبالغ أرجل الحجز بنفس صيغ آلة الحالات القائمة حرفياً (عمولة/نصف الصافي). */
 function bookingLegAmounts(b) {
@@ -325,6 +346,102 @@ async function claimObligationForPayment(b, kind, ref, actor) {
 async function settleLegObligation(bookingId, legKind, note) {
   const ob = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status='claimed' ORDER BY id DESC LIMIT 1`).get(legKind, bookingId);
   if (ob) await setObligationStatus(ob, 'confirmed', 'system', note);
+}
+
+/* ---------------- سفير المدينة = نقطة التحصيل المحلية (اقتراح ٤) ----------------
+   المالك يعيّن عضواً موثّقاً «سفير مدينة» لنطاق (دولة + مدينة): رقم محفظته
+   المحلية يصبح رقم التحصيل الذي يظهر داخل خطوات دفع التزامات المنصة الواقعة
+   في نطاقه (عمولة حجز، باقي محتجَز، اشتراك نجم) بدل رقم المالك الافتراضي —
+   والمرجع المالي الموحد وبصمة الكسور كما هما تماماً. «نطاق الالتزام» هو
+   مدينة/دولة الدافع (عضواً كان: حسابه؛ أو ضيفاً: طلبُه) — لأن خطوة الدفع
+   خطوته هو ووسيلة دفع دولته هي ما يراه أصلاً في الالتزام. خارج أي نطاق سفير:
+   الرقم الافتراضي الحالي كما هو حرفياً. نسبة/مقابل السفير حقل يضبطه المالك
+   ويُحفظ للعرض فقط — لا منطق خصم ولا توزيع فلوس يُبنى حوله أبداً. */
+function normCity(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
+/* نطاق الالتزام من سجلاته: أعمدة مختومة أولاً، وإلا يُشتق من الدافع. */
+async function obligationScope(ob) {
+  if (ob.scope_country) return { city: ob.scope_city || '', country: ob.scope_country };
+  let city = '', country = '';
+  if (ob.payer_user_id) {
+    const u = await getUser(ob.payer_user_id);
+    if (u) { city = u.city || ''; country = u.country || 'EG'; }
+  } else if (ob.guest_token) {
+    const r = await db.prepare('SELECT city, country FROM shop_requests WHERE guest_token=?').get(ob.guest_token);
+    if (r) { city = r.city || ''; country = r.country || 'EG'; }
+  }
+  if (!country && ob.user_id) {
+    const u = await getUser(ob.user_id);
+    if (u) { city = u.city || ''; country = u.country || 'EG'; }
+  }
+  return { city, country };
+}
+/* ختم النطاق على الالتزام مرة واحدة (من أول إنشاء/عرض) فتستقر قراءته لاحقاً. */
+async function stampObligationScope(ob) {
+  if (!ob || ob.scope_country) return ob;
+  const sc = await obligationScope(ob);
+  if (!sc.country) return ob;
+  await db.prepare('UPDATE money_obligations SET scope_city=?, scope_country=? WHERE id=?').run(sc.city || '', sc.country, ob.id);
+  return await getObligation(ob.id);
+}
+/* السفير الفعّال لنطاق (مدينة، دولة) — واحد فقط بفهرس فريد جزئي في القاعدة. */
+async function activeAmbassadorFor(city, country) {
+  const c = countryOf(country);
+  if (!c || !normCity(city)) return null;
+  const rows = await db.prepare('SELECT * FROM ambassadors WHERE active=1 AND country=? ORDER BY id ASC').all(c.code);
+  const target = normCity(city);
+  return rows.find((a) => normCity(a.city) === target) || null;
+}
+async function ambassadorForObligation(ob) {
+  if (!ob || ob.payee !== 'owner') return null;
+  const sc = await obligationScope(ob);
+  return await activeAmbassadorFor(sc.city, sc.country);
+}
+/* رقم التحصيل الفعلي لالتزام منصة: رقم السفير النشط لنطاقه، وإلا الافتراضي. */
+async function collectorForObligation(ob) {
+  const amb = await ambassadorForObligation(ob);
+  if (amb && amb.collection_phone) return { phone: amb.collection_phone, via: 'ambassador', ambassador: amb };
+  return { phone: COMMISSION_PHONE, via: 'owner', ambassador: null };
+}
+/* ختم المُحصّل عند تأكيد الالتزام (يُستدعى من setObligationStatus): السفير
+   النشط للنطاق في هذه اللحظة (أو المالك نفسه بلا سفير) + رقمه + وقت التحصيل. */
+async function stampObligationCollector(ob) {
+  const scoped = await stampObligationScope(ob);
+  const amb = await ambassadorForObligation(scoped);
+  await db.prepare('UPDATE money_obligations SET collector_user_id=?, collector_phone=?, collector_at=? WHERE id=?')
+    .run(amb ? amb.user_id : null, amb ? amb.collection_phone : (COMMISSION_PHONE || ''), now(), ob.id);
+}
+/* نطاق سفارة عضو (لشارة ملفه/بطاقته) — المؤسس بلا سفارة أبداً. */
+async function activeAmbassadorScopeOf(userId) {
+  if (!userId) return null;
+  const a = await db.prepare('SELECT city, country FROM ambassadors WHERE user_id=? AND active=1 ORDER BY id ASC LIMIT 1').get(userId);
+  return a ? { city: a.city, country: a.country } : null;
+}
+/* محصّلات تعيين سفير من الالتزامات المؤكدة المختومة باسمه في نطاقه، وحالة
+   التسوية منها: ما خُتم قبل لحظة «تمت التسوية» الأخيرة = مُسوّى، وبعده = قيد
+   الانتظار. الأرقام من السجلات فقط — لا تُحسب من التعيين نفسه. */
+async function ambassadorCollected(appt) {
+  const rows = await db.prepare(`SELECT exact_amount, currency, collector_at, scope_city, scope_country FROM money_obligations WHERE collector_user_id=? AND status IN ('confirmed','auto_confirmed')`).all(appt.user_id);
+  const cur = (countryOf(appt.country) || {}).currency || '';
+  let total = 0, settled = 0;
+  for (const o of rows) {
+    if ((o.scope_country || '') !== appt.country || normCity(o.scope_city || '') !== normCity(appt.city)) continue;
+    if (cur && o.currency !== cur) continue;
+    total += o.exact_amount;
+    if (appt.settled_at && o.collector_at && o.collector_at <= appt.settled_at) settled += o.exact_amount;
+  }
+  total = mround(total); settled = mround(settled);
+  const pending = mround(total - settled);
+  return { total, settled, pending, currency: cur, status: total === 0 ? 'none' : (pending > 0 ? 'pending' : 'settled') };
+}
+async function ambassadorView(appt) {
+  const u = await getUser(appt.user_id);
+  return {
+    id: appt.id, user_id: appt.user_id, user_name: u ? u.name : '—',
+    city: appt.city, country: appt.country, collection_phone: appt.collection_phone,
+    compensation: appt.compensation || '', active: !!appt.active,
+    created_at: appt.created_at, removed_at: appt.removed_at || 0, settled_at: appt.settled_at || 0,
+    collected: await ambassadorCollected(appt),
+  };
 }
 
 /* ---------------- احتجاز الباقي عند Deal (Escrow — نموذج Binance P2P) ----------------
@@ -535,6 +652,10 @@ async function publicUser(u, viewerId = null) {
     // غلاف شخصي + لون تمييز من اللوحة المنسّقة — المؤسس بهوية ثابتة بلا كليهما.
     cover: founder ? '' : (u.cover || ''),
     accent: founder ? '' : (u.accent || ''),
+    // سفير المدينة (نقطة تحصيل محلية بتعيين المالك): نطاقه العلني فقط (مدينة/
+    // دولة) — رقم تحصيله لا يخرج هنا أبداً؛ يظهر للدافع وحده داخل خطوة دفع
+    // التزام واقع في نطاقه. المؤسس بلا سفارة (لا يُعيَّن ولا يدخل نطاق أحد).
+    ambassador_scope: founder ? null : await activeAmbassadorScopeOf(u.id),
     verified: !!u.verified, pioneer: !!u.pioneer,
     // باقة «نجم Deal»: لا تظهر إلا لاشتراك نشط فعلياً (مؤكد وغير منتهٍ) — المؤسس
     // لا يشترك أصلاً فتبقى false له دائماً. star_of_week لنجم الأسبوع الحالي وحده.
@@ -1680,7 +1801,8 @@ app.get('/api/bookings/:id/fee-info', auth, async (req, res) => {
     base_amount: bookingLegAmounts(b).fee, currency: b.currency,
     payer_user_id: req.user.id, payee: 'owner',
   });
-  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency, obligation: await payerObligationView(ob, req.user.country) });
+  const colFee = await collectorForObligation(ob);
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: colFee.phone, collector_via: colFee.via, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency, obligation: await payerObligationView(ob, req.user.country) });
 });
 
 app.post('/api/bookings/:id/pay', auth, async (req, res) => {
@@ -1986,7 +2108,8 @@ app.get('/api/guest/:token/fee-info', async (req, res) => {
     base_amount: bookingLegAmounts(b).fee, currency: b.currency,
     guest_token: b.guest_token, payee: 'owner',
   });
-  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency, obligation: await payerObligationView(ob, await guestCountryByToken(req.params.token)) });
+  const colGFee = await collectorForObligation(ob);
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: colGFee.phone, collector_via: colGFee.via, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency, obligation: await payerObligationView(ob, await guestCountryByToken(req.params.token)) });
 });
 
 /* التزام خطوة دفع الضيف (عربون/أخيرة): يُعرض للدافع الضيف برمز متابعته فقط. */
@@ -2502,7 +2625,8 @@ app.get('/api/star/payment-info', auth, async (req, res) => {
     kind: 'star_subscription', user_id: req.user.id, base_amount: STAR_PRICE,
     currency: STAR_CURRENCY, payer_user_id: req.user.id, payee: 'owner',
   });
-  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: STAR_PRICE, currency: STAR_CURRENCY, obligation: await payerObligationView(ob, req.user.country) });
+  const colStar = await collectorForObligation(ob);
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: colStar.phone, collector_via: colStar.via, methods: ['Vodafone Cash', 'InstaPay'], amount: STAR_PRICE, currency: STAR_CURRENCY, obligation: await payerObligationView(ob, req.user.country) });
 });
 app.post('/api/star/subscribe', auth, async (req, res) => {
   const u = req.user;
@@ -2696,13 +2820,25 @@ function parseReceiptDate(v) {
   const p = Date.parse(s);
   return isNaN(p) ? 0 : p;
 }
-function recipientMatches(extractedDigits) {
-  const phone = String(COMMISSION_PHONE || '').replace(/\D/g, '');
+function phoneMatches(phone, extractedDigits) {
+  const p = String(phone || '').replace(/\D/g, '');
   const rec = String(extractedDigits || '').replace(/\D/g, '');
-  if (!phone || rec.length < 4) return false;
-  if (!phone.endsWith(rec.slice(-4))) return false;
-  if (rec.length <= phone.length) return phone.endsWith(rec) || rec.length === 4;
-  return rec.endsWith(phone);
+  if (!p || rec.length < 4) return false;
+  if (!p.endsWith(rec.slice(-4))) return false;
+  if (rec.length <= p.length) return p.endsWith(rec) || rec.length === 4;
+  return rec.endsWith(p);
+}
+function recipientMatches(extractedDigits) {
+  return phoneMatches(COMMISSION_PHONE, extractedDigits);
+}
+/* مستلم الإيصال لالتزام بعينه: رقم المالك الافتراضي، أو رقم السفير النشط
+   لنطاق هذا الالتزام تحديداً (جولة السفير) — لا رقم سفير آخر ولا أي رقم
+   ثالث: نفس الصرامة، بمستلمَين مشروعَين فقط لهذا النطاق. */
+async function recipientMatchesForObligation(ob, extractedDigits) {
+  if (recipientMatches(extractedDigits)) return true;
+  const amb = await ambassadorForObligation(ob);
+  if (amb && amb.collection_phone) return phoneMatches(amb.collection_phone, extractedDigits);
+  return false;
 }
 app.post('/api/money/verify-receipt', async (req, res) => {
   const { obligation_code, image, image_hash, extracted = {}, guest_token } = req.body || {};
@@ -2750,7 +2886,7 @@ app.post('/api/money/verify-receipt', async (req, res) => {
       exAmount, exRecipient.slice(0, 40), exRef, exDate, now());
   const failed = [];
   if (exAmount == null || !isFinite(exAmount) || mround(exAmount) !== mround(ob.exact_amount)) failed.push('amount');
-  if (!recipientMatches(exRecipient)) failed.push('recipient');
+  if (!(await recipientMatchesForObligation(ob, exRecipient))) failed.push('recipient');
   if (!exRef) failed.push('ref');
   if (!exDate || now() - exDate > RECEIPT_DATE_WINDOW_MS || exDate > now() + 3600 * 1000) failed.push('date');
   if (image_hash && String(image_hash).toLowerCase() !== serverHash) failed.push('hash');
@@ -2796,6 +2932,9 @@ async function moneyItemView(ob) {
     payer_name: payer ? payer.name : (bk ? (bk.guest_name || 'عميل ضيف') : (subUser ? subUser.name : '—')),
     payee_name: ob.payee === 'owner' ? 'مالك المنصة (عمولات Deal)' : (payeeUser ? payeeUser.name : '—'),
     subject_name: subUser ? subUser.name : '',
+    // نطاق الالتزام ومُحصّله المختوم (للمالك وحده هنا): أين وقع التحصيل فعلاً.
+    scope_city: ob.scope_city || '', scope_country: ob.scope_country || '',
+    collector_user_id: ob.collector_user_id || null, collector_phone: ob.collector_phone || '',
   };
 }
 app.get('/api/owner/money', auth, ownerOnly, async (req, res) => {
@@ -2947,6 +3086,86 @@ app.post('/api/owner/escrow/:bookingId/refund', auth, ownerOnly, async (req, res
   if (b.client_id) await notify(b.client_id, 'escrow', `حجز #${b.id}: اترد لك الباقي المحتجَز ${rest} ${b.currency} — راجع محفظتك`, `booking:${b.id}`);
   res.json({ ok: true, item: await escrowItemView(await getBooking(b.id)) });
 });
+/* ---------------- سفراء المدن = نقاط التحصيل المحلية (اقتراح ٤) ----------------
+   تعيين المالك وحده: عضو موثّق (غير موثّق → 400)، لا مؤسس أبداً، برقم تحصيل
+   محلي صالح لدولة النطاق، وسفير فعّال واحد لكل (دولة، مدينة) — تعيين بديل
+   يُلغي السابق مع بقاء سجله التاريخي. المقابل حقل حر يضبطه المالك ويُحفظ
+   للعرض فقط. التسوية يعلّمها المالك («تمت») فتنقسم محصّلات السفير عندها. */
+app.get('/api/owner/ambassadors', auth, ownerOnly, async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM ambassadors ORDER BY active DESC, id DESC').all();
+  const items = await Promise.all(rows.map(ambassadorView));
+  const candidates = (await db.prepare(`SELECT id, name, role, niche, provider_category, city, country FROM users WHERE verified=1 AND is_platform_founder=0 AND banned=0 AND role IN ('creator','provider') ORDER BY id ASC`).all())
+    .map((u) => ({ id: u.id, name: u.name, role: u.role, niche: u.niche, provider_category: u.provider_category, city: u.city, country: u.country }));
+  res.json({ items, candidates });
+});
+app.post('/api/owner/ambassadors', auth, ownerOnly, async (req, res) => {
+  const { user_id, city, country, collection_phone, compensation } = req.body || {};
+  const target = await getUser(+user_id || 0);
+  if (!target) return res.status(404).json({ error: 'العضو غير موجود' });
+  if (target.is_platform_founder) return res.status(400).json({ error: 'المؤسس لا يُعيَّن سفيراً أبداً' });
+  if (!target.verified) return res.status(400).json({ error: 'تعيين السفير لعضو موثّق فقط — العضو غير موثّق' });
+  if (target.banned) return res.status(400).json({ error: 'العضو محظور — لا يمكن تعيينه سفيراً' });
+  const ctry = countryOf(country);
+  if (!ctry) return res.status(400).json({ error: 'دولة غير صحيحة' });
+  const cityN = normCity(city);
+  if (!cityN) return res.status(400).json({ error: 'مدينة السفير مطلوبة' });
+  const phone = normalizePhoneForCountry(collection_phone, ctry.code);
+  if (!phone) return res.status(400).json({ error: 'رقم التحصيل غير صالح لدولة النطاق' });
+  // بديل لنفس النطاق: السابق يُلغى (يبقى تاريخه) قبل تفعيل الجديد.
+  const prev = await activeAmbassadorFor(cityN, ctry.code);
+  if (prev) {
+    await db.prepare('UPDATE ambassadors SET active=0, removed_at=?, removed_by=? WHERE id=?').run(now(), req.user.id, prev.id);
+    await notify(prev.user_id, 'ambassador_removed', `انتهى تعيينك سفيراً لـDeal في ${prev.city} — شكراً لخدمتك`, 'ambassador');
+  }
+  const info = await db.prepare(`INSERT INTO ambassadors (user_id,city,country,collection_phone,compensation,active,created_at) VALUES (?,?,?,?,?,1,?)`)
+    .run(target.id, cityN, ctry.code, phone, String(compensation || '').slice(0, 200), now());
+  const appt = await db.prepare('SELECT * FROM ambassadors WHERE id=?').get(info.lastInsertRowid);
+  await notify(target.id, 'ambassador_appointed', `🏛️ عيّنك مالك Deal سفيراً للمنصة في ${cityN} — رقم تحصيلك المحلي بقى يظهر في خطوات دفع مدينتك`, 'ambassador');
+  res.json({ ok: true, appointment: await ambassadorView(appt) });
+});
+app.post('/api/owner/ambassadors/:id/remove', auth, ownerOnly, async (req, res) => {
+  const appt = await db.prepare('SELECT * FROM ambassadors WHERE id=?').get(+req.params.id);
+  if (!appt) return res.status(404).json({ error: 'التعيين غير موجود' });
+  if (!appt.active) return res.status(400).json({ error: 'التعيين ملغي أصلاً' });
+  await db.prepare('UPDATE ambassadors SET active=0, removed_at=?, removed_by=? WHERE id=?').run(now(), req.user.id, appt.id);
+  await notify(appt.user_id, 'ambassador_removed', `انتهى تعيينك سفيراً لـDeal في ${appt.city} — شكراً لخدمتك`, 'ambassador');
+  res.json({ ok: true, appointment: await ambassadorView(await db.prepare('SELECT * FROM ambassadors WHERE id=?').get(appt.id)) });
+});
+app.post('/api/owner/ambassadors/:id/settle', auth, ownerOnly, async (req, res) => {
+  const appt = await db.prepare('SELECT * FROM ambassadors WHERE id=?').get(+req.params.id);
+  if (!appt) return res.status(404).json({ error: 'التعيين غير موجود' });
+  await db.prepare('UPDATE ambassadors SET settled_at=? WHERE id=?').run(now(), appt.id);
+  const fresh = await db.prepare('SELECT * FROM ambassadors WHERE id=?').get(appt.id);
+  await notify(appt.user_id, 'ambassador_settled', `💰 سوّى مالك Deal معاك تحصيلات ${appt.city} حتى الآن — الحالة عندك بقت «تمت التسوية»`, 'ambassador');
+  res.json({ ok: true, appointment: await ambassadorView(fresh) });
+});
+/* قسم السفير في لوحته: نطاقه هو فقط — أعضاء مدينته/دولته (بلا أي وسيلة
+   تواصل)، والالتزامات الواقعة في نطاقه بحالاتها، ومحصّلاته وحالة تسويته.
+   عضو بلا تعيين فعّال يرى قائمة فارغة (القسم لا يظهر له أصلاً في الواجهة). */
+app.get('/api/ambassador/me', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.json({ appointments: [] });
+  const appts = await db.prepare('SELECT * FROM ambassadors WHERE user_id=? AND active=1 ORDER BY id ASC').all(req.user.id);
+  const out = [];
+  for (const appt of appts) {
+    const memberRows = await db.prepare(`SELECT * FROM users WHERE role IN ('creator','provider') AND banned=0 AND is_platform_founder=0 AND country=? ORDER BY id ASC`).all(appt.country);
+    const members = memberRows
+      .filter((u) => normCity(u.city) === normCity(appt.city))
+      .map((u) => ({ id: u.id, name: u.name, role: u.role, niche: u.niche, provider_category: u.provider_category, city: u.city, country: u.country, verified: !!u.verified, founder_seat: u.founder_seat ?? null, is_founder_member: !!u.is_founder_member }));
+    const obRows = await db.prepare(`SELECT * FROM money_obligations WHERE payee='owner' AND scope_country=? ORDER BY id DESC LIMIT 200`).all(appt.country);
+    const obligations = obRows
+      .filter((o) => normCity(o.scope_city || '') === normCity(appt.city))
+      .slice(0, 50)
+      .map((o) => ({ code: o.code, kind: o.kind, booking_id: o.booking_id, exact_amount: mround(o.exact_amount), currency: o.currency, status: o.status, created_at: o.created_at, decided_at: o.decided_at || 0, collected: ['confirmed', 'auto_confirmed'].includes(o.status) }));
+    out.push({
+      id: appt.id, city: appt.city, country: appt.country, collection_phone: appt.collection_phone,
+      compensation: appt.compensation || '', created_at: appt.created_at, settled_at: appt.settled_at || 0,
+      collected: await ambassadorCollected(appt),
+      members, obligations,
+    });
+  }
+  res.json({ appointments: out });
+});
+
 /* رد المقدم على الإفراج: وصلني ✓ أو ماوصلش ⚠ (تنبيه فوري للمالك عند الثاني). */
 app.post('/api/bookings/:id/release-response', auth, async (req, res) => {
   const b = await getBooking(+req.params.id);

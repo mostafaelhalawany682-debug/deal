@@ -592,6 +592,36 @@ FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY id ASC) AS rn FROM users WHERE role
 WHERE u.id = sub.id AND sub.rn <= 100 AND u.founder_seat IS NULL;
 `;
 
+/* ترحيلات جولة «سفير المدينة = نقطة التحصيل» (اقتراح ٤): جدول تعيينات
+   السفراء (سفير فعّال واحد لكل (دولة، مدينة) — الفهرس الفريد الجزئي ظهر أخير،
+   والتعيين البديل يُلغي السابق مع بقاء سجله التاريخي)، وأعمدة نطاق/مُحصّل على
+   الالتزامات المالية: النطاق (مدينة/دولة الدافع) يُختم عند الإنشاء، والمُحصّل
+   (السفير النشط وقت التأكيد + رقمه + وقته) يُختم عند انتقال الالتزام إلى
+   confirmed/auto_confirmed فقط — فتبقى نسب التحصيل والتسويات ثابتة تاريخياً
+   مهما تبدّل السفراء بعدها. كل عبارة idempotent. */
+const AMBASSADOR_MIGRATIONS_SQL = `
+CREATE TABLE IF NOT EXISTS ambassadors (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  city TEXT NOT NULL,
+  country TEXT NOT NULL DEFAULT 'EG',
+  collection_phone TEXT NOT NULL DEFAULT '',
+  compensation TEXT DEFAULT '',
+  active INTEGER DEFAULT 1,
+  settled_at BIGINT DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  removed_at BIGINT DEFAULT 0,
+  removed_by INTEGER DEFAULT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ambassadors_scope_active ON ambassadors(country, city) WHERE active=1;
+CREATE INDEX IF NOT EXISTS idx_ambassadors_user ON ambassadors(user_id, active);
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS scope_city TEXT DEFAULT '';
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS scope_country TEXT DEFAULT '';
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS collector_user_id INTEGER DEFAULT NULL;
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS collector_phone TEXT DEFAULT '';
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS collector_at BIGINT DEFAULT 0;
+`;
+
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
    موحّدة (0xxxxxxxxxx) مهما كانت الصيغة المدخلة (+20 / 0020 / مسافات).
    يُستخدم في التسجيل والدخول معاً حتى لا يتكرر حساب لنفس الشخص أبداً. */
@@ -614,6 +644,7 @@ function init() {
       await pool.query(SCHEMA_SQL);
       await pool.query(MIGRATIONS_SQL);
       await pool.query(SOCIAL_MIGRATIONS_SQL);
+      await pool.query(AMBASSADOR_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -638,7 +669,7 @@ const ID_TABLES = new Set([
   'payments', 'disputes', 'reviews', 'notifications', 'profile_views',
   'portfolio_items', 'support_messages', 'messages', 'star_subscriptions',
   'friendships', 'profile_posts',
-  'money_obligations', 'money_ledger', 'money_receipts',
+  'money_obligations', 'money_ledger', 'money_receipts', 'ambassadors',
 ]);
 
 function toPgSql(sql) {

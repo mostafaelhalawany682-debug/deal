@@ -193,10 +193,11 @@ async function publicUser(u, viewerId = null) {
     followers_count: await followersCount(u.id),
     is_following: await isFollowing(viewerId, u.id),
   };
-  // مدينة المؤسس غير ظاهرة للعامة (طلب المالك الصريح): تُحذف من كل رد عام
-  // (الدليل، الملف العام، أطراف الحجوزات...) — وتبقى له وحده عندما يكون
-  // المشاهد هو نفسه، وهو ما يحدث في /api/me ولوحته وتعديل ملفه فقط.
-  if (founder && viewerId !== u.id) delete out.city;
+  // مدينة المؤسس ودولته (وعملته المشتقة منها) غير ظاهرة للعامة (طلب المالك
+  // الصريح): تُحذف من كل رد عام (الدليل، الملف العام، أطراف الحجوزات...) —
+  // وتبقى له وحده عندما يكون المشاهد هو نفسه، وهو ما يحدث في /api/me
+  // ولوحته وتعديل ملفه فقط.
+  if (founder && viewerId !== u.id) { delete out.city; delete out.country; delete out.currency; }
   return out;
 }
 
@@ -306,11 +307,25 @@ async function makeSession(userId) {
 }
 
 app.post('/api/auth/register', async (req, res) => {
-  const { name, role, niche = '', provider_category = null, provider_custom = '', city = '', country = 'EG', currency = 'EGP', followers = 0, price = 0, bio = '', links = '' } = req.body || {};
+  const { name, role, niche = '', provider_category = null, provider_custom = '', city = '', followers = 0, price = 0, bio = '', links = '' } = req.body || {};
+  // الدولة من القائمة المدعومة فقط (افتراضي مصر)، والعملة تُشتق منها خادمياً
+  // — لا تُقبل عملة من العميل أبداً حتى لا ينفصل السعر عن بلد صاحبه.
+  const countryDef = countryOf((req.body || {}).country || 'EG');
+  if (!countryDef) return res.status(400).json({ error: 'دولة غير مدعومة حالياً' });
+  const country = countryDef.code, currency = countryDef.currency;
   // تسجيل واحد فقط لكل شخص: وسيلة التواصل تُطبَّع قبل أي فحص أو حفظ،
   // فلا يفلت تسجيل مكرر بتغيير صيغة الرقم (+20 مقابل 0) أو حالة حروف الإيميل.
-  const contact = normalizeContact(req.body && req.body.contact);
-  const phone = normalizeContact(req.body && req.body.phone) || contact;
+  // الهاتف يُطبَّع بقاعدة دولة التسجيل نفسها (مصر بصيغتها المحلية القائمة،
+  // وغيرها بالصيغة الدولية الكاملة) — ورقم لا يطابق قاعدة دولته يُرفض صراحة.
+  const rawContact = String((req.body && req.body.contact) || '').trim();
+  let contact;
+  if (rawContact.includes('@')) contact = normalizeContact(rawContact);
+  else {
+    contact = normalizePhoneForCountry(rawContact, country);
+    if (!contact) return res.status(400).json({ error: phoneErrorFor(countryDef) });
+  }
+  const rawPhone = String((req.body && req.body.phone) || '').trim();
+  const phone = (rawPhone && !rawPhone.includes('@') ? normalizePhoneForCountry(rawPhone, country) : null) || contact;
   if (!name || !role || !contact) return res.status(400).json({ error: 'الاسم والدور ووسيلة التواصل مطلوبة' });
   if (!['creator', 'provider', 'shop', 'brand'].includes(role)) return res.status(400).json({ error: 'دور غير صحيح' });
   if (role === 'provider') {
@@ -344,8 +359,21 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const contact = normalizeContact(req.body && req.body.contact);
-  const user = contact && await db.prepare('SELECT * FROM users WHERE contact=?').get(contact);
+  const rawLogin = String((req.body && req.body.contact) || '').trim();
+  const contact = normalizeContact(rawLogin);
+  let user = contact && await db.prepare('SELECT * FROM users WHERE contact=?').get(contact);
+  // دخول برقم هاتف بأي صيغة: من سجّل برقم دولي (مثل +966…) قد يكتب رقمه
+  // بالصيغة المحلية عند الدخول — نجرّب تطبيع كل دولة مدعومة حتى نجد حسابه،
+  // فلا يُقفل أحد خارج حسابه بسبب صيغة كتابة.
+  if (!user && rawLogin && !rawLogin.includes('@')) {
+    for (const c of COUNTRIES) {
+      const cand = normalizePhoneForCountry(rawLogin, c.code);
+      if (cand && cand !== contact) {
+        user = await db.prepare('SELECT * FROM users WHERE contact=?').get(cand);
+        if (user) break;
+      }
+    }
+  }
   if (!user) return res.status(404).json({ error: 'لا يوجد حساب بهذه البيانات — سجل أولاً' });
   if (user.banned) return res.status(403).json({ error: 'هذا الحساب محظور' });
   res.json({ token: await makeSession(user.id), user: await publicUser(user) });
@@ -391,8 +419,10 @@ app.patch('/api/me/profile', auth, async (req, res) => {
   if (b.phone !== undefined) {
     const ph = String(b.phone).trim();
     if (ph) {
-      const norm = normEgPhone(ph);
-      if (!norm) return res.status(400).json({ error: 'رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)' });
+      // الهاتف يُتحقق ويُطبَّع بقاعدة دولة صاحب الحساب نفسه (مصر بصيغتها
+      // المحلية القائمة، وغيرها بالصيغة الدولية الكاملة).
+      const norm = normalizePhoneForCountry(ph, req.user.country || 'EG');
+      if (!norm) return res.status(400).json({ error: profilePhoneError(req.user.country || 'EG') });
       sets.push('phone=?'); args.push(norm);
     } else { sets.push('phone=?'); args.push(''); }
   }
@@ -585,10 +615,77 @@ const TAXONOMY = {
     { "key": "translation", "ar": "ترجمة", "en": "Translation" },
     { "key": "dev", "ar": "تطوير مواقع وتطبيقات", "en": "Web & app development" },
     { "key": "marketing", "ar": "تسويق وصناعة محتوى", "en": "Marketing & content" }
-  ]
+  ],
+  "countries": [
+    { "code": "EG", "ar": "مصر", "en": "Egypt", "dial": "20", "currency": "EGP", "curAr": "جنيه", "curEn": "EGP", "payAr": "فودافون كاش / إنستاباي", "payEn": "Vodafone Cash / InstaPay", "nsn": "^1[0125][0-9]{8}$" },
+    { "code": "SA", "ar": "السعودية", "en": "Saudi Arabia", "dial": "966", "currency": "SAR", "curAr": "ريال", "curEn": "SAR", "payAr": "STC Pay / مدى", "payEn": "STC Pay / mada", "nsn": "^5[0-9]{8}$" },
+    { "code": "AE", "ar": "الإمارات", "en": "UAE", "dial": "971", "currency": "AED", "curAr": "درهم", "curEn": "AED", "payAr": "تحويل بنكي", "payEn": "Bank transfer", "nsn": "^5[0-9]{8}$" },
+    { "code": "KW", "ar": "الكويت", "en": "Kuwait", "dial": "965", "currency": "KWD", "curAr": "دينار", "curEn": "KWD", "payAr": "KNET / تحويل بنكي", "payEn": "KNET / bank transfer", "nsn": "^[569][0-9]{7}$" },
+    { "code": "QA", "ar": "قطر", "en": "Qatar", "dial": "974", "currency": "QAR", "curAr": "ريال", "curEn": "QAR", "payAr": "تحويل بنكي", "payEn": "Bank transfer", "nsn": "^[3567][0-9]{7}$" },
+    { "code": "JO", "ar": "الأردن", "en": "Jordan", "dial": "962", "currency": "JOD", "curAr": "دينار", "curEn": "JOD", "payAr": "CliQ", "payEn": "CliQ", "nsn": "^7[789][0-9]{7}$" },
+    { "code": "MA", "ar": "المغرب", "en": "Morocco", "dial": "212", "currency": "MAD", "curAr": "درهم", "curEn": "MAD", "payAr": "تحويل بنكي", "payEn": "Bank transfer", "nsn": "^[67][0-9]{8}$" },
+    { "code": "BH", "ar": "البحرين", "en": "Bahrain", "dial": "973", "currency": "BHD", "curAr": "دينار", "curEn": "BHD", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[36][0-9]{7}$" },
+    { "code": "OM", "ar": "عُمان", "en": "Oman", "dial": "968", "currency": "OMR", "curAr": "ريال", "curEn": "OMR", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[79][0-9]{7}$" },
+    { "code": "IQ", "ar": "العراق", "en": "Iraq", "dial": "964", "currency": "IQD", "curAr": "دينار", "curEn": "IQD", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^7[0-9]{9}$" },
+    { "code": "DZ", "ar": "الجزائر", "en": "Algeria", "dial": "213", "currency": "DZD", "curAr": "دينار", "curEn": "DZD", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[567][0-9]{8}$" },
+    { "code": "TN", "ar": "تونس", "en": "Tunisia", "dial": "216", "currency": "TND", "curAr": "دينار", "curEn": "TND", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[24579][0-9]{7}$" },
+    { "code": "LB", "ar": "لبنان", "en": "Lebanon", "dial": "961", "currency": "LBP", "curAr": "ليرة", "curEn": "LBP", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[3478][0-9]{6,7}$" },
+    { "code": "PS", "ar": "فلسطين", "en": "Palestine", "dial": "970", "currency": "ILS", "curAr": "شيكل", "curEn": "ILS", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^5[69][0-9]{7}$" },
+    { "code": "LY", "ar": "ليبيا", "en": "Libya", "dial": "218", "currency": "LYD", "curAr": "دينار", "curEn": "LYD", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^9[1245][0-9]{7}$" },
+    { "code": "SD", "ar": "السودان", "en": "Sudan", "dial": "249", "currency": "SDG", "curAr": "جنيه", "curEn": "SDG", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[19][0-9]{8}$" },
+    { "code": "YE", "ar": "اليمن", "en": "Yemen", "dial": "967", "currency": "YER", "curAr": "ريال", "curEn": "YER", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^7[0-9]{8}$" },
+    { "code": "SY", "ar": "سوريا", "en": "Syria", "dial": "963", "currency": "SYP", "curAr": "ليرة", "curEn": "SYP", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^9[0-9]{8}$" },
+    { "code": "MR", "ar": "موريتانيا", "en": "Mauritania", "dial": "222", "currency": "MRU", "curAr": "أوقية", "curEn": "MRU", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[234][0-9]{7}$" }
+  ],
+  "link_platforms": ["facebook.com", "instagram.com", "youtube.com", "tiktok.com", "x.com", "twitter.com", "snapchat.com"]
 };
 const SERVICE_KEYS = TAXONOMY.services.map((s) => s.key);
 app.get('/api/taxonomy', (req, res) => res.json(TAXONOMY));
+
+/* ---------------- الدول العربية: هواتف وعملات ودفع محلي ----------------
+   مصدر الحقيقة الوحيد هو TAXONOMY.countries أعلاه (تُبث عبر /api/taxonomy
+   وتطابقها نسخة الواجهة الاحتياطية حرفياً بالفحص البنيوي). كل دولة: مفتاح
+   اتصال، عملة مشتقة (لا يختارها المستخدم)، وقاعدة تحقق للرقم الوطني (nsn —
+   الأرقام بعد مفتاح الدولة وبلا صفر البادئة المحلي) كنمط regex نصي.
+   الصيغة القانونية الموحّدة للتخزين (canonical) — موثقة هنا:
+   • مصر: الصيغة المحلية القائمة تاريخياً 0xxxxxxxxxx (حتى يبقى منع التكرار
+     الحالي والصفوف القائمة كما هي بلا أي كسر).
+   • كل دولة أخرى: الصيغة الدولية الكاملة +<dial><nsn> (مثل +9665xxxxxxxx).
+   التطبيع يقبل: الصيغة الدولية (+ أو 00 أو مفتاح الدولة مباشرة)، أو المحلية
+   بصفر بادئ، أو الرقم الوطني مجرداً — وكلها تؤول لنفس الصيغة القانونية،
+   فمنع التسجيل المكرر يعمل عبر كل صيغ نفس الرقم داخل الدولة الواحدة. */
+const COUNTRIES = TAXONOMY.countries;
+const COUNTRY_MAP = Object.fromEntries(COUNTRIES.map((c) => [c.code, c]));
+function countryOf(code) {
+  const c = COUNTRY_MAP[String(code || 'EG').toUpperCase()];
+  return c || null;
+}
+function normalizePhoneForCountry(raw, code) {
+  const c = countryOf(code);
+  if (!c) return null;
+  let d = String(raw || '').replace(/\D/g, '');
+  if (!d) return null;
+  if (d.startsWith('00')) d = d.slice(2);
+  let nsn;
+  if (d.startsWith(c.dial) && new RegExp(c.nsn).test(d.slice(c.dial.length))) nsn = d.slice(c.dial.length);
+  else if (d.startsWith('0')) nsn = d.slice(1);
+  else nsn = d;
+  if (!new RegExp(c.nsn).test(nsn)) return null;
+  return c.code === 'EG' ? '0' + nsn : '+' + c.dial + nsn;
+}
+/* رسالة خطأ رقم غير صحيح حسب الدولة (رسالة مصر القائمة تبقى حرفياً كما هي). */
+function phoneErrorFor(c) {
+  return c.code === 'EG'
+    ? 'رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)'
+    : `رقم هاتف صحيح مطلوب في ${c.ar} (مثال: +${c.dial}xxxxxxxxx)`;
+}
+/* نفس الرسالة بصياغة «هاتف» لمسار تعديل الملف (رسالته القائمة حرفياً لمصر). */
+function profilePhoneError(code) {
+  const c = countryOf(code) || COUNTRY_MAP.EG;
+  return c.code === 'EG'
+    ? 'رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)'
+    : `رقم هاتف صحيح مطلوب في ${c.ar} (مثال: +${c.dial}xxxxxxxxx)`;
+}
 
 /* ---------------- directory / market ---------------- */
 /* جلسة اختيارية من الترويسة (للمسارات العامة التي يتغير ردها حسب المشاهد). */
@@ -605,11 +702,15 @@ function canSeeFounder(viewer) {
 
 app.get('/api/directory', async (req, res) => {
   const viewer = await optionalViewer(req);
-  const { role, niche, city, q } = req.query;
+  const { role, niche, city, q, country } = req.query;
   let sql = `SELECT * FROM users WHERE role IN ('creator','provider') AND banned=0`;
   const args = [];
   if (!canSeeFounder(viewer)) sql += ' AND is_platform_founder=0';
   if (role) { sql += ' AND role=?'; args.push(role); }
+  // فلتر الدولة يعمل خادمياً مع باقي الفلاتر — ودولة المؤسس ليست علنية،
+  // فلا يجوز أن يكشفها فلتر دولة (يُستبعد المؤسس من أي نتيجة مفلترة بالدولة
+  // تماماً كما يُستبعد عند فلترة المدينة).
+  if (country) { sql += ' AND country=?'; args.push(String(country).toUpperCase()); }
   // فلتر «المجال/الخدمة» موحّد: يطابق مجال الصانع أو مفتاح خدمة المقدم أو نص خدمته الحر.
   if (niche) { sql += ' AND (niche=? OR provider_category=? OR provider_custom=?)'; args.push(niche, niche, niche); }
   if (city) { sql += ' AND city=?'; args.push(city); }
@@ -618,7 +719,7 @@ app.get('/api/directory', async (req, res) => {
   // مدينة المؤسس ليست علنية (طلب المالك): لا يجوز أن يطابقها فلتر مدينة، ولا
   // أن يصل إليها بحث نصي عبر حقل المدينة — يبقى المؤسس قابلاً للإيجاد باسمه
   // أو مجاله العلنيين فقط، فلا تتسرب مدينته من أي باب خلفي في الدليل.
-  if (city) rows = rows.filter((u) => !u.is_platform_founder);
+  if (city || country) rows = rows.filter((u) => !u.is_platform_founder);
   else if (q) rows = rows.filter((u) => !u.is_platform_founder || String(u.name).includes(q) || String(u.niche || '').includes(q));
   const dealsMap = {};
   await Promise.all(rows.map(async (u) => { dealsMap[u.id] = (await talentStats(u.id)).completed_deals; }));
@@ -665,7 +766,7 @@ app.post('/api/verify/request', auth, async (req, res) => {
   if (req.user.role !== 'creator') return res.status(400).json({ error: 'التوثيق للصناع فقط' });
   const code = `DEAL-${req.user.id}-${rnd(3).toUpperCase()}`;
   await db.prepare(`UPDATE users SET verify_code=?, verify_status='pending', verify_reason='' WHERE id=?`).run(code, req.user.id);
-  res.json({ code, instructions: 'ضع هذا الكود في بايو أحد حساباتك العلنية أو منشور مثبت، ثم أرسل رابط الحساب للفحص.' });
+  res.json({ code, instructions: 'ضع هذا الكود في بايو أحد حساباتك العلنية أو منشور مثبت، ثم أرسل رابط الحساب للفحص. الحسابات المقبولة: فيسبوك، إنستجرام، يوتيوب، تيك توك، X (x.com)، وسناب شات.' });
 });
 
 app.post('/api/verify/check', auth, async (req, res) => {
@@ -903,17 +1004,18 @@ app.post('/api/bookings/:id/review', auth, async (req, res) => {
 
 /* ---------------- shop requests + opportunities ---------------- */
 app.post('/api/requests', auth, async (req, res) => {
-  const { title, niche = '', city = '', budget = 0, currency = 'EGP', details = '' } = req.body || {};
+  const { title, niche = '', city = '', budget = 0, details = '' } = req.body || {};
   if (!title) return res.status(400).json({ error: 'عنوان الطلب مطلوب' });
-  const info = await db.prepare('INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,created_at) VALUES (?,?,?,?,?,?,?,?)')
-    .run(req.user.id, title, niche, city || req.user.city, budget, currency, details, now());
+  // دولة الطلب وعملته من حساب الناشر نفسه (مشتقة من دولته) — لا من العميل.
+  const info = await db.prepare('INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,country,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(req.user.id, title, niche, city || req.user.city, budget, req.user.currency || 'EGP', details, req.user.country || 'EG', now());
   res.json({ id: info.lastInsertRowid });
 });
 app.get('/api/requests', async (req, res) => {
   // رقم واتساب الضيف يظهر للمسجلين فقط — الزائر العام لا يراه أبداً
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   const s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
-  const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' AND r.target_talent_id IS NULL ORDER BY r.created_at DESC`).all();
+  const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, r.country, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' AND r.target_talent_id IS NULL ORDER BY r.created_at DESC`).all();
   const items = rows.map(r => {
     const it = { ...r, is_guest: !!r.is_guest };
     if (!s) delete it.guest_phone;
@@ -963,20 +1065,19 @@ app.get('/api/opportunities', auth, async (req, res) => {
    هي رمز وصول عشوائي طويل (token) يُحفظ على الطلب ثم على الحجز عند التحويل،
    وخطواته في الحجز تتم من صفحة الرمز بنفس آلة الحالات المشتركة أعلاه. */
 const GUEST_OPEN_LIMIT = 3; // أقصى طلبات ضيف مفتوحة لنفس الرقم — حد خفيف ضد الإغراق
-const EG_MOBILE = /^01[0125][0-9]{8}$/;
-function normEgPhone(raw) {
-  let d = String(raw || '').replace(/\D/g, '');
-  if (d.startsWith('0020')) d = d.slice(4);
-  else if (d.startsWith('20') && d.length === 12) d = d.slice(2);
-  if (d.length === 10 && d.startsWith('1')) d = '0' + d;
-  return EG_MOBILE.test(d) ? d : null;
-}
+// تحقق/تطبيع هاتف الضيف يتم عبر normalizePhoneForCountry بقاعدة دولة الضيف
+// (مصر بصيغتها المحلية القائمة، وغيرها دولياً) — انظر قسم الدول أعلاه.
 
 app.post('/api/guest-requests', async (req, res) => {
   const { business_name, phone, city, niche, budget, details = '', title, target_talent_id } = req.body || {};
   if (!business_name || !String(business_name).trim()) return res.status(400).json({ error: 'اسم النشاط مطلوب' });
-  const ph = normEgPhone(phone);
-  if (!ph) return res.status(400).json({ error: 'رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)' });
+  // دولة العميل الضيف (افتراضي مصر): الرقم يُتحقق ويُطبَّع بقاعدة دولته،
+  // ويُحفظ بصيغته القانونية (مصر محلياً، وغيرها دولياً كاملاً +dial) فتظهر
+  // للصناع بصيغته الدولية، وعملة الطلب تُشتق من الدولة.
+  const guestCountry = countryOf((req.body || {}).country || 'EG');
+  if (!guestCountry) return res.status(400).json({ error: 'دولة غير مدعومة حالياً' });
+  const ph = normalizePhoneForCountry(phone, guestCountry.code);
+  if (!ph) return res.status(400).json({ error: phoneErrorFor(guestCountry) });
   if (!city || !String(city).trim()) return res.status(400).json({ error: 'المدينة مطلوبة' });
   if (!niche || !String(niche).trim()) return res.status(400).json({ error: 'نوع الإعلان / المجال مطلوب' });
   if (budget == null || budget === '' || !isFinite(+budget) || +budget < 0) return res.status(400).json({ error: 'ميزانية تقريبية صحيحة مطلوبة' });
@@ -996,8 +1097,8 @@ app.post('/api/guest-requests', async (req, res) => {
   const openCount = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE is_guest=1 AND guest_phone=? AND status='open'`).get(ph)).c;
   if (openCount >= GUEST_OPEN_LIMIT) return res.status(429).json({ error: 'عندك طلبات مفتوحة كتير بنفس الرقم — استنى لما طلب يتقفل الأول' });
   const token = rnd(24);
-  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_token,target_talent_id,created_at) VALUES (NULL,?,?,?,?,'EGP',?,'open',1,?,?,?,?,?)`)
-    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, details, String(business_name).trim(), ph, token, targetId, now());
+  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_token,target_talent_id,country,created_at) VALUES (NULL,?,?,?,?,?,?,'open',1,?,?,?,?,?,?)`)
+    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, guestCountry.currency, details, String(business_name).trim(), ph, token, targetId, guestCountry.code, now());
   if (targetId) {
     await notify(targetId, 'guest_targeted',
       `🎯 طلب موجّه ليك مباشرة من عميل «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget} — افتح «فرص ليك» لتحويله لحجز بضمان Deal`,
@@ -1275,6 +1376,10 @@ const SUPPORT_KB = [
     keys: ['حملات', 'حملة', 'اقدم على', 'براند', 'campaign', 'campaigns', 'apply', 'brand'],
     a_ar: 'الحملات شغلانات تنشرها البراندات من قسم «الحملات» ببريف وميزانية: الصانع يقدّم عليها من بطاقتها، وإذا قبل البراند تقديمه يُفتح حجز عادي تلقائياً بنفس حماية Deal ومراحل دفعها.',
     a_en: 'Campaigns are jobs posted by brands in the "Campaigns" section with a brief and budget: creators apply from the campaign card, and if the brand accepts, a normal booking opens automatically with the same Deal protection and payment stages.' },
+  { id: 'countries', q_ar: 'هل Deal متاح في بلدي؟ ما هي الدول المتاحة؟', q_en: 'Is Deal available in my country? Which countries are supported?',
+    keys: ['الدول المتاحه', 'دول متاحه', 'متاح في بلدي', 'في بلدي', 'بلدي متاح', 'دول عربية', 'available countries', 'which countries', 'supported countries', 'my country'],
+    a_ar: 'Deal متاح الآن في 19 دولة عربية: مصر، السعودية، الإمارات، الكويت، قطر، الأردن، المغرب، البحرين، عُمان، العراق، الجزائر، تونس، لبنان، فلسطين، ليبيا، السودان، اليمن، سوريا، وموريتانيا. اختر دولتك عند التسجيل (أو في نموذج «انشر شغلانة» كضيف) وسيظهر سعرك بعملة بلدك، ورقم هاتفك يُتحقق منه بقاعدة بلدك، والدفع المحلي عندك هو وسيلة التحويل المعروفة في بلدك (مثل فودافون كاش/إنستاباي في مصر، وSTC Pay/مدى في السعودية، وCliQ في الأردن).',
+    a_en: 'Deal is now available in 19 Arab countries: Egypt, Saudi Arabia, UAE, Kuwait, Qatar, Jordan, Morocco, Bahrain, Oman, Iraq, Algeria, Tunisia, Lebanon, Palestine, Libya, Sudan, Yemen, Syria and Mauritania. Pick your country when you register (or in the guest "Post a job" form) and your price shows in your country\'s currency, your phone is validated by your country\'s rules, and payments use your local method (e.g. Vodafone Cash/InstaPay in Egypt, STC Pay/mada in Saudi Arabia, CliQ in Jordan).' },
 ];
 function normSupportText(s) {
   return String(s || '').toLowerCase()

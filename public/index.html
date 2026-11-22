@@ -17,16 +17,17 @@ a{color:var(--gold)}button{cursor:pointer;font-family:inherit}
 .btn{border:0;border-radius:12px;padding:11px 20px;font-weight:700;background:var(--grad);color:#fff;font-size:15px}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
 .btn.sm{padding:7px 13px;font-size:13px;border-radius:9px}
-.btn:disabled{opacity:.5}
+.btn:disabled{opacity:.55;cursor:wait}
 header{position:sticky;top:0;z-index:20;background:rgba(7,39,29,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-.hwrap{max-width:1150px;margin:auto;display:flex;align-items:center;gap:14px;padding:10px 16px}
+.hwrap{max-width:1150px;margin:auto;display:flex;align-items:center;gap:10px;padding:10px 16px}
 .logo{display:flex;align-items:center;gap:9px;font-weight:900;font-size:21px}
 .logo img{width:34px;height:34px;border-radius:9px}
 nav{display:flex;gap:4px;flex-wrap:wrap;margin-inline-start:8px}
 nav button{background:none;border:0;color:var(--mut);padding:8px 11px;border-radius:9px;font-size:14.5px}
 nav button.on{background:var(--card);color:var(--txt);border:1px solid var(--line)}
-.sp{flex:1}.bell{position:relative;background:none;border:0;font-size:20px}
+.sp{flex:1}.bell{position:relative;background:none;border:0;font-size:20px;color:var(--txt)}
 .bell b{position:absolute;top:-4px;inset-inline-start:-4px;background:#e03131;color:#fff;font-size:11px;border-radius:50%;min-width:18px;height:18px;display:grid;place-items:center}
+.hbtn{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:14px;font-weight:700}
 .hero{max-width:1150px;margin:auto;padding:56px 16px 30px;text-align:center}
 .hero h1{font-size:clamp(28px,5.4vw,50px);line-height:1.25;margin:0 0 10px}
 .hero p{color:var(--mut);font-size:17px;margin:0 0 22px}
@@ -38,7 +39,6 @@ nav button.on{background:var(--card);color:var(--txt);border:1px solid var(--lin
 .chip{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12.5px;color:var(--mut)}
 .price{font-weight:800;color:var(--gold)}
 .why{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:26px 0}
-.seal{width:22px;height:22px;vertical-align:-5px}
 input,select,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;margin:5px 0 11px;font-family:inherit}
 label{font-size:13.5px;color:var(--mut)}
 dialog{background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:18px;max-width:560px;width:94%;padding:22px}
@@ -46,47 +46,91 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 .step{border-inline-start:3px solid var(--line);padding:8px 12px;margin:9px 0;background:var(--card);border-radius:8px}
 .step.done{border-color:var(--em)}.step.open{border-color:var(--gold)}
 table{width:100%;border-collapse:collapse;font-size:14px}td,th{border-bottom:1px solid var(--line);padding:8px;text-align:start}
-.toast{position:fixed;bottom:18px;inset-inline-start:50%;transform:translateX(50%);background:#123f2e;border:1px solid var(--gold);padding:11px 18px;border-radius:12px;z-index:50;display:none}
+.toast{position:fixed;bottom:18px;inset-inline-start:50%;transform:translateX(50%);background:#123f2e;border:1px solid var(--gold);padding:11px 18px;border-radius:12px;z-index:200;display:none}
 .badge-ic{width:20px;height:20px;border-radius:50%;display:inline-grid;place-items:center;font-size:11px;color:#fff;vertical-align:-4px}
 .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .kpi .card{text-align:center}.kpi .n{font-size:26px;font-weight:900}
 .guarantee{border:1px dashed var(--gold);border-radius:14px;padding:13px 16px;margin:16px 0;background:rgba(212,160,23,.06)}
 footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;color:var(--mut);font-size:13.5px}
 .hide{display:none}
+.err{display:none;background:#5a1f1f;border:1px solid #e03131;color:#ffd7d7;border-radius:10px;padding:9px 12px;margin:8px 0;font-size:14px}
+.err.show{display:block}
+.avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);flex:none}
+.avatar.big{width:76px;height:76px}
+.avatar-fb{width:40px;height:40px;border-radius:50%;background:var(--grad);color:#fff;display:inline-grid;place-items:center;font-weight:900;font-size:18px;flex:none}
+.avatar-fb.big{width:76px;height:76px;font-size:32px}
+.founder-card{background:linear-gradient(160deg,#101418,#1a1405 70%);border:2px solid var(--gold);box-shadow:0 0 0 3px rgba(212,160,23,.18),0 10px 30px rgba(0,0,0,.45)}
+.founder-seal{display:inline-flex;align-items:center;gap:6px;background:#101418;border:1.5px solid var(--gold);color:var(--gold);border-radius:999px;padding:4px 12px;font-weight:900;font-size:13px}
+.shorts{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:8px 0}
+.short{position:relative;aspect-ratio:9/16;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--line)}
+.short iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.short .del{position:absolute;top:6px;inset-inline-end:6px;z-index:2;background:rgba(0,0,0,.65);color:#fff;border:0;border-radius:8px;padding:4px 8px}
+.menu-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:90;display:none}
+.menu-overlay.open{display:block}
+.menu-panel{position:fixed;top:0;inset-inline-end:0;height:100dvh;width:min(330px,90vw);background:var(--bg2);border-inline-start:1px solid var(--line);z-index:95;padding:18px;overflow:auto;transform:translateX(110%);transition:transform .25s}
+[dir="rtl"] .menu-panel{transform:translateX(-110%)}
+.menu-panel.open{transform:translateX(0)!important}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.menu-item{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:14px;padding:14px 8px;font-size:14.5px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:7px}
+.menu-item .ic{font-size:24px}
+.fab{position:fixed;bottom:20px;inset-inline-end:20px;z-index:80;width:56px;height:56px;border-radius:50%;border:0;background:var(--grad);color:#fff;font-size:25px;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.chatlog{max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.msg{max-width:88%;padding:9px 13px;border-radius:14px;font-size:14.5px;line-height:1.55;white-space:pre-wrap}
+.msg.bot{background:var(--card);border:1px solid var(--line);align-self:flex-start}
+.msg.me{background:#14532d;border:1px solid var(--em);align-self:flex-end}
+.chipbtn{background:var(--card);border:1px solid var(--gold);color:var(--txt);border-radius:999px;padding:6px 12px;font-size:13px;margin:3px}
+.notif-item{border-bottom:1px solid var(--line);padding:9px 2px;font-size:14.5px}
+.notif-item.unread{border-inline-start:3px solid var(--gold);padding-inline-start:9px}
+@media (max-width:820px){
+  nav{display:none}
+  #langBtn,#authArea{display:none}
+  .hwrap{gap:7px;padding:9px 10px}
+  .hero{padding:38px 14px 22px}
+}
 </style>
 </head>
 <body>
 <header><div class="hwrap">
   <div class="logo"><img src="/icons/icon-192.png" alt="Deal"><span>Deal</span></div>
   <nav id="nav">
-    <button data-tab="market" class="on">السوق</button>
-    <button data-tab="services">الخدمات</button>
-    <button data-tab="campaigns">الحملات</button>
-    <button data-tab="opps" data-auth>فرص ليك</button>
-    <button data-tab="bookings" data-auth>حجوزاتي</button>
-    <button data-tab="dash" data-auth>لوحتي</button>
-    <button data-tab="owner" id="ownerTab" class="hide">لوحة المالك</button>
+    <button data-tab="market" class="on" data-i18n="nav_market">السوق</button>
+    <button data-tab="services" data-i18n="nav_services">الخدمات</button>
+    <button data-tab="campaigns" data-i18n="nav_campaigns">الحملات</button>
+    <button data-tab="opps" data-auth data-i18n="nav_opps">فرص ليك</button>
+    <button data-tab="bookings" data-auth data-i18n="nav_bookings">حجوزاتي</button>
+    <button data-tab="dash" data-auth data-i18n="nav_dash">لوحتي</button>
+    <button data-tab="owner" id="ownerTab" class="hide" data-i18n="nav_owner">لوحة المالك</button>
   </nav>
   <div class="sp"></div>
+  <button class="btn sm" onclick="openGuest()" data-i18n="post_job_btn">📣 انشر شغلانة</button>
   <button class="bell" id="bellBtn" title="التنبيهات">🔔<b id="bellCount" class="hide">0</b></button>
   <button class="btn ghost sm" id="langBtn">EN</button>
-  <span id="authArea"><button class="btn sm" onclick="openAuth()">دخول / تسجيل</button></span>
+  <button class="hbtn" id="menuBtn" onclick="toggleMenu(true)">☰ <span data-i18n="menu">القائمة</span></button>
+  <span id="authArea"><button class="btn sm" onclick="openAuth()" data-i18n="login_register">دخول / تسجيل</button></span>
 </div></header>
 
-<section class="hero">
-  <h1>انتهى زمن اللف على الشغل…<br><span class="grad-text">الشغل هو اللي بيدوّر عليك</span></h1>
-  <p>فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.</p>
+<div class="menu-overlay" id="menuOverlay" onclick="toggleMenu(false)"></div>
+<aside class="menu-panel" id="menuPanel">
+  <div class="row"><h3 style="margin:0" data-i18n="main_menu">القائمة الرئيسية</h3><div class="sp"></div>
+  <button class="btn ghost sm" onclick="toggleMenu(false)">✕</button></div>
+  <div id="menuUser" class="mut" style="margin-top:6px"></div>
+  <div class="menu-grid" id="menuGrid"></div>
+</aside>
+
+<section class="hero" id="hero">
+  <h1><span data-i18n="hero_l1">انتهى زمن اللف على الشغل…</span><br><span class="grad-text" data-i18n="hero_l2">الشغل هو اللي بيدوّر عليك</span></h1>
+  <p data-i18n="hero_sub">فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.</p>
   <div class="row" style="justify-content:center">
-    <button class="btn" style="font-size:18px;padding:14px 28px" onclick="openGuest()">📣 انشر شغلانة</button>
-    <button class="btn" onclick="openAuth('creator')">سجّل كصانع</button>
-    <button class="btn ghost" onclick="showTab('market')">تصفح السوق</button>
-    <button class="btn ghost" id="installBtn" style="display:none">ثبّت Deal على موبايلك</button>
+    <button class="btn" style="font-size:18px;padding:14px 28px" onclick="openGuest()" data-i18n="post_job_btn">📣 انشر شغلانة</button>
+    <button class="btn" onclick="openAuth('creator')" data-i18n="register_creator">سجّل كصانع</button>
+    <button class="btn ghost" onclick="showTab('market')" data-i18n="browse_market">تصفح السوق</button>
+    <button class="btn ghost" id="installBtn" style="display:none" data-i18n="install_app">ثبّت Deal على موبايلك</button>
   </div>
-  <p class="mut" style="margin-top:10px">عندك محل أو براند؟ انشر شغلانتك في دقيقة — <b>من غير تسجيل</b>، والصناع هيتواصلوا معاك واتساب.</p>
+  <p class="mut" style="margin-top:10px" data-i18n="hero_guest_note">عندك محل أو براند؟ انشر شغلانتك في دقيقة — من غير تسجيل، والصناع هيتواصلوا معاك واتساب.</p>
   <div class="why wrap" style="padding-bottom:0">
-    <div class="card"><h3>فرص بتيجي لك</h3><div class="mut">طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.</div></div>
-    <div class="card"><h3>سمعة موثقة بتكبر</h3><div class="mut">تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.</div></div>
-    <div class="card"><h3>قبض محمي بضمان Deal</h3><div class="mut">دفع على مراحل، عمولة التطبيق أولاً، وإثبات تنفيذ يحمي الطرفين.</div></div>
+    <div class="card"><h3 data-i18n="why1_t">فرص بتيجي لك</h3><div class="mut" data-i18n="why1_d">طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.</div></div>
+    <div class="card"><h3 data-i18n="why2_t">سمعة موثقة بتكبر</h3><div class="mut" data-i18n="why2_d">تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.</div></div>
+    <div class="card"><h3 data-i18n="why3_t">قبض محمي بضمان Deal</h3><div class="mut" data-i18n="why3_d">دفع على مراحل، عمولة التطبيق أولاً، وإثبات تنفيذ يحمي الطرفين.</div></div>
   </div>
 </section>
 
@@ -94,42 +138,42 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
   <!-- MARKET -->
   <section id="tab-market">
     <div class="row">
-      <input id="q" placeholder="ابحث باسم، مجال، مدينة…" style="max-width:320px">
-      <select id="fNiche" style="max-width:190px"><option value="">كل المجالات</option></select>
-      <select id="fCity" style="max-width:170px"><option value="">كل المدن</option></select>
-      <button class="btn sm" onclick="loadMarket()">بحث</button>
+      <input id="q" data-i18n-ph="search_ph" placeholder="ابحث باسم، مجال، مدينة…" style="max-width:320px">
+      <select id="fNiche" style="max-width:190px"></select>
+      <select id="fCity" style="max-width:170px"></select>
+      <button class="btn sm" onclick="loadMarket(this)" data-i18n="search">بحث</button>
     </div>
     <div class="grid" id="marketGrid" style="margin-top:14px"></div>
-    <div class="guarantee">🛡️ <b>ضمان Deal:</b> كل حجز هنا «حجز محمي بضمان Deal» — دفع مرحلي موثق، وبديل موثّق من نفس مدينتك ومجالك لو المنفذ أخلّ.</div>
-    <div class="row"><h3 style="margin:0">طلبات محلات مفتوحة</h3><div class="sp"></div>
-    <button class="btn sm" onclick="openGuest()">📣 انشر شغلانة — بدون تسجيل</button></div>
+    <div class="guarantee">🛡️ <b data-i18n="guarantee_t">ضمان Deal:</b> <span data-i18n="guarantee_d">كل حجز هنا «حجز محمي بضمان Deal» — دفع مرحلي موثق، وبديل موثّق من نفس مدينتك ومجالك لو المنفذ أخلّ.</span></div>
+    <div class="row"><h3 style="margin:0" data-i18n="open_requests">طلبات محلات مفتوحة</h3><div class="sp"></div>
+    <button class="btn sm" onclick="openGuest()" data-i18n="post_job_short">📣 انشر شغلانة — بدون تسجيل</button></div>
     <div class="grid" id="reqGrid" style="margin-top:12px"></div>
   </section>
 
   <!-- SERVICES -->
   <section id="tab-services" class="hide">
-    <h3>خدمات متكاملة — بنفس حماية Deal</h3>
-    <div class="row"><button class="btn sm" onclick="loadServices('ads')">إدارة إعلانات ممولة</button>
-    <button class="btn ghost sm" onclick="loadServices('support')">حلول مشاكل الحسابات</button></div>
+    <h3 data-i18n="services_t">خدمات متكاملة — بنفس حماية Deal</h3>
+    <div class="row"><button class="btn sm" onclick="loadServices('ads',this)" data-i18n="svc_ads">إدارة إعلانات ممولة</button>
+    <button class="btn ghost sm" onclick="loadServices('support',this)" data-i18n="svc_support">حلول مشاكل الحسابات</button></div>
     <div class="grid" id="svcGrid" style="margin-top:14px"></div>
   </section>
 
   <!-- CAMPAIGNS -->
   <section id="tab-campaigns" class="hide">
-    <div class="row"><h3 style="margin:0">حملات البراندات</h3><div class="sp"></div>
-    <button class="btn sm" data-auth onclick="openCampaign()">+ حملة جديدة</button></div>
+    <div class="row"><h3 style="margin:0" data-i18n="campaigns_t">حملات البراندات</h3><div class="sp"></div>
+    <button class="btn sm" data-auth onclick="openCampaign()" data-i18n="new_campaign">+ حملة جديدة</button></div>
     <div class="grid" id="campGrid" style="margin-top:14px"></div>
   </section>
 
   <!-- OPPORTUNITIES -->
   <section id="tab-opps" class="hide">
-    <h3>فرص ليك — مطابقة تلقائية لملفك</h3>
+    <h3 data-i18n="opps_t">فرص ليك — مطابقة تلقائية لملفك</h3>
     <div id="oppList"></div>
   </section>
 
   <!-- BOOKINGS -->
   <section id="tab-bookings" class="hide">
-    <h3>حجوزاتي</h3>
+    <h3 data-i18n="bookings_t">حجوزاتي</h3>
     <div id="bookList"></div>
   </section>
 
@@ -140,7 +184,7 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
 
   <!-- OWNER -->
   <section id="tab-owner" class="hide">
-    <h3>لوحة المالك</h3>
+    <h3 data-i18n="nav_owner">لوحة المالك</h3>
     <div id="ownerBody"></div>
   </section>
 
@@ -150,68 +194,120 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
   </section>
 </main>
 
-<footer>Deal — منصة صناع المحتوى والمحلات المحلية · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal</footer>
+<footer data-i18n="footer">Deal — منصة صناع المحتوى والمحلات المحلية · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal</footer>
 <div class="toast" id="toast"></div>
+<button class="fab" id="supportFab" onclick="openSupport()" title="الدعم">🎧</button>
 
 <dialog id="authDlg"><form method="dialog">
   <h3 id="authTitle">تسجيل حساب جديد</h3>
-  <div class="row"><button type="button" class="btn ghost sm" onclick="authMode('register')">تسجيل</button>
-  <button type="button" class="btn ghost sm" onclick="authMode('login')">دخول</button></div>
+  <div class="row"><button type="button" class="btn ghost sm" onclick="authMode('register')" data-i18n="register">تسجيل</button>
+  <button type="button" class="btn ghost sm" onclick="authMode('login')" data-i18n="login">دخول</button></div>
+  <div class="err" id="authErr"></div>
   <div id="regFields">
-    <label>الاسم</label><input id="aName">
-    <label>أنا…</label><select id="aRole" onchange="roleFx()">
-      <option value="creator">صانع محتوى</option><option value="provider">مقدم خدمة</option>
-      <option value="shop">محل</option><option value="brand">براند</option></select>
-    <div id="provCat" class="hide"><label>فئة الخدمة</label><select id="aProvCat">
-      <option value="ads">إدارة إعلانات ممولة</option><option value="support">حلول مشاكل الحسابات</option></select></div>
-    <label>المجال / التخصص</label><input id="aNiche" placeholder="كوميديا، طبخ، مراجعات…">
-    <div class="row"><div style="flex:1"><label>المدينة</label><input id="aCity"></div>
-    <div style="flex:1"><label>الدولة</label><select id="aCountry"><option>EG</option><option>SA</option><option>AE</option><option>US</option></select></div>
-    <div style="flex:1"><label>العملة</label><select id="aCurr"><option>EGP</option><option>SAR</option><option>AED</option><option>USD</option></select></div></div>
-    <label>عدد المتابعين (للصناع)</label><input id="aFollowers" type="number" value="0">
-    <label>سعرك المعلن لفيديو/خدمة</label><input id="aPrice" type="number" value="0">
-    <label>روابط حساباتك العلنية (للتوثيق)</label><input id="aLinks" placeholder="https://…">
+    <label data-i18n="f_name">الاسم</label><input id="aName">
+    <label data-i18n="f_iam">أنا…</label><select id="aRole" onchange="roleFx()">
+      <option value="creator" data-i18n="role_creator">صانع محتوى</option><option value="provider" data-i18n="role_provider">مقدم خدمة</option>
+      <option value="shop" data-i18n="role_shop">محل</option><option value="brand" data-i18n="role_brand">براند</option></select>
+    <div id="provCat" class="hide"><label data-i18n="f_provcat">فئة الخدمة</label><select id="aProvCat">
+      <option value="ads" data-i18n="svc_ads">إدارة إعلانات ممولة</option><option value="support" data-i18n="svc_support">حلول مشاكل الحسابات</option></select></div>
+    <label data-i18n="f_niche">المجال / التخصص</label><input id="aNiche" data-i18n-ph="niche_ph" placeholder="كوميديا، طبخ، مراجعات…">
+    <div class="row"><div style="flex:1"><label data-i18n="f_city">المدينة</label><input id="aCity"></div>
+    <div style="flex:1"><label data-i18n="f_country">الدولة</label><select id="aCountry"><option>EG</option><option>SA</option><option>AE</option><option>US</option></select></div>
+    <div style="flex:1"><label data-i18n="f_currency">العملة</label><select id="aCurr"><option>EGP</option><option>SAR</option><option>AED</option><option>USD</option></select></div></div>
+    <label data-i18n="f_followers">عدد المتابعين (للصناع)</label><input id="aFollowers" type="number" value="0">
+    <label data-i18n="f_price">سعرك المعلن لفيديو/خدمة</label><input id="aPrice" type="number" value="0">
+    <label data-i18n="f_links">روابط حساباتك العلنية (للتوثيق)</label><input id="aLinks" placeholder="https://…">
   </div>
-  <label>رقم الهاتف أو الإيميل (هو وسيلة الدخول)</label><input id="aContact" placeholder="01xxxxxxxxx أو you@mail.com">
-  <div class="row"><button type="button" class="btn" onclick="doAuth()">متابعة</button>
-  <button class="btn ghost">إغلاق</button></div>
+  <label data-i18n="f_contact">رقم الهاتف أو الإيميل (هو وسيلة الدخول)</label><input id="aContact" data-i18n-ph="contact_ph" placeholder="01xxxxxxxxx أو you@mail.com">
+  <div class="row"><button type="button" class="btn" onclick="doAuth(this)" data-i18n="continue_btn">متابعة</button>
+  <button class="btn ghost" data-i18n="close">إغلاق</button></div>
 </form></dialog>
 
 <dialog id="guestDlg"><form method="dialog">
-  <h3>انشر شغلانة — بدون تسجيل</h3>
+  <h3 data-i18n="guest_title">انشر شغلانة — بدون تسجيل</h3>
+  <div class="err" id="guestErr"></div>
   <div id="guestForm">
-    <label>اسم النشاط / المحل</label><input id="gBiz">
-    <label>رقم الواتساب (موبايل مصري)</label><input id="gPhone" placeholder="01xxxxxxxxx">
-    <div class="row"><div style="flex:1"><label>المدينة</label><input id="gCity"></div>
-    <div style="flex:1"><label>نوع الإعلان / المجال</label><input id="gNiche" placeholder="مطاعم، ملابس، عقارات…"></div></div>
-    <label>الميزانية التقريبية (جنيه)</label><input id="gBudget" type="number">
-    <label>اوصف الشغلانة</label><textarea id="gDetails" placeholder="محتاج فيديو إعلاني عن…"></textarea>
-    <div class="row"><button type="button" class="btn" onclick="doGuestRequest()">انشر الطلب</button>
-    <button class="btn ghost">إغلاق</button></div>
+    <label data-i18n="g_biz">اسم النشاط / المحل</label><input id="gBiz">
+    <label data-i18n="g_phone">رقم الواتساب (موبايل مصري)</label><input id="gPhone" placeholder="01xxxxxxxxx">
+    <div class="row"><div style="flex:1"><label data-i18n="f_city">المدينة</label><input id="gCity"></div>
+    <div style="flex:1"><label data-i18n="g_niche">نوع الإعلان / المجال</label><input id="gNiche" data-i18n-ph="g_niche_ph" placeholder="مطاعم، ملابس، عقارات…"></div></div>
+    <label data-i18n="g_budget">الميزانية التقريبية (جنيه)</label><input id="gBudget" type="number">
+    <label data-i18n="g_details">اوصف الشغلانة</label><textarea id="gDetails" data-i18n-ph="g_details_ph" placeholder="محتاج فيديو إعلاني عن…"></textarea>
+    <div class="row"><button type="button" class="btn" onclick="doGuestRequest(this)" data-i18n="g_publish">انشر الطلب</button>
+    <button class="btn ghost" data-i18n="close">إغلاق</button></div>
   </div>
   <div id="guestDone" class="hide">
-    <div class="step done"><b>اتنشر طلبك ✓</b>
-      <div class="mut" style="margin-top:5px">الصناع هيشوفوه دلوقتي وهيتواصلوا معاك واتساب. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:</div>
+    <div class="step done"><b data-i18n="g_done_t">اتنشر طلبك ✓</b>
+      <div class="mut" style="margin-top:5px" data-i18n="g_done_d">الصناع هيشوفوه دلوقتي وهيتواصلوا معاك واتساب. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:</div>
       <div class="row" style="margin-top:8px"><input id="gFollow" readonly style="flex:1">
-      <button type="button" class="btn sm" onclick="copyFollow()">نسخ الرابط</button></div>
+      <button type="button" class="btn sm" id="copyBtn" onclick="copyFollow(this)" data-i18n="copy_link">نسخ الرابط</button></div>
     </div>
-    <div class="row"><button class="btn ghost">إغلاق</button></div>
+    <div class="row"><button class="btn ghost" data-i18n="close">إغلاق</button></div>
   </div>
 </form></dialog>
 
 <dialog id="bookDlg"><div id="bookBody"></div></dialog>
 <dialog id="talentDlg"><div id="talentBody"></div></dialog>
-<dialog id="campDlg"><form method="dialog"><h3>حملة براند جديدة</h3>
-  <label>العنوان</label><input id="cTitle"><label>البريف</label><textarea id="cBrief"></textarea>
-  <label>المجال</label><input id="cNiche"><label>المدينة</label><input id="cCity">
-  <label>الميزانية</label><input id="cBudget" type="number">
-  <div class="row"><button type="button" class="btn" onclick="doCampaign()">نشر الحملة</button><button class="btn ghost">إغلاق</button></div>
+<dialog id="campDlg"><form method="dialog"><h3 data-i18n="camp_title">حملة براند جديدة</h3>
+  <div class="err" id="campErr"></div>
+  <label data-i18n="c_title">العنوان</label><input id="cTitle"><label data-i18n="c_brief">البريف</label><textarea id="cBrief"></textarea>
+  <label data-i18n="f_niche">المجال / التخصص</label><input id="cNiche"><label data-i18n="f_city">المدينة</label><input id="cCity">
+  <label data-i18n="c_budget">الميزانية</label><input id="cBudget" type="number">
+  <div class="row"><button type="button" class="btn" onclick="doCampaign(this)" data-i18n="c_publish">نشر الحملة</button><button class="btn ghost" data-i18n="close">إغلاق</button></div>
 </form></dialog>
-<dialog id="reqDlg"><form method="dialog"><h3>طلب محل جديد</h3>
-  <label>العنوان</label><input id="rTitle"><label>المجال المطلوب</label><input id="rNiche">
-  <label>الميزانية</label><input id="rBudget" type="number"><label>تفاصيل</label><textarea id="rDetails"></textarea>
-  <div class="row"><button type="button" class="btn" onclick="doRequest()">نشر الطلب</button><button class="btn ghost">إغلاق</button></div>
+<dialog id="reqDlg"><form method="dialog"><h3 data-i18n="req_title">طلب محل جديد</h3>
+  <div class="err" id="reqErr"></div>
+  <label data-i18n="c_title">العنوان</label><input id="rTitle"><label data-i18n="req_niche">المجال المطلوب</label><input id="rNiche">
+  <label data-i18n="c_budget">الميزانية</label><input id="rBudget" type="number"><label data-i18n="req_details">تفاصيل</label><textarea id="rDetails"></textarea>
+  <div class="row"><button type="button" class="btn" onclick="doRequest(this)" data-i18n="g_publish">انشر الطلب</button><button class="btn ghost" data-i18n="close">إغلاق</button></div>
 </form></dialog>
+
+<dialog id="profileDlg"><form method="dialog">
+  <h3 data-i18n="edit_profile">تعديل الملف الشخصي</h3>
+  <div class="err" id="profileErr"></div>
+  <div class="row"><span id="pfAvatarPreview"></span>
+    <div><label data-i18n="pf_photo">الصورة الشخصية</label>
+    <input type="file" id="pfPhotoFile" accept="image/*" onchange="pickAvatar(this)">
+    <div class="mut" data-i18n="pf_photo_hint">تُصغَّر تلقائياً لمربع صغير (≤256px).</div></div></div>
+  <label data-i18n="f_name">الاسم</label><input id="pfName">
+  <label data-i18n="f_niche">المجال / التخصص</label><input id="pfNiche">
+  <div class="row"><div style="flex:1"><label data-i18n="f_city">المدينة</label><input id="pfCity"></div>
+  <div style="flex:1"><label data-i18n="f_followers">عدد المتابعين (للصناع)</label><input id="pfFollowers" type="number"></div></div>
+  <div class="row"><div style="flex:1"><label data-i18n="f_price">سعرك المعلن لفيديو/خدمة</label><input id="pfPrice" type="number"></div>
+  <div style="flex:1"><label data-i18n="pf_phone">رقم الهاتف (واتساب)</label><input id="pfPhone" placeholder="01xxxxxxxxx"></div></div>
+  <label data-i18n="pf_bio">نبذة عنك</label><textarea id="pfBio"></textarea>
+  <div class="row"><button type="button" class="btn" onclick="saveProfile(this)" data-i18n="save_changes">حفظ التعديلات</button>
+  <button class="btn ghost" data-i18n="close">إغلاق</button></div>
+  <div id="shortsMgr">
+    <h4 style="margin:18px 0 4px"><span data-i18n="shorts_title">نماذج الشورتس</span> <span class="chip" id="shortsCount"></span></h4>
+    <div class="mut" data-i18n="shorts_hint">بحد أقصى 3 فيديوهات — تظهر مضمّنة شغالة داخل ملفك العام.</div>
+    <div id="shortsList" style="margin-top:8px"></div>
+    <label data-i18n="short_url">رابط فيديو قصير (يوتيوب Shorts / فيسبوك / إنستجرام / تيك توك)</label>
+    <input id="shortUrl" placeholder="https://…">
+    <label data-i18n="short_title">عنوان النموذج (اختياري)</label><input id="shortTitle">
+    <button type="button" class="btn sm" onclick="addShort(this)" data-i18n="short_add">+ أضف نموذجاً</button>
+  </div>
+</form></dialog>
+
+<dialog id="notifDlg">
+  <div class="row"><h3 style="margin:0" data-i18n="notifications">التنبيهات</h3><div class="sp"></div>
+  <button class="btn ghost sm" onclick="document.getElementById('notifDlg').close()">✕</button></div>
+  <div id="notifBody" style="margin-top:10px"></div>
+</dialog>
+
+<dialog id="supportDlg">
+  <div class="row"><h3 style="margin:0">🎧 <span data-i18n="support_title">دعم Deal — رد تلقائي فوري</span></h3><div class="sp"></div>
+  <button class="btn ghost sm" onclick="document.getElementById('supportDlg').close()">✕</button></div>
+  <div class="mut" data-i18n="support_hint">اختر سؤالاً جاهزاً أو اكتب سؤالك — الرد فوري من قاعدة الأسئلة الشائعة.</div>
+  <div id="supportChips" style="margin-top:8px"></div>
+  <div class="chatlog" id="supportLog"></div>
+  <div id="supportContactRow" class="hide">
+    <label data-i18n="support_contact">وسيلة تواصل (اختياري) — لو حابب الفريق يرجع لك</label>
+    <input id="supportContact" placeholder="01xxxxxxxxx / you@mail.com">
+  </div>
+  <div class="row"><input id="supportInput" data-i18n-ph="support_ph" placeholder="اكتب سؤالك هنا…" style="flex:1">
+  <button class="btn sm" onclick="askSupport(this)" data-i18n="send">إرسال</button></div>
+</dialog>
 
 <script>
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -220,287 +316,589 @@ const api=async(p,o={})=>{const r=await fetch(p,{...o,headers:{'Content-Type':'a
   const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'خطأ'); return j;};
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3200)}
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-const SEAL={founder:'👑',verified:'✔️'};
-function seal(u){if(u.is_platform_founder)return ' <span title="مؤسس Deal">👑</span>';
-  if(u.verified)return ' <span title="موثّق Deal" style="color:var(--gold)">✔️</span>';return ''}
-function badgeDots(u){return (u.badges||[]).map(k=>`<span class="badge-ic" style="background:#1c4d3a" title="${k}">🏅</span>`).join(' ')}
-function talentCard(u){return `<div class="card">
-  <div class="row"><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>${u.pioneer?'<span class="chip">رائد المدينة</span>':''}${u.is_founder_member?'<span class="chip">عضو مؤسس</span>':''}</div>
-  <div class="mut">${esc(u.niche||u.provider_category||'')} · ${esc(u.city)} · ${u.followers||0} متابع</div>
-  <div class="row" style="margin:7px 0"><span class="chip">إتمام ${u.completion_rate}%</span>
-  <span class="chip">⭐ ${u.avg_stars??'—'} (${u.positive_pct??'—'}% إيجابي)</span>${badgeDots(u)}</div>
-  <div class="row"><span class="price">${u.price} ${u.currency}</span><div class="sp"></div>
-  <button class="btn ghost sm" onclick="openTalent(${u.id})">الملف</button>
-  <button class="btn sm" onclick="quickBook(${u.id})">احجز</button></div></div>`}
+/* حالة تحميل موحّدة: أي زر ينفّذ إجراءً غير متزامن يُعطَّل ويعرض «جارٍ…» حتى ينتهي — لا زر يبدو ميتاً. */
+async function withBusy(btn,fn){if(!btn||btn.disabled)return fn();
+  const old=btn.innerHTML;btn.disabled=true;btn.innerHTML=t('loading');
+  try{return await fn()}finally{btn.disabled=false;btn.innerHTML=old}}
+function showErr(id,msg){const e=document.getElementById(id);if(!e)return;e.textContent=msg;e.classList.add('show')}
+function hideErr(id){const e=document.getElementById(id);if(e)e.classList.remove('show')}
 
-async function loadMarket(){
-  const q=encodeURIComponent($('#q').value||''), n=encodeURIComponent($('#fNiche').value||''), c=encodeURIComponent($('#fCity').value||'');
-  const d=await api(`/api/directory?q=${q}&niche=${n}&city=${c}`);
-  $('#marketGrid').innerHTML=d.items.length?d.items.map(talentCard).join(''):'<div class="mut">السوق فاضي لسه — كن أول صانع يسجل.</div>';
+/* ================= i18n — قاموس كامل لكل نصوص الواجهة ================= */
+let LANG=localStorage.getItem('deal_lang')||'ar';
+const DICT={
+ar:{loading:'جارٍ…',copied:'تم النسخ ✓',nav_market:'السوق',nav_services:'الخدمات',nav_campaigns:'الحملات',nav_opps:'فرص ليك',nav_bookings:'حجوزاتي',nav_dash:'لوحتي',nav_owner:'لوحة المالك',post_job_btn:'📣 انشر شغلانة',menu:'القائمة',main_menu:'القائمة الرئيسية',login_register:'دخول / تسجيل',hero_l1:'انتهى زمن اللف على الشغل…',hero_l2:'الشغل هو اللي بيدوّر عليك',hero_sub:'فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.',register_creator:'سجّل كصانع',browse_market:'تصفح السوق',install_app:'ثبّت Deal على موبايلك',hero_guest_note:'عندك محل أو براند؟ انشر شغلانتك في دقيقة — من غير تسجيل، والصناع هيتواصلوا معاك واتساب.',why1_t:'فرص بتيجي لك',why1_d:'طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.',why2_t:'سمعة موثقة بتكبر',why2_d:'تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.',why3_t:'قبض محمي بضمان Deal',why3_d:'دفع على مراحل، عمولة التطبيق أولاً، وإثبات تنفيذ يحمي الطرفين.',search_ph:'ابحث باسم، مجال، مدينة…',search:'بحث',all_niches:'كل المجالات',all_cities:'كل المدن',guarantee_t:'ضمان Deal:',guarantee_d:'كل حجز هنا «حجز محمي بضمان Deal» — دفع مرحلي موثق، وبديل موثّق من نفس مدينتك ومجالك لو المنفذ أخلّ.',open_requests:'طلبات محلات مفتوحة',post_job_short:'📣 انشر شغلانة — بدون تسجيل',services_t:'خدمات متكاملة — بنفس حماية Deal',svc_ads:'إدارة إعلانات ممولة',svc_support:'حلول مشاكل الحسابات',campaigns_t:'حملات البراندات',new_campaign:'+ حملة جديدة',opps_t:'فرص ليك — مطابقة تلقائية لملفك',bookings_t:'حجوزاتي',footer:'Deal — منصة صناع المحتوى والمحلات المحلية · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal',register:'تسجيل',login:'دخول',f_name:'الاسم',f_iam:'أنا…',role_creator:'صانع محتوى',role_provider:'مقدم خدمة',role_shop:'محل',role_brand:'براند',f_provcat:'فئة الخدمة',f_niche:'المجال / التخصص',niche_ph:'كوميديا، طبخ، مراجعات…',f_city:'المدينة',f_country:'الدولة',f_currency:'العملة',f_followers:'عدد المتابعين (للصناع)',f_price:'سعرك المعلن لفيديو/خدمة',f_links:'روابط حساباتك العلنية (للتوثيق)',f_contact:'رقم الهاتف أو الإيميل (هو وسيلة الدخول)',contact_ph:'01xxxxxxxxx أو you@mail.com',continue_btn:'متابعة',close:'إغلاق',guest_title:'انشر شغلانة — بدون تسجيل',g_biz:'اسم النشاط / المحل',g_phone:'رقم الواتساب (موبايل مصري)',g_niche:'نوع الإعلان / المجال',g_niche_ph:'مطاعم، ملابس، عقارات…',g_budget:'الميزانية التقريبية (جنيه)',g_details:'اوصف الشغلانة',g_details_ph:'محتاج فيديو إعلاني عن…',g_publish:'انشر الطلب',g_done_t:'اتنشر طلبك ✓',g_done_d:'الصناع هيشوفوه دلوقتي وهيتواصلوا معاك واتساب. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:',copy_link:'نسخ الرابط',camp_title:'حملة براند جديدة',c_title:'العنوان',c_brief:'البريف',c_budget:'الميزانية',c_publish:'نشر الحملة',req_title:'طلب محل جديد',req_niche:'المجال المطلوب',req_details:'تفاصيل',edit_profile:'تعديل الملف الشخصي',pf_photo:'الصورة الشخصية',pf_photo_hint:'تُصغَّر تلقائياً لمربع صغير (≤256px).',pf_phone:'رقم الهاتف (واتساب)',pf_bio:'نبذة عنك',save_changes:'حفظ التعديلات',shorts_title:'نماذج الشورتس',shorts_hint:'بحد أقصى 3 فيديوهات — تظهر مضمّنة شغالة داخل ملفك العام.',short_url:'رابط فيديو قصير (يوتيوب Shorts / فيسبوك / إنستجرام / تيك توك)',short_title:'عنوان النموذج (اختياري)',short_add:'+ أضف نموذجاً',notifications:'التنبيهات',support_title:'دعم Deal — رد تلقائي فوري',support_hint:'اختر سؤالاً جاهزاً أو اكتب سؤالك — الرد فوري من قاعدة الأسئلة الشائعة.',support_contact:'وسيلة تواصل (اختياري) — لو حابب الفريق يرجع لك',support_ph:'اكتب سؤالك هنا…',send:'إرسال',
+followers_w:'متابع',completion_w:'إتمام',positive_w:'إيجابي',profile_btn:'الملف',book_btn:'احجز',founder_seal:'👑 مؤسس Deal',founder_only:'حساب المؤسس — عرض فقط',pioneer_w:'رائد المدينة',founder_member_w:'عضو مؤسس',empty_market:'السوق فاضي لسه — كن أول صانع يسجل.',guest_chip:'طلب عميل — بدون حساب',whatsapp:'💬 تواصل واتساب',wa_msg:'أهلاً، شفت طلبك على Deal وأقدر أنفذه',start_booking:'ابدأ حجز',view_opps:'شوف فرصك',shop_job_card:'+ عندك شغلانة؟',publish_request:'انشر طلب',no_providers:'لا يوجد مقدمو خدمة في هذه الفئة بعد.',no_campaigns:'لا حملات مفتوحة بعد.',apply_btn:'قدّم',applicants_btn:'المتقدمون',match_w:'مطابقة',kind_campaign:'حملة براند',kind_request:'طلب محل',no_opps:'لا فرص مطابقة لملفك الآن — حدّث مدينتك ومجالك وحدّك الأدنى للسعر من لوحتك.',no_bookings:'لا حجوزات بعد.',open_booking:'فتح الحجز',notify_talent:'📱 نبّه الصانع واتساب',wa_booking_msg:'جالك شغل جديد على Deal — حجز #',guaranteed_chip:'🛡️ حجز محمي بضمان Deal',client_w:'العميل',talent_w:'المنفذ',total_w:'الإجمالي',fee_w:'العمولة',first_w:'أولاً',net_two_w:'والصافي على دفعتين',
+stage_pending_agreement:'اتفاق الطرفين',stage_awaiting_fee:'عمولة Deal أولاً',stage_awaiting_deposit:'عربون الصانع',stage_in_progress:'التنفيذ',stage_proof_submitted:'إثبات التنفيذ',stage_awaiting_rest:'باقي القبض',stage_completed:'اكتمل القبض',stage_disputed:'نزاع مفتوح',stage_cancelled:'ملغي',
+step1:'١) اتفاق الطرفين',step2:'٢) عمولة Deal أولاً',step3:'٣) عربون المنفذ',step4:'٤) إثبات التنفيذ',step5:'٥) باقي القبض',agreed_w:'✔ وافق',waiting_w:'بانتظار',agree_btn:'أوافق',show_fee:'إظهار حساب عمولات Deal',fee_ref_ph:'مرجع عملية التحويل',fee_confirm_btn:'سجلت التحويل — تأكيد تلقائي',fee_confirmed:'اتأكدت تلقائياً ✓',dep_ref_ph:'مرجع تحويل العربون للمنفذ',paid_btn:'سجلت التحويل',proof_ph:'رابط العمل المنشور علناً',proof_btn:'إرسال الإثبات (يتحقق منه التطبيق)',proof_w:'الإثبات',proof_verified:'✔ تم التحقق وخُتم بوقته',receipt_t:'أكد الاستلام',receipt_d:'لو ما رديتش خلال 48 ساعة من الإثبات، الاستلام بيتأكد تلقائياً حمايةً للمنفذ.',receipt_btn:'أكدت الاستلام',completed_t:'اكتمل القبض ✓',rv_pos:'إيجابي 👍',rv_neg:'سلبي 👎',rv_comment_ph:'تعليق (اختياري)',rv_send:'إرسال التقييم (مرة واحدة، بلا تعديل)',rv_done:'قيّمت هذا الحجز ✓',dispute_btn:'فتح نزاع',dispute_prompt:'سبب النزاع؟',alternatives_t:'ضمان Deal — بدائل موثقة من نفس المدينة والمجال:',done_t:'تم',payment_saved:'اتسجلت الدفعة',proof_done:'الإثبات اتختم ✓',review_saved:'اتسجل تقييمك',dispute_opened:'اتفتح النزاع — الإدارة هتراجعه',booking_opened:'اتفتح الحجز #',ref_required:'اكتب مرجع العملية',bk_w:'حجز',bk_status:'الحالة',
+member_since:'عضو منذ',stat_completed:'صفقات مكتملة',stat_positive:'إيجابي',badges_vault:'خزانة الشارات',badge_earned:'مكتسبة ✓',work_gallery:'معرض الأعمال',no_work:'لا أعمال منشورة بعد.',reviews_t:'أحدث تقييمات العملاء',no_reviews:'لا تقييمات بعد.',book_for:'احجز بـ',
+status_w:'حالتك',status_ok:'سليم',frozen_w:'الرصيد مجمّد',kpi_views:'مشاهدات ملفك',kpi_opps:'فرص مفتوحة الآن',kpi_conv:'تحويل حجوزاتك لصفقات',kpi_earn:'أرباحك المقبوضة',kpi_done:'صفقات مكتملة',my_profile:'ملفي الشخصي',verify_t:'التوثيق الآلي',verify_status:'الحالة',v_req:'١) اطلب كود الملكية',v_code_cur:'كودك الحالي',v_code_hint:'حطه في بايو حسابك العلني',v_url_ph:'٢) رابط حسابك العلني بعد وضع الكود',v_check:'٣) افحص دلوقتي',verified_msg:'حسابك موثّق ✔️ بشارة Deal الذهبية',v_ok:'مبروك! بقيت موثّق ✔️',v_exc:'راحت لمراجعة استثنائية',v_rej:'اترفضت: ',code_is:'كودك',prefs_t:'تفضيلات الفرص',pref_min:'الحد الأدنى للسعر في «فرص ليك»',save_btn:'حفظ',saved_t:'اتحفظ',open_opps_btn:'افتح فرص ليك',shop_job:'عندك شغلانة؟',publish_shop_req:'انشر طلب محل',pf_saved:'اتحفظ ملفك ✓',
+ow_today:'عمولات اليوم',ow_month:'عمولات الشهر',ow_total:'إجمالي العمولات',ow_creators:'صناع',ow_founders:'مؤسسون',ow_verified:'موثقون',ow_completed:'صفقات مكتملة/الكل',ow_disputes:'النزاعات المفتوحة',ow_restore:'حل وإرجاع الحجز',ow_cancel:'حل وإلغاء',ow_no_disputes:'لا نزاعات.',ow_exceptional:'مراجعات توثيق استثنائية',ow_link:'الرابط',ow_accept:'قبول',ow_reject:'رفض',ow_no_requests:'لا طلبات.',ow_penalized:'حسابات معاقبة/مجمدة',ow_frozen:'مجمّد',ow_banned:'محظور',ow_unfreeze:'فك التجميد ورفع العقوبة',ow_no_penalized:'لا حسابات معاقبة.',ow_support:'رسائل الدعم',ow_unread:'غير مقروءة',ow_no_support:'لا رسائل دعم محفوظة.',ow_mark_read:'تعليم الكل كمقروء',ow_resolved:'اتحل',ow_penalty_lifted:'اترفعت العقوبة',
+auth_reg_t:'تسجيل حساب جديد',auth_login_t:'تسجيل الدخول',welcome_t:'أهلاً بيك في Deal',logout:'خروج',
+gp_request:'طلبك على Deal',gp_published:'منشور — الصناع بيشوفوه وهيتواصلوا معاك واتساب',gp_booked:'اتحجز — بيتحول لحجز',gp_booking:'حجزك على Deal',gp_invalid:'رابط متابعة غير صحيح.',gp_working:'المنفذ شغال على التنفيذ…',
+m_support:'الدعم',m_language:'اللغة',m_profile:'ملفي الشخصي',notif_empty:'لا تنبيهات بعد.',notif_login:'سجل دخولك لعرض الإشعارات',applied_t:'قدمت ✓',camp_published:'اتنشرت الحملة',req_published:'اتنشر الطلب',no_applicants:'لا متقدمين بعد',price_prompt:'سعر الشغلانة للعميل؟',guest_booked_suffix:' — العميل هيكمّل خطواته من رابط متابعته',install_hint:'من قائمة المتصفح ⋮ اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»',short_added:'اتضاف النموذج ✓',short_deleted:'اتحذف النموذج',delete_w:'حذف'},
+en:{loading:'Loading…',copied:'Copied ✓',nav_market:'Market',nav_services:'Services',nav_campaigns:'Campaigns',nav_opps:'Opportunities',nav_bookings:'My bookings',nav_dash:'My dashboard',nav_owner:'Owner panel',post_job_btn:'📣 Post a job',menu:'Menu',main_menu:'Main menu',login_register:'Login / Register',hero_l1:'No more chasing work…',hero_l2:'Work comes looking for you',hero_sub:'Opportunities from shops and brands in your city, delivered to you — with a protected booking and the Deal Guarantee.',register_creator:'Register as a creator',browse_market:'Browse the market',install_app:'Install Deal on your phone',hero_guest_note:'Own a shop or a brand? Post your job in a minute — no registration, and creators will reach you on WhatsApp.',why1_t:'Opportunities come to you',why1_d:'Requests and campaigns matched to your city and niche — without searching.',why2_t:'A verified reputation that grows',why2_d:'Ratings, completion rate and achievement badges accumulate on your profile.',why3_t:'Protected payment with Deal Guarantee',why3_d:'Staged payments, the app fee first, and delivery proof that protects both sides.',search_ph:'Search by name, niche, city…',search:'Search',all_niches:'All niches',all_cities:'All cities',guarantee_t:'Deal Guarantee:',guarantee_d:'Every booking here is a "Deal-Guaranteed booking" — documented staged payments, and a verified alternative from your city and niche if the creator defaults.',open_requests:'Open shop requests',post_job_short:'📣 Post a job — no registration',services_t:'Integrated services — with the same Deal protection',svc_ads:'Sponsored ads management',svc_support:'Account problem solutions',campaigns_t:'Brand campaigns',new_campaign:'+ New campaign',opps_t:'Opportunities for you — auto-matched to your profile',bookings_t:'My bookings',footer:'Deal — the platform for local content creators and shops · The official Deal seal 🛡️ Deal-Guaranteed booking',register:'Register',login:'Login',f_name:'Name',f_iam:'I am a…',role_creator:'Content creator',role_provider:'Service provider',role_shop:'Shop',role_brand:'Brand',f_provcat:'Service category',f_niche:'Niche / specialty',niche_ph:'Comedy, cooking, reviews…',f_city:'City',f_country:'Country',f_currency:'Currency',f_followers:'Follower count (for creators)',f_price:'Your listed price per video/service',f_links:'Your public account links (for verification)',f_contact:'Phone number or email (your login)',contact_ph:'01xxxxxxxxx or you@mail.com',continue_btn:'Continue',close:'Close',guest_title:'Post a job — no registration',g_biz:'Business / shop name',g_phone:'WhatsApp number (Egyptian mobile)',g_niche:'Ad type / niche',g_niche_ph:'Restaurants, clothes, real estate…',g_budget:'Approximate budget (EGP)',g_details:'Describe the job',g_details_ph:'I need an ad video about…',g_publish:'Publish request',g_done_t:'Your request is published ✓',g_done_d:'Creators can see it now and will contact you on WhatsApp. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',copy_link:'Copy link',camp_title:'New brand campaign',c_title:'Title',c_brief:'Brief',c_budget:'Budget',c_publish:'Publish campaign',req_title:'New shop request',req_niche:'Needed niche',req_details:'Details',edit_profile:'Edit profile',pf_photo:'Profile photo',pf_photo_hint:'Automatically cropped to a small square (≤256px).',pf_phone:'Phone number (WhatsApp)',pf_bio:'Bio',save_changes:'Save changes',shorts_title:'Shorts samples',shorts_hint:'Maximum 3 videos — shown as embedded playable videos on your public profile.',short_url:'Short video link (YouTube Shorts / Facebook / Instagram / TikTok)',short_title:'Sample title (optional)',short_add:'+ Add sample',notifications:'Notifications',support_title:'Deal Support — instant auto-replies',support_hint:'Pick a ready question or type yours — replies are instant from the FAQ base.',support_contact:'Contact (optional) — if you want the team to get back to you',support_ph:'Type your question here…',send:'Send',
+followers_w:'followers',completion_w:'Completion',positive_w:'positive',profile_btn:'Profile',book_btn:'Book',founder_seal:'👑 Deal Founder',founder_only:'Founder account — display only',pioneer_w:'City Pioneer',founder_member_w:'Founding Member',empty_market:'The market is still empty — be the first creator to register.',guest_chip:'Guest client request — no account',whatsapp:'💬 WhatsApp',wa_msg:'Hi, I saw your request on Deal and I can do it',start_booking:'Start booking',view_opps:'See your opportunities',shop_job_card:'+ Have a job?',publish_request:'Publish request',no_providers:'No providers in this category yet.',no_campaigns:'No open campaigns yet.',apply_btn:'Apply',applicants_btn:'Applicants',match_w:'Match',kind_campaign:'Brand campaign',kind_request:'Shop request',no_opps:'No opportunities match your profile right now — update your city, niche and minimum price from your dashboard.',no_bookings:'No bookings yet.',open_booking:'Open booking',notify_talent:'📱 Notify creator on WhatsApp',wa_booking_msg:'You have new work on Deal — booking #',guaranteed_chip:'🛡️ Deal-Guaranteed booking',client_w:'Client',talent_w:'Creator',total_w:'Total',fee_w:'fee',first_w:'first',net_two_w:'and the net in two payments',
+stage_pending_agreement:'Agreement',stage_awaiting_fee:'Deal fee first',stage_awaiting_deposit:'Creator deposit',stage_in_progress:'In progress',stage_proof_submitted:'Proof of delivery',stage_awaiting_rest:'Remaining payment',stage_completed:'Fully paid',stage_disputed:'Dispute open',stage_cancelled:'Cancelled',
+step1:'1) Agreement',step2:'2) Deal fee first',step3:'3) Creator deposit',step4:'4) Proof of delivery',step5:'5) Remaining payment',agreed_w:'✔ Agreed',waiting_w:'Waiting',agree_btn:'I agree',show_fee:'Show Deal fee account',fee_ref_ph:'Transfer reference',fee_confirm_btn:'I transferred it — auto-confirm',fee_confirmed:'Auto-confirmed ✓',dep_ref_ph:'Deposit transfer reference to the creator',paid_btn:'I transferred it',proof_ph:'Publicly published work link',proof_btn:'Submit proof (the app verifies it)',proof_w:'Proof',proof_verified:'✔ Verified and timestamped',receipt_t:'Confirm receipt',receipt_d:'If you do not respond within 48 hours of the proof, receipt is auto-confirmed to protect the creator.',receipt_btn:'I received it',completed_t:'Fully paid ✓',rv_pos:'Positive 👍',rv_neg:'Negative 👎',rv_comment_ph:'Comment (optional)',rv_send:'Submit rating (once, no edits)',rv_done:'You rated this booking ✓',dispute_btn:'Open dispute',dispute_prompt:'Dispute reason?',alternatives_t:'Deal Guarantee — verified alternatives from the same city and niche:',done_t:'Done',payment_saved:'Payment recorded',proof_done:'Proof timestamped ✓',review_saved:'Your rating was recorded',dispute_opened:'Dispute opened — admin will review it',booking_opened:'Booking opened #',ref_required:'Enter the transfer reference',bk_w:'Booking',bk_status:'Status',
+member_since:'Member since',stat_completed:'Completed deals',stat_positive:'Positive',badges_vault:'Badge vault',badge_earned:'Earned ✓',work_gallery:'Work portfolio',no_work:'No published work yet.',reviews_t:'Latest client reviews',no_reviews:'No reviews yet.',book_for:'Book for',
+status_w:'Your status',status_ok:'Good standing',frozen_w:'Balance frozen',kpi_views:'Profile views',kpi_opps:'Open opportunities now',kpi_conv:'Bookings-to-deals conversion',kpi_earn:'Your received earnings',kpi_done:'Completed deals',my_profile:'My profile',verify_t:'Automatic verification',verify_status:'Status',v_req:'1) Request ownership code',v_code_cur:'Your current code',v_code_hint:'Put it in your public account bio',v_url_ph:'2) Your public account link after adding the code',v_check:'3) Check now',verified_msg:'Your account is verified ✔️ with the Deal gold badge',v_ok:'Congrats! You are now verified ✔️',v_exc:'Sent to exceptional review',v_rej:'Rejected: ',code_is:'Your code',prefs_t:'Opportunity preferences',pref_min:'Minimum price in "Opportunities for you"',save_btn:'Save',saved_t:'Saved',open_opps_btn:'Open your opportunities',shop_job:'Have a job?',publish_shop_req:'Publish a shop request',pf_saved:'Your profile was saved ✓',
+ow_today:'Fees today',ow_month:'Fees this month',ow_total:'Total fees',ow_creators:'Creators',ow_founders:'founders',ow_verified:'verified',ow_completed:'Completed/total deals',ow_disputes:'Open disputes',ow_restore:'Resolve & restore booking',ow_cancel:'Resolve & cancel',ow_no_disputes:'No disputes.',ow_exceptional:'Exceptional verification reviews',ow_link:'Link',ow_accept:'Approve',ow_reject:'Reject',ow_no_requests:'No requests.',ow_penalized:'Penalized/frozen accounts',ow_frozen:'Frozen',ow_banned:'Banned',ow_unfreeze:'Unfreeze & lift penalty',ow_no_penalized:'No penalized accounts.',ow_support:'Support messages',ow_unread:'unread',ow_no_support:'No saved support messages.',ow_mark_read:'Mark all as read',ow_resolved:'Resolved',ow_penalty_lifted:'Penalty lifted',
+auth_reg_t:'Create a new account',auth_login_t:'Login',welcome_t:'Welcome to Deal',logout:'Logout',
+gp_request:'Your request on Deal',gp_published:'Published — creators can see it and will contact you on WhatsApp',gp_booked:'Booked — converting to a booking',gp_booking:'Your booking on Deal',gp_invalid:'Invalid follow-up link.',gp_working:'The creator is working on delivery…',
+m_support:'Support',m_language:'Language',m_profile:'My profile',notif_empty:'No notifications yet.',notif_login:'Log in to view your notifications',applied_t:'Applied ✓',camp_published:'Campaign published',req_published:'Request published',no_applicants:'No applicants yet',price_prompt:'Price for the client?',guest_booked_suffix:' — the client will complete their steps from their follow-up link',install_hint:'From the browser menu ⋮ choose "Install app" or "Add to Home screen"',short_added:'Sample added ✓',short_deleted:'Sample deleted',delete_w:'Delete'}
+};
+const t=k=>(DICT[LANG]&&DICT[LANG][k])||DICT.ar[k]||k;
+const ERR_EN={'سجل الدخول أولاً':'Log in first','حساب غير موجود':'Account not found','هذا الحساب محظور':'This account is banned','الاسم والدور ووسيلة التواصل مطلوبة':'Name, role and contact are required','دور غير صحيح':'Invalid role','وسيلة التواصل مسجلة من قبل — سجل الدخول':'This contact is already registered — please log in','لا يوجد حساب بهذه البيانات — سجل أولاً':'No account with these details — register first','غير موجود':'Not found','حدد سعراً صحيحاً':'Enter a valid price','لا يمكنك حجز نفسك':'You cannot book yourself','حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً':'Founder account — display only, no bookings or contact','هذا الطلب اتحجز خلاص — لا يمكن تحويله مرتين':'This request is already booked — it cannot be converted twice','طلب ضيف غير موجود':'Guest request not found','اكتب مرجع العملية':'Enter the transfer reference','مرجع العملية مطلوب':'Transfer reference is required','رابط فيديو غير مدعوم — الصق رابط شورتس من يوتيوب أو فيسبوك أو إنستجرام أو تيك توك':'Unsupported video link — paste a shorts link from YouTube, Facebook, Instagram or TikTok','وصلت إلى الحد الأقصى: 3 فيديوهات شورتس — احذف واحداً أولاً':'You reached the maximum: 3 shorts videos — delete one first','الصورة أكبر من 200KB — صغّرها وحاول مجدداً':'Image is larger than 200KB — shrink it and try again','رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian mobile number is required (01xxxxxxxxx)','رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian phone number is required (01xxxxxxxxx)','المدينة مطلوبة':'City is required','اسم النشاط مطلوب':'Business name is required','اوصف الشغلانة المطلوبة':'Describe the job','خطأ في الخادم':'Server error','خطأ':'Error'};
+const errT=m=>LANG==='en'?(ERR_EN[m]||m):m;
+function applyI18n(){
+  document.documentElement.lang=LANG;document.documentElement.dir=LANG==='ar'?'rtl':'ltr';
+  document.title=LANG==='ar'?'Deal — الشغل هو اللي بيدوّر عليك':'Deal — Work comes looking for you';
+  $$('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n)});
+  $$('[data-i18n-ph]').forEach(el=>{el.placeholder=t(el.dataset.i18nPh)});
+  $('#langBtn').textContent=LANG==='ar'?'EN':'عربي';
+  $('#authTitle').textContent=AMODE==='register'?t('auth_reg_t'):t('auth_login_t');
+  buildMenu();
+}
+function setLang(l){LANG=l;localStorage.setItem('deal_lang',l);
+  try{SUPPORT_TOPICS_LOADED=false;const sc=$('#supportChips');if(sc)sc.innerHTML=''}catch(e){}
+  applyI18n();renderAuth();refresh()}
+$('#langBtn').onclick=()=>setLang(LANG==='ar'?'en':'ar');
+</script>
+
+<script>
+/* ================= البطاقات والسوق ================= */
+function seal(u){if(u.is_platform_founder)return ` <span class="founder-seal">${t('founder_seal')}</span>`;
+  if(u.verified)return ' <span title="Deal Verified" style="color:var(--gold)">✔️</span>';return ''}
+function badgeDots(u){return (u.badges||[]).map(k=>`<span class="badge-ic" style="background:#1c4d3a" title="${k}">🏅</span>`).join(' ')}
+function avatarHtml(u,big=false){if(u.avatar)return `<img class="avatar${big?' big':''}" src="${u.avatar}" alt="">`;
+  return `<span class="avatar-fb${big?' big':''}">${esc((u.name||'?').trim().charAt(0)||'?')}</span>`}
+function talentCard(u){
+  if(u.is_platform_founder)return `<div class="card founder-card">
+    <div class="row"><h3 style="margin:0">${esc(u.name)}</h3>${seal(u)}</div>
+    <div class="mut" style="margin-top:6px">${esc(u.niche||'')} · ${esc(u.city)}</div>
+    <div class="row" style="margin-top:10px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span><div class="sp"></div>
+    <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button></div></div>`;
+  return `<div class="card">
+  <div class="row">${avatarHtml(u)}<h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}</div>
+  <div class="mut" style="margin-top:6px">${esc(u.niche||u.provider_category||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}</div>
+  <div class="row" style="margin:7px 0"><span class="chip">${t('completion_w')} ${u.completion_rate}%</span>
+  <span class="chip">⭐ ${u.avg_stars??'—'} (${u.positive_pct??'—'}% ${t('positive_w')})</span>${badgeDots(u)}</div>
+  <div class="row"><span class="price">${u.price} ${u.currency}</span><div class="sp"></div>
+  <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button>
+  <button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_btn')}</button></div></div>`}
+
+let FILTERS_READY=false;
+async function loadFilterOptions(){
+  // خيارات الفلاتر تُبنى من الدليل الكامل مرة واحدة وتُحفَظ اختيارات المستخدم —
+  // (كانت تُعاد كتابتها من نتيجة الفلترة نفسها فتُمحى القيم المختارة ولا يعمل البحث).
+  const d=await api('/api/directory');
   const niches=[...new Set(d.items.map(i=>i.niche).filter(Boolean))], cities=[...new Set(d.items.map(i=>i.city).filter(Boolean))];
-  $('#fNiche').innerHTML='<option value="">كل المجالات</option>'+niches.map(x=>`<option>${esc(x)}</option>`).join('');
-  $('#fCity').innerHTML='<option value="">كل المدن</option>'+cities.map(x=>`<option>${esc(x)}</option>`).join('');
+  const fn=$('#fNiche'), fc=$('#fCity'), vn=fn.value, vc=fc.value;
+  fn.innerHTML=`<option value="">${t('all_niches')}</option>`+niches.map(x=>`<option ${x===vn?'selected':''}>${esc(x)}</option>`).join('');
+  fc.innerHTML=`<option value="">${t('all_cities')}</option>`+cities.map(x=>`<option ${x===vc?'selected':''}>${esc(x)}</option>`).join('');
+  FILTERS_READY=true;
+}
+async function loadMarket(btn){
+  const work=async()=>{
+    if(!FILTERS_READY) await loadFilterOptions();
+    const q=encodeURIComponent($('#q').value||''), n=encodeURIComponent($('#fNiche').value||''), c=encodeURIComponent($('#fCity').value||'');
+    const d=await api(`/api/directory?q=${q}&niche=${n}&city=${c}`);
+    $('#marketGrid').innerHTML=d.items.length?d.items.map(talentCard).join(''):`<div class="mut">${t('empty_market')}</div>`;
+    await loadRequests();
+  };
+  if(btn) return withBusy(btn,work); return work();
+}
+async function loadRequests(){
   const r=await api('/api/requests');
   $('#reqGrid').innerHTML=r.items.map(x=>`<div class="card"><h3>${esc(x.title)}</h3>
     <div class="mut">${esc(x.shop_name)} · ${esc(x.niche)} · ${esc(x.city)}</div>
-    ${x.is_guest?'<span class="chip">طلب عميل — بدون حساب</span>':''}
+    ${x.is_guest?`<span class="chip">${t('guest_chip')}</span>`:''}
     <div class="row"><span class="price">${x.budget} ${x.currency}</span><div class="sp"></div>
-    ${x.is_guest&&ME&&['creator','provider'].includes(ME.user.role)?`${x.guest_phone?`<a class="btn ghost sm" target="_blank" href="https://wa.me/${waNum(x.guest_phone)}?text=${encodeURIComponent('أهلاً، شفت طلبك على Deal وأقدر أنفذه')}">💬 تواصل واتساب</a>`:''}<button class="btn sm" onclick="bookGuestReq(${x.id},${x.budget||0})">ابدأ حجز</button>`
-    :`<button class="btn ghost sm" onclick="document.querySelector('[data-tab=opps]').click()">شوف فرصك</button>`}</div></div>`).join('')
-    +(ME&&ME.user.role==='shop'?'<div class="card"><h3>+ عندك شغلانة؟</h3><button class="btn sm" onclick="document.getElementById(\'reqDlg\').showModal()">انشر طلب</button></div>':'');
+    ${x.is_guest&&ME&&['creator','provider'].includes(ME.user.role)?`${x.guest_phone?`<a class="btn ghost sm" target="_blank" href="https://wa.me/${waNum(x.guest_phone)}?text=${encodeURIComponent(t('wa_msg'))}">${t('whatsapp')}</a>`:''}<button class="btn sm" onclick="bookGuestReq(this,${x.id},${x.budget||0})">${t('start_booking')}</button>`
+    :`<button class="btn ghost sm" onclick="showTab('opps')">${t('view_opps')}</button>`}</div></div>`).join('')
+    +(ME&&ME.user.role==='shop'?`<div class="card"><h3>${t('shop_job_card')}</h3><button class="btn sm" onclick="document.getElementById('reqDlg').showModal()">${t('publish_request')}</button></div>`:'');
 }
-async function loadServices(cat){
-  const d=await api('/api/directory?role=provider');
-  const items=d.items.filter(i=>i.provider_category===cat);
-  $('#svcGrid').innerHTML=items.length?items.map(talentCard).join(''):'<div class="mut">لا يوجد مقدمو خدمة في هذه الفئة بعد.</div>';
+async function loadServices(cat,btn){
+  const work=async()=>{
+    const d=await api('/api/directory?role=provider');
+    const items=d.items.filter(i=>i.provider_category===cat);
+    $('#svcGrid').innerHTML=items.length?items.map(talentCard).join(''):`<div class="mut">${t('no_providers')}</div>`;
+  };
+  if(btn) return withBusy(btn,work); return work();
 }
 async function loadCampaigns(){
   const d=await api('/api/campaigns');
   $('#campGrid').innerHTML=d.items.length?d.items.map(c=>`<div class="card"><h3>${esc(c.title)}</h3>
     <div class="mut">${esc(c.brand_name)} · ${esc(c.niche)} · ${esc(c.city)}</div><p class="mut">${esc(c.brief)}</p>
     <div class="row"><span class="price">${c.budget} ${c.currency}</span><div class="sp"></div>
-    ${ME&&ME.user.role==='creator'?`<button class="btn sm" onclick="applyCamp(${c.id})">قدّم</button>
-    <button class="btn ghost sm" onclick="viewApps(${c.id})">متقدمون</button>`:''}
-    ${ME&&ME.user.id===c.brand_user_id?`<button class="btn ghost sm" onclick="viewApps(${c.id})">المتقدمون</button>`:''}</div></div>`).join('')
-    :'<div class="mut">لا حملات مفتوحة بعد.</div>';
+    ${ME&&ME.user.role==='creator'?`<button class="btn sm" onclick="applyCamp(this,${c.id})">${t('apply_btn')}</button>
+    <button class="btn ghost sm" onclick="viewApps(this,${c.id})">${t('applicants_btn')}</button>`:''}
+    ${ME&&ME.user.id===c.brand_user_id?`<button class="btn ghost sm" onclick="viewApps(this,${c.id})">${t('applicants_btn')}</button>`:''}</div></div>`).join('')
+    :`<div class="mut">${t('no_campaigns')}</div>`;
 }
 async function loadOpps(){
   if(!ME) return;
   const d=await api('/api/opportunities');
   $('#oppList').innerHTML=d.items.length?d.items.map(o=>`<div class="card" style="margin-bottom:10px">
-    <div class="row"><h3 style="margin:0">${esc(o.title)}</h3><span class="chip">مطابقة ${o.score}%</span>
-    <span class="chip">${o.kind==='campaign'?'حملة براند':(o.is_guest?'طلب عميل — بدون حساب':'طلب محل')}</span></div>
+    <div class="row"><h3 style="margin:0">${esc(o.title)}</h3><span class="chip">${t('match_w')} ${o.score}%</span>
+    <span class="chip">${o.kind==='campaign'?t('kind_campaign'):(o.is_guest?t('guest_chip'):t('kind_request'))}</span></div>
     <div class="mut">${(o.reasons||[]).join(' · ')} · ${esc(o.city)} · ${esc(o.niche)}</div>
     <div class="row"><span class="price">${o.budget} ${o.currency}</span><div class="sp"></div>
-    ${o.kind==='campaign'?`<button class="btn sm" onclick="applyCamp(${o.id})">قدّم عليها</button>`:''}
-    ${o.kind==='request'&&o.is_guest?`${o.guest_phone?`<a class="btn ghost sm" target="_blank" href="https://wa.me/${waNum(o.guest_phone)}?text=${encodeURIComponent('أهلاً، شفت طلبك على Deal وأقدر أنفذه')}">💬 تواصل واتساب</a>`:''}<button class="btn sm" onclick="bookGuestReq(${o.id},${o.budget||0})">ابدأ حجز</button>`:''}</div></div>`).join('')
-    :'<div class="mut">لا فرص مطابقة لملفك الآن — حدّث مدينتك ومجالك وحدّك الأدنى للسعر من لوحتك.</div>';
+    ${o.kind==='campaign'?`<button class="btn sm" onclick="applyCamp(this,${o.id})">${t('apply_btn')}</button>`:''}
+    ${o.kind==='request'&&o.is_guest?`${o.guest_phone?`<a class="btn ghost sm" target="_blank" href="https://wa.me/${waNum(o.guest_phone)}?text=${encodeURIComponent(t('wa_msg'))}">${t('whatsapp')}</a>`:''}<button class="btn sm" onclick="bookGuestReq(this,${o.id},${o.budget||0})">${t('start_booking')}</button>`:''}</div></div>`).join('')
+    :`<div class="mut">${t('no_opps')}</div>`;
 }
-const STAGES=['pending_agreement','awaiting_fee','awaiting_deposit','in_progress','proof_submitted','awaiting_rest','completed'];
-const STAGE_AR={pending_agreement:'اتفاق الطرفين',awaiting_fee:'عمولة Deal أولاً',awaiting_deposit:'عربون الصانع',in_progress:'التنفيذ',proof_submitted:'إثبات التنفيذ',awaiting_rest:'باقي القبض',completed:'اكتمل القبض',disputed:'نزاع مفتوح',cancelled:'ملغي'};
+async function applyCamp(btn,id){await withBusy(btn,async()=>{try{await api(`/api/campaigns/${id}/apply`,{method:'POST',body:JSON.stringify({pitch:''})});toast(t('applied_t'))}catch(e){toast(errT(e.message))}})}
+async function viewApps(btn,id){await withBusy(btn,async()=>{try{const d=await api(`/api/campaigns/${id}/applications`);
+  alert(d.items.length?d.items.map(a=>`${a.creator.name} — ${a.status}`).join('\n'):t('no_applicants'))}catch(e){toast(errT(e.message))}})}
+function openCampaign(){if(!ME)return openAuth();hideErr('campErr');$('#campDlg').showModal()}
+async function doCampaign(btn){hideErr('campErr');await withBusy(btn,async()=>{try{await api('/api/campaigns',{method:'POST',body:JSON.stringify({title:$('#cTitle').value,brief:$('#cBrief').value,niche:$('#cNiche').value,city:$('#cCity').value,budget:+$('#cBudget').value||0})});$('#campDlg').close();toast(t('camp_published'));loadCampaigns()}catch(e){showErr('campErr',errT(e.message))}})}
+async function doRequest(btn){hideErr('reqErr');await withBusy(btn,async()=>{try{await api('/api/requests',{method:'POST',body:JSON.stringify({title:$('#rTitle').value,niche:$('#rNiche').value,budget:+$('#rBudget').value||0,details:$('#rDetails').value})});$('#reqDlg').close();toast(t('req_published'));loadMarket()}catch(e){showErr('reqErr',errT(e.message))}})}
+</script>
+
+<script>
+/* ================= الحجوزات ================= */
+const stageName=s=>t('stage_'+s);
 async function loadBookings(){
   if(!ME) return;
   const d=await api('/api/bookings');
   $('#bookList').innerHTML=d.items.length?d.items.map(b=>`<div class="card" style="margin-bottom:10px">
-    <div class="row"><h3 style="margin:0">#${b.id} ${esc(b.title)}</h3><span class="chip">${STAGE_AR[b.status]||b.status}</span>
-    <span class="chip">🛡️ حجز محمي بضمان Deal</span>${b.is_guest?'<span class="chip">طلب عميل — بدون حساب</span>':''}</div>
-    <div class="mut">العميل: ${esc(b.client?b.client.name:(b.guest_name||'عميل'))} · المنفذ: ${esc(b.talent.name)} · الإجمالي ${b.price} ${b.currency} (العمولة ${b.fee} أولاً، والصافي ${b.net} على دفعتين ${b.deposit}+${b.rest})</div>
-    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="openBooking(${b.id})">فتح الحجز</button>
-    ${b.talent.phone?`<a class="btn ghost sm" target="_blank" href="https://wa.me/${String(b.talent.phone||'').replace(/\D/g,'')}?text=${encodeURIComponent('جالك شغل جديد على Deal — حجز #'+b.id)}">📱 نبّه الصانع واتساب</a>`:''}</div></div>`).join('')
-    :'<div class="mut">لا حجوزات بعد.</div>';
+    <div class="row"><h3 style="margin:0">#${b.id} ${esc(b.title)}</h3><span class="chip">${stageName(b.status)}</span>
+    <span class="chip">${t('guaranteed_chip')}</span>${b.is_guest?`<span class="chip">${t('guest_chip')}</span>`:''}</div>
+    <div class="mut">${t('client_w')}: ${esc(b.client?b.client.name:(b.guest_name||t('client_w')))} · ${t('talent_w')}: ${esc(b.talent.name)} · ${t('total_w')} ${b.price} ${b.currency} (${t('fee_w')} ${b.fee} ${t('first_w')}، ${t('net_two_w')} ${b.deposit}+${b.rest})</div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="openBooking(this,${b.id})">${t('open_booking')}</button>
+    ${b.talent.phone?`<a class="btn ghost sm" target="_blank" href="https://wa.me/${String(b.talent.phone||'').replace(/\D/g,'')}?text=${encodeURIComponent(t('wa_booking_msg')+b.id)}">${t('notify_talent')}</a>`:''}</div></div>`).join('')
+    :`<div class="mut">${t('no_bookings')}</div>`;
 }
-async function openBooking(id){
-  const {booking:b}=await api('/api/bookings/'+id);
-  const meId=ME.user.id, isClient=b.client_id===meId, isTalent=b.talent_id===meId;
-  const step=(key,label,state,inner)=>`<div class="step ${state}"><b>${label}</b>${inner||''}</div>`;
-  let h=`<h3>حجز #${b.id} — ${esc(b.title)}</h3><div class="mut">🛡️ حجز محمي بضمان Deal · الحالة: ${STAGE_AR[b.status]||b.status}</div>`;
-  h+=step('agree','١) اتفاق الطرفين',b.status!=='pending_agreement'?'done':(isClient||isTalent?'open':''),
-    b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">العميل ${b.agreed_client?'✔ وافق':'بانتظار'}</span><span class="chip">المنفذ ${b.agreed_talent?'✔ وافق':'بانتظار'}</span>
-    ${((isClient&&!b.agreed_client)||(isTalent&&!b.agreed_talent))?`<button class="btn sm" onclick="act(${b.id},'agree')">أوافق</button>`:''}</div>`:'');
-  h+=step('fee','٢) عمولة Deal أولاً — '+b.fee+' '+b.currency, b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'&&isClient?'open':''),
-    b.status==='awaiting_fee'&&isClient?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="feeInfo(${b.id})">إظهار حساب عمولات Deal</button> <span id="feeInfo"></span>
-    <input id="feeRef" placeholder="مرجع عملية التحويل"><button class="btn sm" onclick="pay(${b.id},'fee','feeRef')">سجلت التحويل — تأكيد تلقائي</button></div>`
-    :(b.fee_status==='confirmed'?'<div class="mut">اتأكدت تلقائياً ✓</div>':''));
-  h+=step('dep','٣) عربون المنفذ — '+b.deposit+' '+b.currency, ['in_progress','proof_submitted','awaiting_rest','completed'].includes(b.status)?'done':(b.status==='awaiting_deposit'&&isClient?'open':''),
-    b.status==='awaiting_deposit'&&isClient?`<input id="depRef" placeholder="مرجع تحويل العربون للمنفذ"><button class="btn sm" onclick="pay(${b.id},'deposit','depRef')">سجلت التحويل</button>`:'');
-  h+=step('proof','٤) إثبات التنفيذ', ['awaiting_rest','completed'].includes(b.status)?'done':(b.status==='in_progress'&&isTalent?'open':''),
-    b.status==='in_progress'&&isTalent?`<input id="proofUrl" placeholder="رابط العمل المنشور علناً"><button class="btn sm" onclick="proof(${b.id})">إرسال الإثبات (يتحقق منه التطبيق)</button>`
-    :(b.proof_url?`<div class="mut">الإثبات: <a target="_blank" href="${esc(b.proof_url)}">${esc(b.proof_url)}</a> — ${b.proof_check==='verified'?'✔ تم التحقق وخُتم بوقته':''}</div>`:''));
-  if(b.status==='proof_submitted'&&isClient) h+=`<div class="step open"><b>أكد الاستلام</b><div class="mut">لو ما رديتش خلال 48 ساعة من الإثبات، الاستلام بيتأكد تلقائياً حمايةً للمنفذ.</div><button class="btn sm" onclick="act(${b.id},'confirm-receipt')">أكدت الاستلام</button></div>`;
-  h+=step('rest','٥) باقي القبض — '+b.rest+' '+b.currency, b.status==='completed'?'done':(b.status==='awaiting_rest'&&isClient?'open':''),
-    b.status==='awaiting_rest'&&isClient?`<input id="restRef" placeholder="مرجع تحويل الباقي"><button class="btn sm" onclick="pay(${b.id},'rest','restRef')">سجلت التحويل</button>`:'');
-  if(b.status==='completed') h+=`<div class="step done"><b>اكتمل القبض ✓</b>${b.can_review?`<div style="margin-top:7px"><div class="row"><select id="rvS" style="max-width:150px"><option value="positive">إيجابي 👍</option><option value="negative">سلبي 👎</option></select>
-    <select id="rvStars" style="max-width:110px"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
-    <input id="rvC" placeholder="تعليق (اختياري)"><button class="btn sm" onclick="review(${b.id})">إرسال التقييم (مرة واحدة، بلا تعديل)</button></div>`:'<div class="mut">قيّمت هذا الحجز ✓</div>'}</div>`;
-  if(!['completed','cancelled','disputed'].includes(b.status)) h+=`<div class="row" style="margin-top:10px"><button class="btn ghost sm" onclick="dispute(${b.id})">فتح نزاع</button></div>`;
-  if(b.status==='disputed'&&b.alternatives&&b.alternatives.length) h+=`<div class="guarantee">ضمان Deal — بدائل موثقة من نفس المدينة والمجال: ${b.alternatives.map(a=>esc(a.name)).join('، ')}</div>`;
-  h+=`<div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="document.getElementById('bookDlg').close()">إغلاق</button></div>`;
-  $('#bookBody').innerHTML=h; $('#bookDlg').showModal();
+async function openBooking(btn,id){
+  const work=async()=>{
+    const {booking:b}=await api('/api/bookings/'+id);
+    const meId=ME.user.id, isClient=b.client_id===meId, isTalent=b.talent_id===meId;
+    const step=(label,state,inner)=>`<div class="step ${state}"><b>${label}</b>${inner||''}</div>`;
+    let h=`<h3>${t('bk_w')} #${b.id} — ${esc(b.title)}</h3><div class="mut">${t('guaranteed_chip')} · ${t('bk_status')}: ${stageName(b.status)}</div>`;
+    h+=step(t('step1'),b.status!=='pending_agreement'?'done':(isClient||isTalent?'open':''),
+      b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">${t('client_w')} ${b.agreed_client?t('agreed_w'):t('waiting_w')}</span><span class="chip">${t('talent_w')} ${b.agreed_talent?t('agreed_w'):t('waiting_w')}</span>
+      ${((isClient&&!b.agreed_client)||(isTalent&&!b.agreed_talent))?`<button class="btn sm" onclick="act(this,${b.id},'agree')">${t('agree_btn')}</button>`:''}</div>`:'');
+    h+=step(`${t('step2')} — ${b.fee} ${b.currency}`, b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'&&isClient?'open':''),
+      b.status==='awaiting_fee'&&isClient?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="feeInfo(this,${b.id})">${t('show_fee')}</button> <span id="feeInfo"></span>
+      <input id="feeRef" placeholder="${t('fee_ref_ph')}"><button class="btn sm" onclick="pay(this,${b.id},'fee','feeRef')">${t('fee_confirm_btn')}</button></div>`
+      :(b.fee_status==='confirmed'?`<div class="mut">${t('fee_confirmed')}</div>`:''));
+    h+=step(`${t('step3')} — ${b.deposit} ${b.currency}`, ['in_progress','proof_submitted','awaiting_rest','completed'].includes(b.status)?'done':(b.status==='awaiting_deposit'&&isClient?'open':''),
+      b.status==='awaiting_deposit'&&isClient?`<input id="depRef" placeholder="${t('dep_ref_ph')}"><button class="btn sm" onclick="pay(this,${b.id},'deposit','depRef')">${t('paid_btn')}</button>`:'');
+    h+=step(t('step4'), ['awaiting_rest','completed'].includes(b.status)?'done':(b.status==='in_progress'&&isTalent?'open':''),
+      b.status==='in_progress'&&isTalent?`<input id="proofUrl" placeholder="${t('proof_ph')}"><button class="btn sm" onclick="proof(this,${b.id})">${t('proof_btn')}</button>`
+      :(b.proof_url?`<div class="mut">${t('proof_w')}: <a target="_blank" href="${esc(b.proof_url)}">${esc(b.proof_url)}</a> — ${b.proof_check==='verified'?t('proof_verified'):''}</div>`:''));
+    if(b.status==='proof_submitted'&&isClient) h+=`<div class="step open"><b>${t('receipt_t')}</b><div class="mut">${t('receipt_d')}</div><button class="btn sm" onclick="act(this,${b.id},'confirm-receipt')">${t('receipt_btn')}</button></div>`;
+    h+=step(`${t('step5')} — ${b.rest} ${b.currency}`, b.status==='completed'?'done':(b.status==='awaiting_rest'&&isClient?'open':''),
+      b.status==='awaiting_rest'&&isClient?`<input id="restRef" placeholder="${t('fee_ref_ph')}"><button class="btn sm" onclick="pay(this,${b.id},'rest','restRef')">${t('paid_btn')}</button>`:'');
+    if(b.status==='completed') h+=`<div class="step done"><b>${t('completed_t')}</b>${b.can_review?`<div style="margin-top:7px"><div class="row"><select id="rvS" style="max-width:170px"><option value="positive">${t('rv_pos')}</option><option value="negative">${t('rv_neg')}</option></select>
+      <select id="rvStars" style="max-width:110px"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
+      <input id="rvC" placeholder="${t('rv_comment_ph')}"><button class="btn sm" onclick="review(this,${b.id})">${t('rv_send')}</button></div>`:`<div class="mut">${t('rv_done')}</div>`}</div>`;
+    if(!['completed','cancelled','disputed'].includes(b.status)) h+=`<div class="row" style="margin-top:10px"><button class="btn ghost sm" onclick="dispute(this,${b.id})">${t('dispute_btn')}</button></div>`;
+    if(b.status==='disputed'&&b.alternatives&&b.alternatives.length) h+=`<div class="guarantee">${t('alternatives_t')} ${b.alternatives.map(a=>esc(a.name)).join('، ')}</div>`;
+    h+=`<div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="document.getElementById('bookDlg').close()">${t('close')}</button></div>`;
+    $('#bookBody').innerHTML=h; $('#bookDlg').showModal();
+  };
+  if(btn) return withBusy(btn,work); return work();
 }
-async function act(id,a){try{await api(`/api/bookings/${id}/${a}`,{method:'POST',body:'{}'});toast('تم');openBooking(id);loadBookings()}catch(e){toast(e.message)}}
-async function pay(id,kind,inputId){const ref=document.getElementById(inputId).value.trim();if(!ref)return toast('اكتب مرجع العملية');
-  try{await api(`/api/bookings/${id}/pay`,{method:'POST',body:JSON.stringify({kind,ref})});toast('اتسجلت الدفعة');openBooking(id);loadBookings()}catch(e){toast(e.message)}}
-async function feeInfo(id){try{const f=await api(`/api/bookings/${id}/fee-info`);
-  document.getElementById('feeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`}catch(e){toast(e.message)}}
-async function proof(id){const url=document.getElementById('proofUrl').value.trim();
-  try{await api(`/api/bookings/${id}/proof`,{method:'POST',body:JSON.stringify({url})});toast('الإثبات اتختم ✓');openBooking(id);loadBookings()}catch(e){toast(e.message)}}
-async function review(id){try{await api(`/api/bookings/${id}/review`,{method:'POST',body:JSON.stringify({sentiment:$('#rvS').value,stars:+$('#rvStars').value,comment:$('#rvC').value})});toast('اتسجل تقييمك');openBooking(id)}catch(e){toast(e.message)}}
-async function dispute(id){const reason=prompt('سبب النزاع؟')||'';try{await api(`/api/bookings/${id}/dispute`,{method:'POST',body:JSON.stringify({reason})});toast('اتفتح النزاع — الإدارة هتراجعه');openBooking(id);loadBookings()}catch(e){toast(e.message)}}
-async function quickBook(talentId){if(!ME)return openAuth();
-  try{const r=await api('/api/bookings',{method:'POST',body:JSON.stringify({talent_id:talentId})});toast('اتفتح الحجز #'+r.booking.id);showTab('bookings')}catch(e){toast(e.message)}}
-async function openTalent(id){const d=await api('/api/talent/'+id);const u=d.user;
-  $('#talentBody').innerHTML=`<h3>${esc(u.name)}${seal(u)}</h3>
-  <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · عضو منذ ${new Date(u.member_since).toLocaleDateString('ar-EG')}</div>
-  <div class="row" style="margin:8px 0"><span class="chip">صفقات مكتملة ${d.stats.completed_deals}</span><span class="chip">إتمام ${d.stats.completion_rate}%</span><span class="chip">إيجابي ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span></div>
-  <p>${esc(u.bio||'')}</p>
-  <h4>خزانة الشارات</h4>${d.badges.map(b=>`<div class="row"><span class="badge-ic" style="background:${b.earned?b.color:'#444'}">🏅</span><span>${b.name}</span><span class="mut">${b.earned?'مكتسبة ✓':b.progress}</span></div>`).join('')}
-  <h4>معرض الأعمال</h4>${u.portfolio&&u.portfolio.length?u.portfolio.map(l=>`<div><a target="_blank" href="${esc(l)}">${esc(l)}</a></div>`).join(''):'<div class="mut">لا أعمال منشورة بعد.</div>'}
-  <h4>أحدث تقييمات العملاء</h4>${d.reviews.length?d.reviews.map(r=>`<div class="step">${r.sentiment==='positive'?'👍':'👎'} ⭐${r.stars} — ${esc(r.comment||'')} <span class="mut">(${esc(r.reviewer_name)})</span></div>`).join(''):'<div class="mut">لا تقييمات بعد.</div>'}
-  <div class="row" style="margin-top:12px"><button class="btn sm" onclick="quickBook(${u.id})">احجز بـ ${u.price} ${u.currency}</button>
-  <button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">إغلاق</button></div>`;
-  $('#talentDlg').showModal();}
+async function act(btn,id,a){await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/${a}`,{method:'POST',body:'{}'});toast(t('done_t'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
+async function pay(btn,id,kind,inputId){const ref=document.getElementById(inputId).value.trim();if(!ref)return toast(t('ref_required'));
+  await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/pay`,{method:'POST',body:JSON.stringify({kind,ref})});toast(t('payment_saved'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
+async function feeInfo(btn,id){await withBusy(btn,async()=>{try{const f=await api(`/api/bookings/${id}/fee-info`);
+  document.getElementById('feeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`}catch(e){toast(errT(e.message))}})}
+async function proof(btn,id){const url=document.getElementById('proofUrl').value.trim();
+  await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/proof`,{method:'POST',body:JSON.stringify({url})});toast(t('proof_done'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
+async function review(btn,id){await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/review`,{method:'POST',body:JSON.stringify({sentiment:$('#rvS').value,stars:+$('#rvStars').value,comment:$('#rvC').value})});toast(t('review_saved'));await openBooking(null,id)}catch(e){toast(errT(e.message))}})}
+async function dispute(btn,id){const reason=prompt(t('dispute_prompt'))||'';await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/dispute`,{method:'POST',body:JSON.stringify({reason})});toast(t('dispute_opened'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
+async function quickBook(btn,talentId){if(!ME)return openAuth();
+  await withBusy(btn,async()=>{try{const r=await api('/api/bookings',{method:'POST',body:JSON.stringify({talent_id:talentId})});toast(t('booking_opened')+r.booking.id);showTab('bookings')}catch(e){toast(errT(e.message))}})}
+async function bookGuestReq(btn,id,budget){
+  if(!ME)return openAuth();
+  const price=prompt(t('price_prompt'),budget||'');if(price===null)return;
+  await withBusy(btn,async()=>{
+    try{
+      const r=await api(`/api/guest-requests/${id}/book`,{method:'POST',body:JSON.stringify({price:+price||undefined})});
+      toast(t('booking_opened')+r.booking.id+t('guest_booked_suffix'));
+      showTab('bookings');
+      await openBooking(null,r.booking.id);
+    }catch(e){toast(errT(e.message))}
+  });
+}
 
+/* ================= ملف الصانع العام ================= */
+function shortsEmbeds(items){
+  if(!items||!items.length)return '';
+  return `<h4>${t('shorts_title')}</h4><div class="shorts">${items.map(s=>`<div class="short"><iframe src="${esc(s.embed_url)}" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen title="${esc(s.title||'')}"></iframe></div>`).join('')}</div>`;
+}
+async function openTalent(btn,id){
+  const work=async()=>{
+    const d=await api('/api/talent/'+id);const u=d.user;
+    if(u.is_platform_founder){
+      $('#talentBody').innerHTML=`<div class="founder-card" style="border-radius:16px;padding:22px;text-align:center">
+      <div style="font-size:44px">👑</div>
+      <h3 style="margin:6px 0">${esc(u.name)}</h3>
+      <div>${seal(u)}</div>
+      <div class="mut" style="margin-top:8px">${esc(u.niche||'')} · ${esc(u.city)}</div>
+      <div style="margin-top:12px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">${t('close')}</button></div>`;
+      $('#talentDlg').showModal();return;
+    }
+    $('#talentBody').innerHTML=`<div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
+    <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${t('member_since')} ${new Date(u.member_since).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div></div></div>
+    <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span></div>
+    <p>${esc(u.bio||'')}</p>
+    ${shortsEmbeds(d.shorts)}
+    <h4>${t('badges_vault')}</h4>${d.badges.map(b=>`<div class="row"><span class="badge-ic" style="background:${b.earned?b.color:'#444'}">🏅</span><span>${b.name}</span><span class="mut">${b.earned?t('badge_earned'):b.progress}</span></div>`).join('')}
+    <h4>${t('work_gallery')}</h4>${u.portfolio&&u.portfolio.length?u.portfolio.map(l=>`<div><a target="_blank" href="${esc(l)}">${esc(l)}</a></div>`).join(''):`<div class="mut">${t('no_work')}</div>`}
+    <h4>${t('reviews_t')}</h4>${d.reviews.length?d.reviews.map(r=>`<div class="step">${r.sentiment==='positive'?'👍':'👎'} ⭐${r.stars} — ${esc(r.comment||'')} <span class="mut">(${esc(r.reviewer_name)})</span></div>`).join(''):`<div class="mut">${t('no_reviews')}</div>`}
+    <div class="row" style="margin-top:12px">${ME&&ME.user.id===u.id?'':`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_for')} ${u.price} ${u.currency}</button>`}
+    <button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">${t('close')}</button></div>`;
+    $('#talentDlg').showModal();
+  };
+  if(btn) return withBusy(btn,work); return work();
+}
+</script>
+
+<script>
+/* ================= لوحتي + ملفي الشخصي ================= */
 async function loadDash(){
   if(!ME) return;
   const [me,stats]=await Promise.all([api('/api/me'),api('/api/my/stats')]);
+  ME.user=me.user;
   const u=me.user;
-  $('#dashBody').innerHTML=`<div class="row"><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
-  ${u.is_platform_founder?'<span class="chip">مؤسس Deal 👑</span>':''}${u.is_founder_member?'<span class="chip">عضو مؤسس</span>':''}${u.pioneer?'<span class="chip">رائد المدينة</span>':''}
-  <span class="chip">حالتك: ${u.penalty_level==='none'?'سليم':u.penalty_level}${u.frozen?' · الرصيد مجمّد':''}</span></div>
-  <div class="kpi" style="margin:14px 0">
-    <div class="card"><div class="n">${stats.views}</div><div class="mut">مشاهدات ملفك</div></div>
-    <div class="card"><div class="n">${stats.opportunities_open}</div><div class="mut">فرص مفتوحة الآن</div></div>
-    <div class="card"><div class="n">${stats.conversion}%</div><div class="mut">تحويل حجوزاتك لصفقات</div></div>
-    <div class="card"><div class="n">${stats.earnings_total}</div><div class="mut">أرباحك المقبوضة</div></div>
-    <div class="card"><div class="n">${stats.record.completed_deals}</div><div class="mut">صفقات مكتملة</div></div>
+  $('#dashBody').innerHTML=`<div class="card">
+    <div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
+    <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}${u.is_platform_founder?'':` · <span class="price">${u.price} ${u.currency}</span>`}</div>
+    <div class="row" style="margin-top:5px">${u.is_platform_founder?`<span class="founder-seal">${t('founder_seal')}</span>`:''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}
+    <span class="chip">${t('status_w')}: ${u.penalty_level==='none'?t('status_ok'):u.penalty_level}${u.frozen?' · '+t('frozen_w'):''}</span></div></div>
+    <div class="sp"></div><button class="btn sm" onclick="openProfile(this)">${t('edit_profile')}</button></div>
+    ${u.bio?`<p style="margin:10px 0 0">${esc(u.bio)}</p>`:''}
   </div>
-  <div class="card"><h3>التوثيق الآلي</h3><div class="mut">الحالة: ${me.verify_status}</div>
-    ${me.verify_status!=='verified'?`<button class="btn sm" onclick="vReq()">١) اطلب كود الملكية</button>
-    <div id="vCode" class="mut" style="margin:6px 0">${me.verify_code?'كودك الحالي: <b>'+me.verify_code+'</b> — حطه في بايو حسابك العلني':''}</div>
-    <input id="vUrl" placeholder="٢) رابط حسابك العلني بعد وضع الكود">
-    <button class="btn sm" onclick="vCheck()">٣) افحص دلوقتي</button>`:'<div>حسابك موثّق ✔️ بشارة Deal الذهبية</div>'}</div>
-  <div class="card" style="margin-top:12px"><h3>تفضيلات الفرص</h3>
-    <label>الحد الأدنى للسعر في «فرص ليك»</label><input id="prefMin" type="number" value="${''}">
-    <button class="btn sm" onclick="savePrefs()">حفظ</button>
-    <button class="btn ghost sm" onclick="document.querySelector('[data-tab=opps]').click()">افتح فرص ليك</button></div>
-  ${u.role==='shop'?'<div class="card" style="margin-top:12px"><h3>عندك شغلانة؟</h3><button class="btn sm" onclick="document.getElementById(\'reqDlg\').showModal()">انشر طلب محل</button></div>':''}`;
+  <div class="kpi" style="margin:14px 0">
+    <div class="card"><div class="n">${stats.views}</div><div class="mut">${t('kpi_views')}</div></div>
+    <div class="card"><div class="n">${stats.opportunities_open}</div><div class="mut">${t('kpi_opps')}</div></div>
+    <div class="card"><div class="n">${stats.conversion}%</div><div class="mut">${t('kpi_conv')}</div></div>
+    <div class="card"><div class="n">${stats.earnings_total}</div><div class="mut">${t('kpi_earn')}</div></div>
+    <div class="card"><div class="n">${stats.record.completed_deals}</div><div class="mut">${t('kpi_done')}</div></div>
+  </div>
+  <div class="card"><h3>${t('verify_t')}</h3><div class="mut">${t('verify_status')}: ${me.verify_status}</div>
+    ${me.verify_status!=='verified'?`<button class="btn sm" onclick="vReq(this)">${t('v_req')}</button>
+    <div id="vCode" class="mut" style="margin:6px 0">${me.verify_code?`${t('v_code_cur')}: <b>${me.verify_code}</b> — ${t('v_code_hint')}`:''}</div>
+    <input id="vUrl" placeholder="${t('v_url_ph')}">
+    <button class="btn sm" onclick="vCheck(this)">${t('v_check')}</button>`:`<div>${t('verified_msg')}</div>`}</div>
+  <div class="card" style="margin-top:12px"><h3>${t('prefs_t')}</h3>
+    <label>${t('pref_min')}</label><input id="prefMin" type="number" value="">
+    <button class="btn sm" onclick="savePrefs(this)">${t('save_btn')}</button>
+    <button class="btn ghost sm" onclick="showTab('opps')">${t('open_opps_btn')}</button></div>
+  ${u.role==='shop'?`<div class="card" style="margin-top:12px"><h3>${t('shop_job')}</h3><button class="btn sm" onclick="document.getElementById('reqDlg').showModal()">${t('publish_shop_req')}</button></div>`:''}`;
 }
-async function vReq(){try{const r=await api('/api/verify/request',{method:'POST',body:'{}'});
-  document.getElementById('vCode').innerHTML='كودك: <b>'+r.code+'</b> — '+r.instructions}catch(e){toast(e.message)}}
-async function vCheck(){try{const r=await api('/api/verify/check',{method:'POST',body:JSON.stringify({url:$('#vUrl').value.trim()})});
-  toast(r.status==='verified'?'مبروك! بقيت موثّق ✔️':(r.status==='exceptional'?'راحت لمراجعة استثنائية':'اترفضت: '+(r.reason||'')));loadDash()}catch(e){toast(e.message)}}
-async function savePrefs(){try{await api('/api/me/prefs',{method:'POST',body:JSON.stringify({min_price_pref:+$('#prefMin').value||0})});toast('اتحفظ')}catch(e){toast(e.message)}}
+async function vReq(btn){await withBusy(btn,async()=>{try{const r=await api('/api/verify/request',{method:'POST',body:'{}'});
+  document.getElementById('vCode').innerHTML=`${t('code_is')}: <b>${r.code}</b> — ${r.instructions}`}catch(e){toast(errT(e.message))}})}
+async function vCheck(btn){await withBusy(btn,async()=>{try{const r=await api('/api/verify/check',{method:'POST',body:JSON.stringify({url:$('#vUrl').value.trim()})});
+  toast(r.status==='verified'?t('v_ok'):(r.status==='exceptional'?t('v_exc'):t('v_rej')+(r.reason||'')));loadDash()}catch(e){toast(errT(e.message))}})}
+async function savePrefs(btn){await withBusy(btn,async()=>{try{await api('/api/me/prefs',{method:'POST',body:JSON.stringify({min_price_pref:+$('#prefMin').value||0})});toast(t('saved_t'))}catch(e){toast(errT(e.message))}})}
 
+/* تعديل الملف: تعبئة من /api/me، صورة تُصغَّر بالكانفس، وشورتس (حد أقصى 3). */
+let PF_AVATAR=null, PF_AVATAR_DIRTY=false;
+async function openProfile(btn){
+  const work=async()=>{
+    hideErr('profileErr');
+    const me=await api('/api/me'); const u=me.user; ME.user=u;
+    $('#pfName').value=u.name||''; $('#pfNiche').value=u.niche||''; $('#pfCity').value=u.city||'';
+    $('#pfFollowers').value=u.followers||0; $('#pfPrice').value=u.price||0;
+    $('#pfPhone').value=u.phone||''; $('#pfBio').value=u.bio||'';
+    PF_AVATAR=u.avatar||null; PF_AVATAR_DIRTY=false;
+    $('#pfAvatarPreview').innerHTML=avatarHtml(u,true);
+    const canShorts = u.role==='creator' && !u.is_platform_founder;
+    $('#shortsMgr').classList.toggle('hide',!canShorts);
+    if(canShorts){ const d=await api('/api/me/portfolio'); renderShortsMgr(d.items); }
+    $('#profileDlg').showModal();
+  };
+  if(btn) return withBusy(btn,work); return work();
+}
+function pickAvatar(input){
+  const f=input.files&&input.files[0]; if(!f)return;
+  const img=new Image();
+  img.onload=()=>{
+    const S=256, c=document.createElement('canvas'); c.width=S; c.height=S;
+    const ctx=c.getContext('2d');
+    const side=Math.min(img.width,img.height), sx=(img.width-side)/2, sy=(img.height-side)/2;
+    ctx.drawImage(img,sx,sy,side,side,0,0,S,S);
+    PF_AVATAR=c.toDataURL('image/jpeg',0.85); PF_AVATAR_DIRTY=true;
+    $('#pfAvatarPreview').innerHTML=`<img class="avatar big" src="${PF_AVATAR}" alt="">`;
+    URL.revokeObjectURL(img.src);
+  };
+  img.src=URL.createObjectURL(f);
+}
+async function saveProfile(btn){
+  hideErr('profileErr');
+  await withBusy(btn,async()=>{
+    try{
+      const body={name:$('#pfName').value.trim(),niche:$('#pfNiche').value.trim(),city:$('#pfCity').value.trim(),
+        followers:+$('#pfFollowers').value||0,price:+$('#pfPrice').value||0,phone:$('#pfPhone').value.trim(),bio:$('#pfBio').value};
+      if(PF_AVATAR_DIRTY) body.avatar=PF_AVATAR||'';
+      const r=await api('/api/me/profile',{method:'PATCH',body:JSON.stringify(body)});
+      ME.user=r.user; renderAuth(); toast(t('pf_saved'));
+      $('#profileDlg').close(); FILTERS_READY=false; loadDash(); loadMarket();
+    }catch(e){showErr('profileErr',errT(e.message))}
+  });
+}
+function renderShortsMgr(items){
+  $('#shortsCount').textContent=`${items.length}/3`;
+  $('#shortsList').innerHTML=items.length?items.map(s=>`<div class="row" style="margin-bottom:6px"><span class="chip">${esc(s.platform)}</span>
+    <span style="flex:1">${esc(s.title||s.embed_url)}</span>
+    <button type="button" class="btn ghost sm" onclick="deleteShort(this,${s.id})">${t('delete_w')}</button></div>`).join(''):`<div class="mut">${t('no_work')}</div>`;
+}
+async function addShort(btn){
+  hideErr('profileErr');
+  await withBusy(btn,async()=>{
+    try{
+      const r=await api('/api/me/portfolio',{method:'POST',body:JSON.stringify({url:$('#shortUrl').value.trim(),title:$('#shortTitle').value.trim()})});
+      $('#shortUrl').value=''; $('#shortTitle').value='';
+      renderShortsMgr(r.items); toast(t('short_added'));
+    }catch(e){showErr('profileErr',errT(e.message))}
+  });
+}
+async function deleteShort(btn,id){
+  await withBusy(btn,async()=>{
+    try{const r=await api('/api/me/portfolio/'+id,{method:'DELETE'}); renderShortsMgr(r.items); toast(t('short_deleted'));}
+    catch(e){showErr('profileErr',errT(e.message))}
+  });
+}
+
+/* ================= لوحة المالك ================= */
 async function loadOwner(){
   const d=await api('/api/owner/dashboard');
+  let support={items:[],unread:0};
+  try{ support=await api('/api/owner/support-messages'); }catch(e){ /* قسم الدعم إضافي */ }
   $('#ownerBody').innerHTML=`<div class="kpi">
-    <div class="card"><div class="n">${d.commissions.today}</div><div class="mut">عمولات اليوم</div></div>
-    <div class="card"><div class="n">${d.commissions.month}</div><div class="mut">عمولات الشهر</div></div>
-    <div class="card"><div class="n">${d.commissions.total}</div><div class="mut">إجمالي العمولات</div></div>
-    <div class="card"><div class="n">${d.platform.creators}</div><div class="mut">صناع (${d.platform.founders} مؤسسون · ${d.platform.verified} موثقون)</div></div>
-    <div class="card"><div class="n">${d.platform.completed}/${d.platform.bookings}</div><div class="mut">صفقات مكتملة/الكل</div></div></div>
-  <h4>النزاعات المفتوحة</h4>${d.disputes.length?d.disputes.map(x=>`<div class="step">حجز #${x.booking_id} — ${esc(x.reason)} <button class="btn sm" onclick="resolveD(${x.id},'restore')">حل وإرجاع الحجز</button> <button class="btn ghost sm" onclick="resolveD(${x.id},'cancel')">حل وإلغاء</button></div>`).join(''):'<div class="mut">لا نزاعات.</div>'}
-  <h4>مراجعات توثيق استثنائية</h4>${d.exceptional.length?d.exceptional.map(x=>`<div class="step">${esc(x.name)} — ${esc(x.city)}/${esc(x.niche)} <a target="_blank" href="${esc(x.verify_url)}">الرابط</a> <button class="btn sm" onclick="vExc(${x.id},true)">قبول</button> <button class="btn ghost sm" onclick="vExc(${x.id},false)">رفض</button></div>`).join(''):'<div class="mut">لا طلبات.</div>'}
-  <h4>حسابات معاقبة/مجمدة</h4>${d.penalized.length?d.penalized.map(x=>`<div class="step">${esc(x.name)} — ${x.penalty_level}${x.frozen?' · مجمّد':''}${x.banned?' · محظور':''} <button class="btn sm" onclick="pen(${x.id})">فك التجميد ورفع العقوبة</button></div>`).join(''):'<div class="mut">لا حسابات معاقبة.</div>'}`;
+    <div class="card"><div class="n">${d.commissions.today}</div><div class="mut">${t('ow_today')}</div></div>
+    <div class="card"><div class="n">${d.commissions.month}</div><div class="mut">${t('ow_month')}</div></div>
+    <div class="card"><div class="n">${d.commissions.total}</div><div class="mut">${t('ow_total')}</div></div>
+    <div class="card"><div class="n">${d.platform.creators}</div><div class="mut">${t('ow_creators')} (${d.platform.founders} ${t('ow_founders')} · ${d.platform.verified} ${t('ow_verified')})</div></div>
+    <div class="card"><div class="n">${d.platform.completed}/${d.platform.bookings}</div><div class="mut">${t('ow_completed')}</div></div></div>
+  <h4>${t('ow_disputes')}</h4>${d.disputes.length?d.disputes.map(x=>`<div class="step">${t('bk_w')} #${x.booking_id} — ${esc(x.reason)} <button class="btn sm" onclick="resolveD(this,${x.id},'restore')">${t('ow_restore')}</button> <button class="btn ghost sm" onclick="resolveD(this,${x.id},'cancel')">${t('ow_cancel')}</button></div>`).join(''):`<div class="mut">${t('ow_no_disputes')}</div>`}
+  <h4>${t('ow_exceptional')}</h4>${d.exceptional.length?d.exceptional.map(x=>`<div class="step">${esc(x.name)} — ${esc(x.city)}/${esc(x.niche)} <a target="_blank" href="${esc(x.verify_url)}">${t('ow_link')}</a> <button class="btn sm" onclick="vExc(this,${x.id},true)">${t('ow_accept')}</button> <button class="btn ghost sm" onclick="vExc(this,${x.id},false)">${t('ow_reject')}</button></div>`).join(''):`<div class="mut">${t('ow_no_requests')}</div>`}
+  <h4>${t('ow_penalized')}</h4>${d.penalized.length?d.penalized.map(x=>`<div class="step">${esc(x.name)} — ${x.penalty_level}${x.frozen?' · '+t('ow_frozen'):''}${x.banned?' · '+t('ow_banned'):''} <button class="btn sm" onclick="pen(this,${x.id})">${t('ow_unfreeze')}</button></div>`).join(''):`<div class="mut">${t('ow_no_penalized')}</div>`}
+  <h4>${t('ow_support')}${support.unread?` <span class="chip" style="border-color:var(--gold);color:var(--gold)">${support.unread} ${t('ow_unread')}</span>`:''}</h4>
+  ${support.items.length?support.items.map(m=>`<div class="step">${m.is_read?'':'🆕 '}<b>${esc(m.question)}</b><div class="mut">${esc(m.user_name||'—')}${m.contact?' · '+esc(m.contact):''} · ${new Date(m.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}</div></div>`).join('')+`<button class="btn ghost sm" onclick="markSupportRead(this)">${t('ow_mark_read')}</button>`:`<div class="mut">${t('ow_no_support')}</div>`}`;
 }
-async function resolveD(id,a){await api(`/api/owner/disputes/${id}/resolve`,{method:'POST',body:JSON.stringify({action:a})});toast('اتحل');loadOwner()}
-async function vExc(id,ok){await api(`/api/owner/verify-exceptional/${id}`,{method:'POST',body:JSON.stringify({approve:ok})});toast('تم');loadOwner()}
-async function pen(id){await api(`/api/owner/users/${id}/penalty`,{method:'POST',body:JSON.stringify({level:'none',frozen:false})});toast('اترفعت العقوبة');loadOwner()}
+async function resolveD(btn,id,a){await withBusy(btn,async()=>{await api(`/api/owner/disputes/${id}/resolve`,{method:'POST',body:JSON.stringify({action:a})});toast(t('ow_resolved'));loadOwner()})}
+async function vExc(btn,id,ok){await withBusy(btn,async()=>{await api(`/api/owner/verify-exceptional/${id}`,{method:'POST',body:JSON.stringify({approve:ok})});toast(t('done_t'));loadOwner()})}
+async function pen(btn,id){await withBusy(btn,async()=>{await api(`/api/owner/users/${id}/penalty`,{method:'POST',body:JSON.stringify({level:'none',frozen:false})});toast(t('ow_penalty_lifted'));loadOwner()})}
+async function markSupportRead(btn){await withBusy(btn,async()=>{await api('/api/owner/support-messages/read',{method:'POST',body:'{}'});loadOwner()})}
+</script>
 
-async function applyCamp(id){try{await api(`/api/campaigns/${id}/apply`,{method:'POST',body:JSON.stringify({pitch:''})});toast('قدمت ✓')}catch(e){toast(e.message)}}
-async function viewApps(id){try{const d=await api(`/api/campaigns/${id}/applications`);
-  alert(d.items.length?d.items.map(a=>`${a.creator.name} — ${a.status}`).join('\n'):'لا متقدمين بعد')}catch(e){toast(e.message)}}
-function openCampaign(){if(!ME)return openAuth();$('#campDlg').showModal()}
-async function doCampaign(){try{await api('/api/campaigns',{method:'POST',body:JSON.stringify({title:$('#cTitle').value,brief:$('#cBrief').value,niche:$('#cNiche').value,city:$('#cCity').value,budget:+$('#cBudget').value||0})});$('#campDlg').close();toast('اتنشرت الحملة');loadCampaigns()}catch(e){toast(e.message)}}
-async function doRequest(){try{await api('/api/requests',{method:'POST',body:JSON.stringify({title:$('#rTitle').value,niche:$('#rNiche').value,budget:+$('#rBudget').value||0,details:$('#rDetails').value})});$('#reqDlg').close();toast('اتنشر الطلب');loadMarket()}catch(e){toast(e.message)}}
-
-/* auth */
+<script>
+/* ================= المصادقة ================= */
 let AMODE='register';
-function openAuth(role){if(role){$('#aRole').value=role;roleFx()}$('#authDlg').showModal()}
-function authMode(m){AMODE=m;$('#regFields').style.display=m==='register'?'block':'none';$('#authTitle').textContent=m==='register'?'تسجيل حساب جديد':'تسجيل الدخول'}
+function openAuth(role){hideErr('authErr');if(role){$('#aRole').value=role;roleFx()}authMode(AMODE);$('#authDlg').showModal()}
+function authMode(m){AMODE=m;$('#regFields').style.display=m==='register'?'block':'none';$('#authTitle').textContent=m==='register'?t('auth_reg_t'):t('auth_login_t')}
 function roleFx(){$('#provCat').classList.toggle('hide',$('#aRole').value!=='provider')}
-async function doAuth(){
-  try{
-    const r=AMODE==='register'
-      ?await api('/api/auth/register',{method:'POST',body:JSON.stringify({name:$('#aName').value,role:$('#aRole').value,niche:$('#aNiche').value,provider_category:$('#aProvCat').value,city:$('#aCity').value,country:$('#aCountry').value,currency:$('#aCurr').value,contact:$('#aContact').value,followers:+$('#aFollowers').value||0,price:+$('#aPrice').value||0,links:$('#aLinks').value})})
-      :await api('/api/auth/login',{method:'POST',body:JSON.stringify({contact:$('#aContact').value})});
-    TOKEN=r.token;localStorage.setItem('deal_token',TOKEN);ME={user:r.user};
-    $('#authDlg').close();renderAuth();toast('أهلاً بيك في Deal');refresh();
-  }catch(e){toast(e.message)}
+async function doAuth(btn){
+  hideErr('authErr');
+  await withBusy(btn,async()=>{
+    try{
+      const r=AMODE==='register'
+        ?await api('/api/auth/register',{method:'POST',body:JSON.stringify({name:$('#aName').value,role:$('#aRole').value,niche:$('#aNiche').value,provider_category:$('#aProvCat').value,city:$('#aCity').value,country:$('#aCountry').value,currency:$('#aCurr').value,contact:$('#aContact').value,followers:+$('#aFollowers').value||0,price:+$('#aPrice').value||0,links:$('#aLinks').value})})
+        :await api('/api/auth/login',{method:'POST',body:JSON.stringify({contact:$('#aContact').value})});
+      TOKEN=r.token;localStorage.setItem('deal_token',TOKEN);ME={user:r.user};
+      $('#authDlg').close();renderAuth();toast(t('welcome_t'));FILTERS_READY=false;refresh();
+    }catch(e){showErr('authErr',errT(e.message))}
+  });
 }
 function renderAuth(){
-  if(ME){$('#authArea').innerHTML=`<span class="mut">${esc(ME.user.name)}</span> <button class="btn ghost sm" onclick="logout()">خروج</button>`;
+  if(ME){
+    $('#authArea').innerHTML=`<span class="row" style="gap:7px">${avatarHtml(ME.user)}<span class="mut">${esc(ME.user.name)}</span></span> <button class="btn ghost sm" onclick="logout()">${t('logout')}</button>`;
     $('#ownerTab').classList.toggle('hide',!ME.user.is_platform_founder);
-    $$('#nav [data-auth]').forEach(b=>b.style.display='');}
-  else{$('#authArea').innerHTML='<button class="btn sm" onclick="openAuth()">دخول / تسجيل</button>';$('#ownerTab').classList.add('hide')}
+    $$('[data-auth]').forEach(b=>b.style.display='');
+  } else {
+    $('#authArea').innerHTML=`<button class="btn sm" onclick="openAuth()">${t('login_register')}</button>`;
+    $('#ownerTab').classList.add('hide');
+    $$('[data-auth]').forEach(b=>b.style.display='none');
+  }
+  buildMenu();
 }
-function logout(){TOKEN='';ME=null;localStorage.removeItem('deal_token');renderAuth();showTab('market')}
+function logout(){TOKEN='';ME=null;localStorage.removeItem('deal_token');renderAuth();toggleMenu(false);showTab('market')}
+
+/* ================= القائمة الرئيسية (كل الأيقونات في مكان واحد) ================= */
+function toggleMenu(open){
+  $('#menuPanel').classList.toggle('open',!!open);
+  $('#menuOverlay').classList.toggle('open',!!open);
+  if(open) buildMenu();
+}
+function buildMenu(){
+  const grid=$('#menuGrid'); if(!grid) return;
+  $('#menuUser').textContent=ME?`${ME.user.name} · ${t('role_'+ME.user.role)}`:'';
+  const item=(ic,label,fn,show=true)=>show?`<button class="menu-item" onclick="${fn}"><span class="ic">${ic}</span>${label}</button>`:'';
+  grid.innerHTML=
+    item('🏪',t('nav_market'),"toggleMenu(false);showTab('market')")+
+    item('📩',t('nav_opps'),"toggleMenu(false);showTab('opps')",!!ME)+
+    item('📣',t('nav_campaigns'),"toggleMenu(false);showTab('campaigns')")+
+    item('🛠️',t('nav_services'),"toggleMenu(false);showTab('services')")+
+    item('📣',t('post_job_btn').replace('📣 ',''),"toggleMenu(false);openGuest()")+
+    item('📖',t('nav_bookings'),"toggleMenu(false);showTab('bookings')",!!ME)+
+    item('👤',t('m_profile'),"toggleMenu(false);showTab('dash')",!!ME)+
+    item('🔔',t('notifications'),"toggleMenu(false);bell()")+
+    item('🎧',t('m_support'),"toggleMenu(false);openSupport()")+
+    item('👑',t('nav_owner'),"toggleMenu(false);showTab('owner')",!!(ME&&ME.user.is_platform_founder))+
+    item('🌐',t('m_language')+': '+(LANG==='ar'?'EN':'عربي'),"toggleMenu(false);setLang(LANG==='ar'?'en':'ar')")+
+    (ME?item('🚪',t('logout'),"logout()"):item('🔑',t('login_register'),"toggleMenu(false);openAuth()"));
+}
+
+/* ================= الإشعارات ================= */
 async function bell(){
-  if(!ME)return openAuth();
-  const d=await api('/api/notifications');
-  alert(d.items.length?d.items.map(n=>(n.is_read?'':'🆕 ')+n.text).join('\n\n'):'لا تنبيهات');
-  await api('/api/notifications/read',{method:'POST',body:'{}'});bellCount();
-}
-async function bellCount(){if(!ME)return;const d=await api('/api/notifications');const b=$('#bellCount');
-  b.textContent=d.unread;b.classList.toggle('hide',!d.unread)}
-$('#bellBtn').onclick=bell;
-
-/* tabs */
-function showTab(t){$$('main section').forEach(s=>s.classList.add('hide'));$('#tab-'+t).classList.remove('hide');
-  $$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
-  ({market:loadMarket,services:()=>loadServices('ads'),campaigns:loadCampaigns,opps:loadOpps,bookings:loadBookings,dash:loadDash,owner:loadOwner}[t]||(()=>{}))();}
-$$('#nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
-$('#langBtn').onclick=()=>toast('English UI is partial in this standalone build — Arabic is the primary experience.');
-async function refresh(){loadMarket();bellCount()}
-(async()=>{ if(TOKEN){try{const m=await api('/api/me');ME={user:m.user};renderAuth()}catch(e){TOKEN='';localStorage.removeItem('deal_token')}} if(!routeHash()) refresh(); else bellCount(); })();
-
-/* -------- guest client (طلب عميل بدون تسجيل + صفحة الرمز) -------- */
-function waNum(p){const d=String(p||'').replace(/\D/g,'');return d.startsWith('0')?'20'+d.slice(1):d}
-function openGuest(){$('#guestForm').classList.remove('hide');$('#guestDone').classList.add('hide');$('#guestDlg').showModal()}
-async function doGuestRequest(){
+  if(!ME){ toast(t('notif_login')); openAuth(); return; }
   try{
-    const r=await api('/api/guest-requests',{method:'POST',body:JSON.stringify({business_name:$('#gBiz').value.trim(),phone:$('#gPhone').value.trim(),city:$('#gCity').value.trim(),niche:$('#gNiche').value.trim(),budget:+$('#gBudget').value||0,details:$('#gDetails').value.trim()})});
-    $('#guestForm').classList.add('hide');$('#guestDone').classList.remove('hide');
-    $('#gFollow').value=location.origin+location.pathname+'#/g/'+r.token;
-    loadMarket();
-  }catch(e){toast(e.message)}
+    const d=await api('/api/notifications');
+    $('#notifBody').innerHTML=d.items.length?d.items.map(n=>`<div class="notif-item ${n.is_read?'':'unread'}">${n.is_read?'':'🆕 '}${esc(n.text)}<div class="mut">${new Date(n.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}</div></div>`).join(''):`<div class="mut">${t('notif_empty')}</div>`;
+    $('#notifDlg').showModal();
+    await api('/api/notifications/read',{method:'POST',body:'{}'});
+    const b=$('#bellCount'); b.textContent='0'; b.classList.add('hide');
+  }catch(e){toast(errT(e.message))}
 }
-function copyFollow(){const i=$('#gFollow');i.select();if(navigator.clipboard)navigator.clipboard.writeText(i.value);toast('اتنسخ رابط المتابعة')}
-async function bookGuestReq(id,budget){
-  if(!ME)return openAuth();
-  const price=prompt('سعر الشغلانة للعميل؟',budget||'');if(price===null)return;
-  try{const r=await api(`/api/guest-requests/${id}/book`,{method:'POST',body:JSON.stringify({price:+price||undefined})});
-    toast('اتفتح الحجز #'+r.booking.id+' — العميل هيكمّل خطواته من رابط متابعته');showTab('bookings')}catch(e){toast(e.message)}
+async function bellCount(){if(!ME)return;try{const d=await api('/api/notifications');const b=$('#bellCount');
+  b.textContent=d.unread;b.classList.toggle('hide',!d.unread)}catch(e){}}
+$('#bellBtn').onclick=()=>bell();
+
+/* ================= الدعم بالرد التلقائي ================= */
+let SUPPORT_TOPICS_LOADED=false, LAST_Q='';
+function addMsg(who,text){const log=$('#supportLog');const d=document.createElement('div');d.className='msg '+who;d.textContent=text;log.appendChild(d);log.scrollTop=log.scrollHeight}
+async function openSupport(){
+  $('#supportDlg').showModal();
+  if(!$('#supportLog').children.length) addMsg('bot',t('support_hint'));
+  if(!SUPPORT_TOPICS_LOADED){
+    SUPPORT_TOPICS_LOADED=true;
+    try{
+      const d=await (await fetch('/api/support/topics?lang='+LANG)).json();
+      $('#supportChips').innerHTML=d.items.map(x=>`<button type="button" class="chipbtn" onclick="askTopic(this)">${esc(x.q)}</button>`).join('');
+    }catch(e){ /* الرقائق إضافية */ }
+  }
+}
+async function supportAsk(q,contact){
+  const r=await fetch('/api/support/ask',{method:'POST',headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{})},body:JSON.stringify({q,lang:LANG,contact:contact||''})});
+  const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'خطأ'); return j;
+}
+async function askTopic(btn){const q=btn.textContent.trim();addMsg('me',q);LAST_Q=q;
+  try{const r=await supportAsk(q);handleSupportAnswer(r)}catch(e){addMsg('bot',errT(e.message))}}
+async function askSupport(btn){
+  const inp=$('#supportInput'), contactEl=$('#supportContact');
+  const contactVisible=!$('#supportContactRow').classList.contains('hide');
+  // بعد رد احتياطي: إرسال وسيلة التواصل وحدها يحفظها مع آخر سؤال.
+  if(contactVisible&&contactEl.value.trim()&&!inp.value.trim()&&LAST_Q){
+    await withBusy(btn,async()=>{try{await supportAsk(LAST_Q,contactEl.value.trim());
+      addMsg('bot',LANG==='en'?'Thanks! Your contact was saved with your question — the team will get back to you.':'شكراً! اتحفظت وسيلة تواصلك مع سؤالك — الفريق هيرجع لك.');
+      $('#supportContactRow').classList.add('hide');contactEl.value='';}catch(e){addMsg('bot',errT(e.message))}});
+    return;
+  }
+  const q=inp.value.trim(); if(!q)return;
+  inp.value=''; addMsg('me',q); LAST_Q=q;
+  await withBusy(btn,async()=>{try{const r=await supportAsk(q);handleSupportAnswer(r)}catch(e){addMsg('bot',errT(e.message))}});
+}
+function handleSupportAnswer(r){
+  addMsg('bot',r.answer);
+  if(r.fallback){
+    if(r.topics&&r.topics.length) addMsg('bot',r.topics.map(x=>'• '+x).join('\n'));
+    $('#supportContactRow').classList.remove('hide');
+  }
+}
+$('#supportInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();askSupport(null)}});
+
+/* ================= التبويبات والتوجيه ================= */
+let CURTAB='market';
+function showTab(tb){
+  if(location.hash.startsWith('#/g/')){ history.pushState(null,'',location.pathname+location.search); $('#hero').classList.remove('hide'); }
+  CURTAB=tb;
+  $$('main section').forEach(s=>s.classList.add('hide'));$('#tab-'+tb).classList.remove('hide');
+  $$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tb));
+  ({market:()=>loadMarket(),services:()=>loadServices('ads'),campaigns:loadCampaigns,opps:loadOpps,bookings:loadBookings,dash:loadDash,owner:loadOwner}[tb]||(()=>{}))();
+}
+$$('#nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+async function refresh(){ FILTERS_READY=false; if(CURTAB==='market') loadMarket(); else showTab(CURTAB); bellCount(); }
+
+/* ================= الضيف: نشر طلب + صفحة الرمز ================= */
+function waNum(p){const d=String(p||'').replace(/\D/g,'');return d.startsWith('0')?'20'+d.slice(1):d}
+function openGuest(){hideErr('guestErr');$('#guestForm').classList.remove('hide');$('#guestDone').classList.add('hide');$('#guestDlg').showModal()}
+async function doGuestRequest(btn){
+  hideErr('guestErr');
+  await withBusy(btn,async()=>{
+    try{
+      const r=await api('/api/guest-requests',{method:'POST',body:JSON.stringify({business_name:$('#gBiz').value.trim(),phone:$('#gPhone').value.trim(),city:$('#gCity').value.trim(),niche:$('#gNiche').value.trim(),budget:+$('#gBudget').value||0,details:$('#gDetails').value.trim()})});
+      $('#guestForm').classList.add('hide');$('#guestDone').classList.remove('hide');
+      $('#gFollow').value=location.origin+location.pathname+'#/g/'+r.token;
+      loadMarket();
+    }catch(e){showErr('guestErr',errT(e.message))}
+  });
+}
+async function copyFollow(btn){
+  const i=$('#gFollow'); const val=i.value;
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText) await navigator.clipboard.writeText(val);
+    else { i.select(); document.execCommand('copy'); } }
+  catch(e){ i.select(); document.execCommand('copy'); }
+  if(btn){ const old=btn.textContent; btn.textContent=t('copied'); btn.disabled=true;
+    setTimeout(()=>{btn.textContent=old;btn.disabled=false},2200); }
+  toast(t('copied'));
 }
 let GTOKEN='';
 async function gFetch(p,o={}){const r=await fetch(p,{...o,headers:{'Content-Type':'application/json'}});
   const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'خطأ');return j}
 async function loadGuestPage(tok){
   GTOKEN=tok;
-  let d;try{d=await gFetch('/api/guest/'+tok)}catch(e){$('#guestBody').innerHTML='<div class="card">رابط متابعة غير صحيح.</div>';return}
+  let d;try{d=await gFetch('/api/guest/'+tok)}catch(e){$('#guestBody').innerHTML=`<div class="card">${t('gp_invalid')}</div>`;return}
   if(d.type==='request'){const q=d.request;
-    $('#guestBody').innerHTML=`<h3>طلبك على Deal</h3><div class="card"><h3 style="margin-top:0">${esc(q.title)}</h3>
-    <div class="mut">${esc(q.niche)} · ${esc(q.city)} · الميزانية ${q.budget} ${q.currency}</div>
-    <p class="mut">${esc(q.details||'')}</p><span class="chip">${q.status==='open'?'منشور — الصناع بيشوفوه وهيتواصلوا معاك واتساب':'اتحجز — بيتحول لحجز'}</span></div>`;
+    $('#guestBody').innerHTML=`<h3>${t('gp_request')}</h3><div class="card"><h3 style="margin-top:0">${esc(q.title)}</h3>
+    <div class="mut">${esc(q.niche)} · ${esc(q.city)} · ${q.budget} ${q.currency}</div>
+    <p class="mut">${esc(q.details||'')}</p><span class="chip">${q.status==='open'?t('gp_published'):t('gp_booked')}</span></div>`;
     return}
   const b=d.booking;
   const step=(label,state,inner)=>`<div class="step ${state}"><b>${label}</b>${inner||''}</div>`;
-  let h=`<h3>حجزك على Deal — ${esc(b.title)}</h3><div class="mut">🛡️ حجز محمي بضمان Deal · المنفذ: ${esc(b.talent.name)} · الإجمالي ${b.price} ${b.currency} (عمولة Deal ${b.fee} أولاً، والصافي ${b.net} على دفعتين ${b.deposit}+${b.rest}) · الحالة: ${STAGE_AR[b.status]||b.status}</div>`;
-  h+=step('١) اتفاق الطرفين',b.status!=='pending_agreement'?'done':(!b.agreed_client?'open':''),
-    b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">أنت ${b.agreed_client?'✔ وافقت':'بانتظار موافقتك'}</span><span class="chip">المنفذ ${b.agreed_talent?'✔ وافق':'بانتظار'}</span>${!b.agreed_client?`<button class="btn sm" onclick="gAct('agree')">أوافق</button>`:''}</div>`:'');
-  h+=step('٢) عمولة Deal أولاً — '+b.fee+' '+b.currency,b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'?'open':''),
-    b.status==='awaiting_fee'?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="gFeeInfo()">إظهار حساب عمولات Deal</button> <span id="gFeeInfo"></span>
-    <input id="gFeeRef" placeholder="مرجع عملية التحويل"><button class="btn sm" onclick="gPay('fee','gFeeRef')">سجلت التحويل — تأكيد تلقائي</button></div>`
-    :(b.fee_status==='confirmed'?'<div class="mut">اتأكدت تلقائياً ✓</div>':''));
-  h+=step('٣) عربون المنفذ — '+b.deposit+' '+b.currency,['in_progress','proof_submitted','awaiting_rest','completed'].includes(b.status)?'done':(b.status==='awaiting_deposit'?'open':''),
-    b.status==='awaiting_deposit'?`<input id="gDepRef" placeholder="مرجع تحويل العربون للمنفذ"><button class="btn sm" onclick="gPay('deposit','gDepRef')">سجلت التحويل</button>`:'');
-  h+=step('٤) إثبات التنفيذ',['awaiting_rest','completed'].includes(b.status)?'done':'',
-    b.proof_url?`<div class="mut">الإثبات: <a target="_blank" href="${esc(b.proof_url)}">${esc(b.proof_url)}</a> — ${b.proof_check==='verified'?'✔ تم التحقق وخُتم بوقته':''}</div>`
-    :(b.status==='in_progress'?'<div class="mut">المنفذ شغال على التنفيذ…</div>':''));
-  if(b.status==='proof_submitted')h+=`<div class="step open"><b>أكد الاستلام</b><div class="mut">لو ما رديتش خلال 48 ساعة من الإثبات، الاستلام بيتأكد تلقائياً حمايةً للمنفذ.</div><button class="btn sm" onclick="gAct('confirm-receipt')">أكدت الاستلام</button></div>`;
-  h+=step('٥) باقي القبض — '+b.rest+' '+b.currency,b.status==='completed'?'done':(b.status==='awaiting_rest'?'open':''),
-    b.status==='awaiting_rest'?`<input id="gRestRef" placeholder="مرجع تحويل الباقي"><button class="btn sm" onclick="gPay('rest','gRestRef')">سجلت التحويل</button>`:'');
-  if(b.status==='completed')h+=`<div class="step done"><b>اكتمل القبض ✓</b>${!b.reviewed?`<div style="margin-top:7px"><div class="row"><select id="gRvS" style="max-width:150px"><option value="positive">إيجابي 👍</option><option value="negative">سلبي 👎</option></select>
+  let h=`<h3>${t('gp_booking')} — ${esc(b.title)}</h3><div class="mut">${t('guaranteed_chip')} · ${t('talent_w')}: ${esc(b.talent.name)} · ${t('total_w')} ${b.price} ${b.currency} (${t('fee_w')} ${b.fee} ${t('first_w')}، ${t('net_two_w')} ${b.deposit}+${b.rest}) · ${t('bk_status')}: ${stageName(b.status)}</div>`;
+  h+=step(t('step1'),b.status!=='pending_agreement'?'done':(!b.agreed_client?'open':''),
+    b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">${t('client_w')} ${b.agreed_client?t('agreed_w'):t('waiting_w')}</span><span class="chip">${t('talent_w')} ${b.agreed_talent?t('agreed_w'):t('waiting_w')}</span>${!b.agreed_client?`<button class="btn sm" onclick="gAct(this,'agree')">${t('agree_btn')}</button>`:''}</div>`:'');
+  h+=step(`${t('step2')} — ${b.fee} ${b.currency}`,b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'?'open':''),
+    b.status==='awaiting_fee'?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="gFeeInfo(this)">${t('show_fee')}</button> <span id="gFeeInfo"></span>
+    <input id="gFeeRef" placeholder="${t('fee_ref_ph')}"><button class="btn sm" onclick="gPay(this,'fee','gFeeRef')">${t('fee_confirm_btn')}</button></div>`
+    :(b.fee_status==='confirmed'?`<div class="mut">${t('fee_confirmed')}</div>`:''));
+  h+=step(`${t('step3')} — ${b.deposit} ${b.currency}`,['in_progress','proof_submitted','awaiting_rest','completed'].includes(b.status)?'done':(b.status==='awaiting_deposit'?'open':''),
+    b.status==='awaiting_deposit'?`<input id="gDepRef" placeholder="${t('dep_ref_ph')}"><button class="btn sm" onclick="gPay(this,'deposit','gDepRef')">${t('paid_btn')}</button>`:'');
+  h+=step(t('step4'),['awaiting_rest','completed'].includes(b.status)?'done':'',
+    b.proof_url?`<div class="mut">${t('proof_w')}: <a target="_blank" href="${esc(b.proof_url)}">${esc(b.proof_url)}</a> — ${b.proof_check==='verified'?t('proof_verified'):''}</div>`
+    :(b.status==='in_progress'?`<div class="mut">${t('gp_working')}</div>`:''));
+  if(b.status==='proof_submitted')h+=`<div class="step open"><b>${t('receipt_t')}</b><div class="mut">${t('receipt_d')}</div><button class="btn sm" onclick="gAct(this,'confirm-receipt')">${t('receipt_btn')}</button></div>`;
+  h+=step(`${t('step5')} — ${b.rest} ${b.currency}`,b.status==='completed'?'done':(b.status==='awaiting_rest'?'open':''),
+    b.status==='awaiting_rest'?`<input id="gRestRef" placeholder="${t('fee_ref_ph')}"><button class="btn sm" onclick="gPay(this,'rest','gRestRef')">${t('paid_btn')}</button>`:'');
+  if(b.status==='completed')h+=`<div class="step done"><b>${t('completed_t')}</b>${!b.reviewed?`<div style="margin-top:7px"><div class="row"><select id="gRvS" style="max-width:170px"><option value="positive">${t('rv_pos')}</option><option value="negative">${t('rv_neg')}</option></select>
     <select id="gRvStars" style="max-width:110px"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
-    <input id="gRvC" placeholder="تعليق (اختياري)"><button class="btn sm" onclick="gReview()">إرسال التقييم (مرة واحدة، بلا تعديل)</button></div>`:'<div class="mut">قيّمت هذا الحجز ✓</div>'}</div>`;
+    <input id="gRvC" placeholder="${t('rv_comment_ph')}"><button class="btn sm" onclick="gReview(this)">${t('rv_send')}</button></div>`:`<div class="mut">${t('rv_done')}</div>`}</div>`;
   $('#guestBody').innerHTML=h;
 }
-async function gAct(a){try{await gFetch(`/api/guest/${GTOKEN}/${a}`,{method:'POST',body:'{}'});toast('تم');loadGuestPage(GTOKEN)}catch(e){toast(e.message)}}
-async function gPay(kind,inputId){const ref=document.getElementById(inputId).value.trim();if(!ref)return toast('اكتب مرجع العملية');
-  try{await gFetch(`/api/guest/${GTOKEN}/pay`,{method:'POST',body:JSON.stringify({kind,ref})});toast('اتسجلت الدفعة');loadGuestPage(GTOKEN)}catch(e){toast(e.message)}}
-async function gFeeInfo(){try{const f=await gFetch(`/api/guest/${GTOKEN}/fee-info`);
-  document.getElementById('gFeeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`}catch(e){toast(e.message)}}
-async function gReview(){try{await gFetch(`/api/guest/${GTOKEN}/review`,{method:'POST',body:JSON.stringify({sentiment:$('#gRvS').value,stars:+$('#gRvStars').value,comment:$('#gRvC').value})});toast('اتسجل تقييمك');loadGuestPage(GTOKEN)}catch(e){toast(e.message)}}
+async function gAct(btn,a){await withBusy(btn,async()=>{try{await gFetch(`/api/guest/${GTOKEN}/${a}`,{method:'POST',body:'{}'});toast(t('done_t'));loadGuestPage(GTOKEN)}catch(e){toast(errT(e.message))}})}
+async function gPay(btn,kind,inputId){const ref=document.getElementById(inputId).value.trim();if(!ref)return toast(t('ref_required'));
+  await withBusy(btn,async()=>{try{await gFetch(`/api/guest/${GTOKEN}/pay`,{method:'POST',body:JSON.stringify({kind,ref})});toast(t('payment_saved'));loadGuestPage(GTOKEN)}catch(e){toast(errT(e.message))}})}
+async function gFeeInfo(btn){await withBusy(btn,async()=>{try{const f=await gFetch(`/api/guest/${GTOKEN}/fee-info`);
+  document.getElementById('gFeeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`}catch(e){toast(errT(e.message))}})}
+async function gReview(btn){await withBusy(btn,async()=>{try{await gFetch(`/api/guest/${GTOKEN}/review`,{method:'POST',body:JSON.stringify({sentiment:$('#gRvS').value,stars:+$('#gRvStars').value,comment:$('#gRvC').value})});toast(t('review_saved'));loadGuestPage(GTOKEN)}catch(e){toast(errT(e.message))}})}
+/* توجيه الهاش: رابط متابعة الضيف يفتح صفحة الضيف مباشرة (مع إخفاء الواجهة الرئيسية)
+   عند التحميل الأولي في أي تبويب جديد وعند تغيّر الهاش معاً. */
 function routeHash(){const m=location.hash.match(/^#\/g\/([a-zA-Z0-9]+)/);if(!m)return false;
+  $('#hero').classList.add('hide');
   $$('main section').forEach(s=>s.classList.add('hide'));$('#tab-guest').classList.remove('hide');
-  $$('#nav button').forEach(b=>b.classList.remove('on'));loadGuestPage(m[1]);return true}
-window.addEventListener('hashchange',routeHash);
+  $$('#nav button').forEach(b=>b.classList.remove('on'));
+  window.scrollTo(0,0);loadGuestPage(m[1]);return true}
+window.addEventListener('hashchange',()=>{if(!routeHash()){ $('#hero').classList.remove('hide'); showTab('market'); }});
 
-/* PWA install */
+/* ================= التهيئة + PWA ================= */
+(async()=>{ applyI18n();
+  if(TOKEN){try{const m=await api('/api/me');ME={user:m.user};}catch(e){TOKEN='';localStorage.removeItem('deal_token')}}
+  renderAuth();
+  if(!routeHash()) loadMarket();
+  bellCount();
+})();
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#installBtn').style.display=''});
 $('#installBtn').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;$('#installBtn').style.display='none'}
-  else toast('من قائمة المتصفح ⋮ اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»')};
+  else toast(t('install_hint'))};
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>
 </body>

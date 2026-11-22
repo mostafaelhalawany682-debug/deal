@@ -311,6 +311,9 @@ CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by INTEGER DEFAULT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS featured_until BIGINT DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by);
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS target_talent_id INTEGER DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_shop_requests_target ON shop_requests(target_talent_id) WHERE target_talent_id IS NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_custom TEXT DEFAULT '';
 `;
 
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية

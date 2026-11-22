@@ -94,7 +94,7 @@ async function publicUser(u, viewerId = null) {
   // يظهر سعره ولا أعماله، وسعره يُحجب حتى عن الحقول الرقمية.)
   const out = {
     id: u.id, name: u.name, role: u.role, niche: u.niche,
-    provider_category: u.provider_category, city: u.city, country: u.country,
+    provider_category: u.provider_category, provider_custom: u.provider_custom || '', city: u.city, country: u.country,
     currency: u.currency, followers: u.followers,
     price: founder ? null : u.price,
     bio: founder ? '' : u.bio,
@@ -230,14 +230,18 @@ async function makeSession(userId) {
 }
 
 app.post('/api/auth/register', async (req, res) => {
-  const { name, role, niche = '', provider_category = null, city = '', country = 'EG', currency = 'EGP', followers = 0, price = 0, bio = '', links = '' } = req.body || {};
+  const { name, role, niche = '', provider_category = null, provider_custom = '', city = '', country = 'EG', currency = 'EGP', followers = 0, price = 0, bio = '', links = '' } = req.body || {};
   // تسجيل واحد فقط لكل شخص: وسيلة التواصل تُطبَّع قبل أي فحص أو حفظ،
   // فلا يفلت تسجيل مكرر بتغيير صيغة الرقم (+20 مقابل 0) أو حالة حروف الإيميل.
   const contact = normalizeContact(req.body && req.body.contact);
   const phone = normalizeContact(req.body && req.body.phone) || contact;
   if (!name || !role || !contact) return res.status(400).json({ error: 'الاسم والدور ووسيلة التواصل مطلوبة' });
   if (!['creator', 'provider', 'shop', 'brand'].includes(role)) return res.status(400).json({ error: 'دور غير صحيح' });
-  if (role === 'provider' && !['ads', 'support'].includes(provider_category)) return res.status(400).json({ error: 'اختر فئة الخدمة: إعلانات ممولة أو حلول حسابات' });
+  if (role === 'provider') {
+    // أي خدمة يحتاجها السوق: من القائمة الموحّدة، أو «أخرى» بنص حر إلزامي يظهر كما كتبه.
+    if (![...SERVICE_KEYS, 'other'].includes(provider_category)) return res.status(400).json({ error: 'اختر خدمتك من القائمة' });
+    if (provider_category === 'other' && !String(provider_custom || '').trim()) return res.status(400).json({ error: 'اكتب خدمتك كما تريد أن تظهر في ملفك' });
+  }
   if (await db.prepare('SELECT id FROM users WHERE contact=?').get(contact)) return res.status(409).json({ error: 'وسيلة التواصل مسجلة من قبل — سجل الدخول' });
 
   /* إحالة رابط الملف (#/u/<id>): تُقبل فقط إن كان المُحيل موجوداً وليس الشخص
@@ -255,9 +259,9 @@ app.post('/api/auth/register', async (req, res) => {
   const creatorsCount = (await db.prepare(`SELECT COUNT(*) c FROM users WHERE role='creator'`).get()).c;
   const isFounder = totalUsers === 0 ? 1 : 0;
   const isFounderMember = role === 'creator' && creatorsCount < 100 ? 1 : 0;
-  const info = await db.prepare(`INSERT INTO users (name,role,niche,provider_category,city,country,currency,contact,phone,followers,price,bio,links,is_platform_founder,is_founder_member,referred_by,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(name, role, niche, provider_category, city, country, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, referredBy, now());
+  const info = await db.prepare(`INSERT INTO users (name,role,niche,provider_category,provider_custom,city,country,currency,contact,phone,followers,price,bio,links,is_platform_founder,is_founder_member,referred_by,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(name, role, niche, provider_category, role === 'provider' ? String(provider_custom || '').trim() : '', city, country, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, referredBy, now());
   const user = await getUser(info.lastInsertRowid);
   if (referredBy) await notify(referredBy, 'referral', `سجّل ${user.name} من رابط ملفك على Deal`, `user:${user.id}`);
   res.json({ token: await makeSession(user.id), user: await publicUser(user) });
@@ -484,6 +488,31 @@ app.post('/api/messages/:userId', auth, async (req, res) => {
   res.json({ ok: true, message: { id: info.lastInsertRowid, body, created_at: ts, mine: true } });
 });
 
+/* ---------------- التصنيف الموحّد (مصدر واحد مشترك) ----------------
+   مجالات صناع المحتوى وخدمات مقدمي الخدمة تُعرَّف هنا مرة واحدة وتُخدَم من
+   /api/taxonomy؛ الواجهة تبني قوائمها منها (ونسختها الاحتياطية المدمجة يطابقها
+   فحص آلي حرفياً حتى لا تنحرف النسختان أبداً). «أخرى» ليست قيمة مخزّنة:
+   للمجال تُخزَّن كتابة المستخدم نفسها، وللخدمة تُخزَّن provider_category='other'
+   ونصّها الحر في provider_custom ويظهر كما كتبه صاحبه. */
+const TAXONOMY = {
+  "niches": ["كوميديا", "طبخ", "رياضة", "جمال", "مراجعات وتقنية", "تعليم", "ألعاب", "سفر", "أطفال", "ديني", "أخبار وتريند", "حرف وDIY", "سيارات", "عقارات", "صحة ولياقة", "موسيقى", "تصوير", "عام"],
+  "services": [
+    { "key": "editing", "ar": "مونتاج فيديو", "en": "Video editing" },
+    { "key": "design", "ar": "تصميم وموشن جرافيك", "en": "Design & motion graphics" },
+    { "key": "filming", "ar": "تصوير", "en": "Filming & photography" },
+    { "key": "voiceover", "ar": "تعليق صوتي", "en": "Voice-over" },
+    { "key": "script", "ar": "كتابة سكربت", "en": "Script writing" },
+    { "key": "accounts", "ar": "إدارة حسابات سوشيال", "en": "Social account management" },
+    { "key": "ads", "ar": "إدارة إعلانات ممولة", "en": "Sponsored ads management" },
+    { "key": "support", "ar": "دعم وحل مشاكل الحسابات", "en": "Account support & troubleshooting" },
+    { "key": "translation", "ar": "ترجمة", "en": "Translation" },
+    { "key": "dev", "ar": "تطوير مواقع وتطبيقات", "en": "Web & app development" },
+    { "key": "marketing", "ar": "تسويق وصناعة محتوى", "en": "Marketing & content" }
+  ]
+};
+const SERVICE_KEYS = TAXONOMY.services.map((s) => s.key);
+app.get('/api/taxonomy', (req, res) => res.json(TAXONOMY));
+
 /* ---------------- directory / market ---------------- */
 /* جلسة اختيارية من الترويسة (للمسارات العامة التي يتغير ردها حسب المشاهد). */
 async function optionalViewer(req) {
@@ -504,9 +533,10 @@ app.get('/api/directory', async (req, res) => {
   const args = [];
   if (!canSeeFounder(viewer)) sql += ' AND is_platform_founder=0';
   if (role) { sql += ' AND role=?'; args.push(role); }
-  if (niche) { sql += ' AND niche=?'; args.push(niche); }
+  // فلتر «المجال/الخدمة» موحّد: يطابق مجال الصانع أو مفتاح خدمة المقدم أو نص خدمته الحر.
+  if (niche) { sql += ' AND (niche=? OR provider_category=? OR provider_custom=?)'; args.push(niche, niche, niche); }
   if (city) { sql += ' AND city=?'; args.push(city); }
-  if (q) { sql += ' AND (name LIKE ? OR niche LIKE ? OR city LIKE ?)'; args.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  if (q) { sql += ' AND (name LIKE ? OR niche LIKE ? OR city LIKE ? OR provider_custom LIKE ?)'; args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
   let rows = await db.prepare(sql).all(...args);
   // مدينة المؤسس ليست علنية (طلب المالك): لا يجوز أن يطابقها فلتر مدينة، ولا
   // أن يصل إليها بحث نصي عبر حقل المدينة — يبقى المؤسس قابلاً للإيجاد باسمه
@@ -796,7 +826,7 @@ app.get('/api/requests', async (req, res) => {
   // رقم واتساب الضيف يظهر للمسجلين فقط — الزائر العام لا يراه أبداً
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   const s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
-  const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' ORDER BY r.created_at DESC`).all();
+  const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' AND r.target_talent_id IS NULL ORDER BY r.created_at DESC`).all();
   const items = rows.map(r => {
     const it = { ...r, is_guest: !!r.is_guest };
     if (!s) delete it.guest_phone;
@@ -814,12 +844,25 @@ function matchScore(creator, item) {
   return { score, reasons };
 }
 app.get('/api/opportunities', auth, async (req, res) => {
-  if (req.user.role !== 'creator') return res.json({ items: [] });
-  const reqs = (await db.prepare(`SELECT * FROM shop_requests WHERE status='open'`).all())
-    .map(r => { const { guest_token, ...rest } = r; return { kind: 'request', ...rest, is_guest: !!r.is_guest, ...matchScore(req.user, r) }; });
-  const camps = (await db.prepare(`SELECT * FROM campaigns WHERE status='open'`).all())
-    .map(c => ({ kind: 'campaign', ...c, ...matchScore(req.user, c) }));
-  const items = [...reqs, ...camps].filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+  if (!['creator', 'provider'].includes(req.user.role)) return res.json({ items: [] });
+  // الطلب الموجّه (target_talent_id) لا يظهر إلا لمستهدَفه وحده — لا في القائمة
+  // العامة ولا في فرص غيره — ويُقدَّم له بمطابقة كاملة وسبب صريح.
+  const reqs = (await db.prepare(`SELECT * FROM shop_requests WHERE status='open' AND (target_talent_id IS NULL OR target_talent_id=?)`).all(req.user.id))
+    .map(r => {
+      const { guest_token, ...rest } = r;
+      const targeted = r.target_talent_id === req.user.id;
+      const it = { kind: 'request', ...rest, is_guest: !!r.is_guest, targeted, ...matchScore(req.user, r) };
+      if (targeted) { it.score = 100; it.reasons = ['طلب موجّه ليك مباشرة', ...it.reasons.filter((x) => x !== 'الميزانية مناسبة')]; }
+      return it;
+    });
+  const camps = req.user.role === 'creator'
+    ? (await db.prepare(`SELECT * FROM campaigns WHERE status='open'`).all())
+      .map(c => ({ kind: 'campaign', ...c, ...matchScore(req.user, c) }))
+    : [];
+  // مقدم الخدمة يرى في «فرص ليك» ما وُجّه إليه فقط؛ الصانع يرى كل ما يطابقه كالمعتاد.
+  const items = [...reqs, ...camps]
+    .filter(x => req.user.role === 'provider' ? x.targeted : x.score > 0)
+    .sort((a, b) => b.score - a.score);
   res.json({ items });
 });
 
@@ -838,7 +881,7 @@ function normEgPhone(raw) {
 }
 
 app.post('/api/guest-requests', async (req, res) => {
-  const { business_name, phone, city, niche, budget, details = '', title } = req.body || {};
+  const { business_name, phone, city, niche, budget, details = '', title, target_talent_id } = req.body || {};
   if (!business_name || !String(business_name).trim()) return res.status(400).json({ error: 'اسم النشاط مطلوب' });
   const ph = normEgPhone(phone);
   if (!ph) return res.status(400).json({ error: 'رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)' });
@@ -846,11 +889,28 @@ app.post('/api/guest-requests', async (req, res) => {
   if (!niche || !String(niche).trim()) return res.status(400).json({ error: 'نوع الإعلان / المجال مطلوب' });
   if (budget == null || budget === '' || !isFinite(+budget) || +budget < 0) return res.status(400).json({ error: 'ميزانية تقريبية صحيحة مطلوبة' });
   if (!details || !String(details).trim()) return res.status(400).json({ error: 'اوصف الشغلانة المطلوبة' });
+  // استهداف اختياري: الطلب يوجَّه لصانع/مقدم خدمة بعينه — يُتحقق أنه موجود فعلاً
+  // وأنه عضو قابل للطلب (صانع أو مقدم خدمة، غير محظور)، والمؤسس مرفوض صراحة
+  // لأنه حساب عرض فقط لا يقبل طلبات إطلاقاً.
+  let targetId = null;
+  if (target_talent_id != null && target_talent_id !== '') {
+    targetId = +target_talent_id;
+    const target = Number.isInteger(targetId) && targetId > 0 ? await getUser(targetId) : null;
+    if (!target || target.banned || !['creator', 'provider'].includes(target.role)) {
+      return res.status(400).json({ error: 'الصانع المستهدف غير موجود' });
+    }
+    if (target.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل طلبات' });
+  }
   const openCount = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE is_guest=1 AND guest_phone=? AND status='open'`).get(ph)).c;
   if (openCount >= GUEST_OPEN_LIMIT) return res.status(429).json({ error: 'عندك طلبات مفتوحة كتير بنفس الرقم — استنى لما طلب يتقفل الأول' });
   const token = rnd(24);
-  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_token,created_at) VALUES (NULL,?,?,?,?,'EGP',?,'open',1,?,?,?,?)`)
-    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, details, String(business_name).trim(), ph, token, now());
+  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_token,target_talent_id,created_at) VALUES (NULL,?,?,?,?,'EGP',?,'open',1,?,?,?,?,?)`)
+    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, details, String(business_name).trim(), ph, token, targetId, now());
+  if (targetId) {
+    await notify(targetId, 'guest_targeted',
+      `🎯 طلب موجّه ليك مباشرة من عميل «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget} — افتح «فرص ليك» لتحويله لحجز بضمان Deal`,
+      `request:${info.lastInsertRowid}`);
+  }
   res.json({ id: info.lastInsertRowid, token, follow: `/#/g/${token}` });
 });
 
@@ -871,6 +931,8 @@ app.post('/api/guest-requests/:id/book', auth, async (req, res) => {
     const rq = rqRes.rows[0];
     if (!rq) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'طلب ضيف غير موجود' }); }
     if (rq.status !== 'open') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'هذا الطلب اتحجز خلاص — لا يمكن تحويله مرتين' }); }
+    // الطلب الموجّه لا يحوّله إلا مستهدَفه وحده — هو وحده من يراه أصلاً.
+    if (rq.target_talent_id && rq.target_talent_id !== req.user.id) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'هذا الطلب موجّه لصانع آخر' }); }
     const p = price != null ? +price : (rq.budget || req.user.price);
     if (!p || p <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'حدد سعراً صحيحاً' }); }
     const ins = await client.query(
@@ -1187,9 +1249,11 @@ app.get('/api/me/overview', auth, async (req, res) => {
   const u = req.user;
   let opportunities = 0;
   if (u.role === 'creator') {
-    const reqs = await db.prepare(`SELECT * FROM shop_requests WHERE status='open'`).all();
+    const reqs = await db.prepare(`SELECT * FROM shop_requests WHERE status='open' AND (target_talent_id IS NULL OR target_talent_id=?)`).all(u.id);
     const camps = await db.prepare(`SELECT * FROM campaigns WHERE status='open'`).all();
-    opportunities = [...reqs, ...camps].filter((x) => matchScore(u, x).score > 0).length;
+    opportunities = [...reqs, ...camps].filter((x) => x.target_talent_id === u.id || matchScore(u, x).score > 0).length;
+  } else if (u.role === 'provider') {
+    opportunities = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE status='open' AND target_talent_id=?`).get(u.id)).c;
   }
   const active_bookings = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE (client_id=? OR talent_id=?) AND status NOT IN ('completed','cancelled')`).get(u.id, u.id)).c;
   const unread_messages = (await db.prepare('SELECT COUNT(*) c FROM messages WHERE recipient_id=? AND is_read=0').get(u.id)).c;
@@ -1251,7 +1315,7 @@ app.get('/api/me/badges-progress', auth, async (req, res) => {
 app.get('/api/my/stats', auth, async (req, res) => {
   const uid = req.user.id;
   const views = (await db.prepare('SELECT COUNT(*) c FROM profile_views WHERE talent_id=?').get(uid)).c;
-  const opps = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE status='open'`).get()).c +
+  const opps = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE status='open' AND (target_talent_id IS NULL OR target_talent_id=?)`).get(uid)).c +
                (await db.prepare(`SELECT COUNT(*) c FROM campaigns WHERE status='open'`).get()).c;
   const myBookings = (await db.prepare('SELECT COUNT(*) c FROM bookings WHERE talent_id=?').get(uid)).c;
   const done = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND status='completed'`).get(uid)).c;

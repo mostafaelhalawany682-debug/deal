@@ -27,6 +27,10 @@ const STAR_TERMS_VERSION = 'star-terms-v1';
 const STAR_WEEK_MS = 7 * 24 * 3600 * 1000;
 
 const app = express();
+/* مسارات المال تحمل صور إيصالات base64 (حتى 2MB) — محلّل أكبر لها وحدها،
+   يُسجَّل قبل المحلّل العام فيتولاها هو ويتخطاها العام (body-parser يعلّم
+   الطلب مُعالجاً فلا يعيد تحليله). */
+app.use('/api/money', express.json({ limit: '4mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
 // إنشاء الجداول عند أول طلب API (مرة واحدة لكل نسخة serverless — init() آمن للتكرار).
@@ -155,6 +159,190 @@ async function myStarState(userId) {
   const latest = await db.prepare('SELECT * FROM star_subscriptions WHERE user_id=? ORDER BY created_at DESC, id DESC LIMIT 1').get(userId);
   if (!latest) return { state: 'none', subscription: null, is_week_star: false };
   return { state: latest.status, subscription: starSubView(latest), is_week_star: false };
+}
+
+/* ---------------- المرجع المالي الموحد + نظام أمان المعاملات ----------------
+   قرار المالك الملزم: كل التزام مالي في المنصة (اشتراك باقة، عمولة حجز،
+   عربون، دفعة أخيرة) يحمل «مرجعاً مالياً» يعرفه الطرفان: كود معاملة بشري
+   (DL-XXXXXX) + مبلغ فريد بكسور بصمة (base + قروش 1..99 لا تصطدم بأي التزام
+   مفتوح لنفس المستلم) — لأن تحويلات المحافظ الشخصية بلا خانة ملاحظات، فالكسور
+   نفسها هي المرجع الذي يطابقه الإيصال. كل انتقال حالة يُسجَّل في money_ledger
+   (سجل append-only: INSERT فقط في كل الكود — لا UPDATE ولا DELETE عليه أبداً).
+   قاعدة الأمان الحاكمة: لا حالة فلوس تتحرك بكلمة طرف واحد — الادعاء (claimed)
+   وحده لا يؤكّد؛ التأكيد يحتاج مطابقة إيصال كاملة صارمة، أو قرار المستلم/المالك،
+   أو مهلة قائمة في آلة الحجز. */
+const MONEY_OB_TTL_MS = 48 * 3600 * 1000;      // عمر الالتزام المفتوح قبل انتهائه
+const RECEIPT_MAX_BYTES = 2 * 1024 * 1024;     // أقصى حجم لصورة الإيصال
+const RECEIPT_MAX_ATTEMPTS = 5;                // بعدها يُقفل الرفع على الالتزام
+const RECEIPT_DATE_WINDOW_MS = 48 * 3600 * 1000; // حداثة تاريخ الإيصال المطلوبة
+const RECEIPT_HOURLY_CAP = 20;                 // حد إيصالات الرافع الواحد في الساعة
+const mround = (x) => Math.round(x * 100) / 100; // نفس تقريب آلة الحجز القائمة حرفياً
+
+async function moneyLedger(obligationId, from, to, actor, note = '') {
+  await db.prepare('INSERT INTO money_ledger (obligation_id,from_status,to_status,actor,note,created_at) VALUES (?,?,?,?,?,?)')
+    .run(obligationId, from || '', to, actor, String(note || '').slice(0, 300), now());
+}
+/* انتقال حالة وحيد لكل الالتزامات: تحديث + سجل في خطوة واحدة، فلا حالة بلا أثر. */
+async function setObligationStatus(ob, to, actor, note = '', patch = {}) {
+  const allowed = ['transfer_ref', 'receipt_hash', 'decided_by', 'decided_at', 'fraud_flag', 'receipt_locked', 'receipt_attempts'];
+  const sets = ['status=?'], args = [to];
+  for (const k of allowed) if (patch[k] !== undefined) { sets.push(`${k}=?`); args.push(patch[k]); }
+  await db.prepare(`UPDATE money_obligations SET ${sets.join(',')} WHERE id=?`).run(...args, ob.id);
+  await moneyLedger(ob.id, ob.status, to, actor, note);
+  return await db.prepare('SELECT * FROM money_obligations WHERE id=?').get(ob.id);
+}
+async function getObligation(id) { return await db.prepare('SELECT * FROM money_obligations WHERE id=?').get(id); }
+async function notifyOwner(type, text, ref = '') {
+  const founder = await db.prepare('SELECT id FROM users WHERE is_platform_founder=1').get();
+  if (founder) await notify(founder.id, type, text, ref);
+}
+/* عرض الالتزام الآمن للدافع وحده: الكود والمبلغ بالبصمة والحالة — بلا بيانات غيره. */
+/* عرض الالتزام للدافع نفسه داخل خطوة دفعه: يضيف وسيلة دفع دولة الدافع
+   (payLabel من التصنيف — مصدر الحقيقة نفسه) ورقم المستلم الذي سيحوّل إليه:
+   رقم العمولات يُكشف فقط بينما الالتزام «مفتوح» (خطوة دفع نشطة — نفس بوابة
+   payment-info القائمة؛ فلا يظهر أبداً في حالة «قيد التحقق»)، ورقم المقدم
+   يُكشف لطرفي حجزه لأنه وسيلة التحويل نفسها. */
+async function payerObligationView(ob, countryCode) {
+  const v = obligationView(ob);
+  const c = countryOf(countryCode) || countryOf('EG');
+  v.country = c.code;
+  v.method_label = c.payAr;
+  v.method_label_en = c.payEn;
+  if (ob.payee === 'owner') {
+    if (ob.status === 'open' && COMMISSION_PHONE) v.payee_phone = COMMISSION_PHONE;
+  } else if (ob.payee_user_id) {
+    const pu = await getUser(ob.payee_user_id);
+    if (pu && pu.contact) v.payee_phone = pu.contact;
+  }
+  return v;
+}
+async function guestCountryByToken(token) {
+  const r = await db.prepare('SELECT country FROM shop_requests WHERE guest_token=?').get(token);
+  return (r && r.country) || 'EG';
+}
+function obligationView(ob) {
+  if (!ob) return null;
+  return {
+    code: ob.code, kind: ob.kind, booking_id: ob.booking_id,
+    base_amount: ob.base_amount, exact_amount: mround(ob.exact_amount),
+    currency: ob.currency, status: ob.status, payee: ob.payee,
+    receipt_locked: !!ob.receipt_locked,
+  };
+}
+const MONEY_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function newMoneyCode() {
+  let s = '';
+  const bytes = crypto.randomBytes(6);
+  for (let i = 0; i < 6; i++) s += MONEY_CODE_ALPHABET[bytes[i] % MONEY_CODE_ALPHABET.length];
+  return `DL-${s}`;
+}
+/* مخصّص البصمة: كسور 1..99 لا يستخدمها أي التزام مفتوح/مُدّعى لنفس المستلم
+   وبنفس المبلغ الأساسي — والفهرس الفريد الجزئي في القاعدة ظهر أخير عند السباق. */
+async function allocFingerprint(payee, baseAmount) {
+  const used = new Set((await db.prepare(`SELECT fingerprint_cents FROM money_obligations WHERE payee=? AND base_amount=? AND status IN ('open','claimed')`)
+    .all(payee, baseAmount)).map((r) => r.fingerprint_cents));
+  const free = [];
+  for (let c = 1; c <= 99; c++) if (!used.has(c)) free.push(c);
+  if (!free.length) return null;
+  return free[crypto.randomInt(free.length)];
+}
+async function createObligation(f) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const cents = await allocFingerprint(f.payee, f.base_amount);
+    if (cents == null) throw new Error('لا توجد بصمة مبلغ متاحة الآن — حاول بعد قليل');
+    try {
+      const info = await db.prepare(`INSERT INTO money_obligations (code,kind,booking_id,user_id,base_amount,fingerprint_cents,exact_amount,currency,payer_user_id,guest_token,payee,payee_user_id,status,created_at,expires_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'open',?,?)`)
+        .run(newMoneyCode(), f.kind, f.booking_id ?? null, f.user_id ?? null, f.base_amount, cents,
+          mround(f.base_amount + cents / 100), f.currency || 'EGP', f.payer_user_id ?? null,
+          f.guest_token || '', f.payee, f.payee_user_id ?? null, now(), now() + MONEY_OB_TTL_MS);
+      const ob = await getObligation(info.lastInsertRowid);
+      await moneyLedger(ob.id, '', 'open', 'system', `أُنشئ الالتزام (${f.kind})`);
+      return ob;
+    } catch (e) { if (e && e.code === '23505') continue; throw e; } // سباق بصمة/كود — أعد التخصيص
+  }
+  throw new Error('تعذر إنشاء المرجع المالي — حاول مجدداً');
+}
+/* جلب التزام الغرض نفسه إن كان مفتوحاً/مُدّعى (يُعاد استخدامه)، وإن انتهت
+   صلاحيته يُختم «expired» في السجل ويُولد بديل جديد — فلا بصمة محجوزة للأبد. */
+async function getOrCreateObligation(f) {
+  let existing = null;
+  if (f.kind === 'star_subscription') {
+    existing = await db.prepare(`SELECT * FROM money_obligations WHERE kind='star_subscription' AND user_id=? AND status IN ('open','claimed') ORDER BY id DESC LIMIT 1`).get(f.user_id);
+  } else {
+    existing = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status IN ('open','claimed') ORDER BY id DESC LIMIT 1`).get(f.kind, f.booking_id);
+  }
+  if (existing) {
+    if (!existing.expires_at || existing.expires_at > now()) return existing;
+    await setObligationStatus(existing, 'expired', 'system', 'انتهت صلاحية الالتزام المفتوح');
+  }
+  return await createObligation(f);
+}
+/* مبالغ أرجل الحجز بنفس صيغ آلة الحالات القائمة حرفياً (عمولة/نصف الصافي). */
+function bookingLegAmounts(b) {
+  const fee = mround(b.price * COMMISSION_RATE);
+  const net = b.price - fee;
+  const half = mround(net / 2);
+  return { fee, deposit: half, rest: half };
+}
+const OBLIGATION_KIND_FOR_LEG = { fee: 'booking_commission', deposit: 'booking_deposit', rest: 'booking_final' };
+/* ربط دفعة مسجلة في آلة الحجز بالتزامها: ادعاء الدافع بمرجعه (claimed) — لا
+   تأكيد؛ التأكيد يأتي من مطابقة إيصال أو قرار مالك/مستلم أو اكتمال الحجز. */
+async function claimObligationForPayment(b, kind, ref, actor) {
+  const legKind = OBLIGATION_KIND_FOR_LEG[kind];
+  if (!legKind) return null;
+  const amounts = bookingLegAmounts(b);
+  const base = kind === 'fee' ? amounts.fee : amounts[kind];
+  const ob = await getOrCreateObligation({
+    kind: legKind, booking_id: b.id, user_id: b.talent_id, base_amount: base, currency: b.currency,
+    payer_user_id: b.client_id || null, guest_token: b.guest_token || '',
+    payee: kind === 'fee' ? 'owner' : `user:${b.talent_id}`,
+    payee_user_id: kind === 'fee' ? null : b.talent_id,
+  });
+  if (ob.status === 'open') {
+    const claimed = await setObligationStatus(ob, 'claimed', actor, 'سجّل الدافع مرجع التحويلة في الحجز', { transfer_ref: String(ref || '').slice(0, 120) });
+    // اكتمال الحجز لاحقاً/سابقاً هو عامل التأكيد الثاني لهذه الرجل.
+    const fresh = await getBooking(b.id);
+    if (fresh && fresh.status === 'completed') await settleLegObligation(b.id, legKind, 'اكتمل الحجز واكتمل القبض');
+    else if (legKind === 'booking_deposit' && fresh && fresh.proof_at) await settleLegObligation(b.id, legKind, 'قدّم المنفذ إثبات التنفيذ');
+    return await getObligation(claimed.id);
+  }
+  return ob;
+}
+/* تسوية التزام رجل (عربون/أخيرة) إلى «confirmed» عندما يثبت اكتمال الحجز —
+   اكتمال القبض نفسه هو عامل التأكيد الثاني بعد ادعاء الدافع. */
+async function settleLegObligation(bookingId, legKind, note) {
+  const ob = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status='claimed' ORDER BY id DESC LIMIT 1`).get(legKind, bookingId);
+  if (ob) await setObligationStatus(ob, 'confirmed', 'system', note);
+}
+
+/* تفعيل اشتراك نجم معلّق بسبب التزام (تأكيد تلقائي أو قرار مالك) — نفس شروط
+   التفعيل اليدوي القائمة: 30 يوماً من لحظة القرار، وإشعار للمشترك. */
+async function activateStarSubForObligation(ob, decidedBy) {
+  let sub = null;
+  if (ob.id) {
+    sub = await db.prepare(`SELECT * FROM star_subscriptions WHERE obligation_id=? AND status='pending' ORDER BY id DESC LIMIT 1`).get(ob.id);
+  }
+  if (!sub && ob.user_id) {
+    sub = await db.prepare(`SELECT * FROM star_subscriptions WHERE user_id=? AND status='pending' ORDER BY id DESC LIMIT 1`).get(ob.user_id);
+  }
+  if (!sub) return null;
+  const t = now();
+  await db.prepare(`UPDATE star_subscriptions SET status='active', decided_at=?, decided_by=?, activated_at=?, expires_at=?, obligation_id=? WHERE id=?`)
+    .run(t, decidedBy ?? null, t, t + STAR_DURATION_MS, ob.id, sub.id);
+  await notify(sub.user_id, 'star_active', '⭐ مبروك! اتفعّل اشتراكك في «نجم Deal» — مزاياك شغالة من دلوقتي ولمدة 30 يوم', 'star');
+  return await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(sub.id);
+}
+/* أثر التأكيد على العمل بحسب نوع الالتزام — يُستدعى بعد auto_confirmed/confirmed. */
+async function applyObligationEffect(ob, actor) {
+  if (ob.kind === 'star_subscription') {
+    await activateStarSubForObligation(ob, actor === 'owner' ? (await db.prepare('SELECT id FROM users WHERE is_platform_founder=1').get() || {}).id : null);
+  } else if (ob.kind === 'booking_commission') {
+    const b = await getBooking(ob.booking_id);
+    if (b && b.fee_status !== 'confirmed' && b.status === 'awaiting_fee') {
+      await applyClientPayment(b, 'fee', ob.transfer_ref || `AUTO-${ob.code}`);
+    }
+  }
 }
 
 async function publicUser(u, viewerId = null) {
@@ -934,7 +1122,13 @@ app.get('/api/bookings/:id/fee-info', auth, async (req, res) => {
   const b = await getBooking(+req.params.id);
   if (!b || b.client_id !== req.user.id) return res.status(403).json({ error: 'غير متاح' });
   if (b.status !== 'awaiting_fee' || b.fee_status === 'confirmed') return res.status(400).json({ error: 'خطوة العمولة غير مفتوحة الآن' });
-  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency });
+  // خطوة الدفع بدأت: يُنشأ/يُجلب التزام العمولة بمرجعه المالي الموحد (كود + مبلغ ببصمة).
+  const ob = await getOrCreateObligation({
+    kind: 'booking_commission', booking_id: b.id, user_id: b.talent_id,
+    base_amount: bookingLegAmounts(b).fee, currency: b.currency,
+    payer_user_id: req.user.id, payee: 'owner',
+  });
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency, obligation: await payerObligationView(ob, req.user.country) });
 });
 
 app.post('/api/bookings/:id/pay', auth, async (req, res) => {
@@ -944,6 +1138,8 @@ app.post('/api/bookings/:id/pay', auth, async (req, res) => {
   if (!ref) return res.status(400).json({ error: 'مرجع العملية مطلوب' });
   const r = await applyClientPayment(b, kind, ref);
   if (r.error) return res.status(400).json({ error: r.error });
+  // ربط الدفعة بالتزامها المالي (ادعاء بمرجع — التأكيد بعوامل أخرى كما هو موثق).
+  try { await claimObligationForPayment(r.booking, kind, ref, 'user'); } catch (e) { /* الربط لا يعطّل الدفع */ }
   res.json({ booking: await bookingView(r.booking, req.user) });
 });
 
@@ -960,6 +1156,8 @@ app.post('/api/bookings/:id/proof', auth, async (req, res) => {
   } catch (e) { ok = false; }
   if (!ok) return res.status(400).json({ error: 'تعذر التحقق: الرابط لا يعمل أو غير علني (لازم HTTP 200)' });
   await db.prepare(`UPDATE bookings SET proof_url=?, proof_at=?, proof_check='verified', status='proof_submitted' WHERE id=?`).run(url, now(), b.id);
+  // تقديم الإثبات بعد استلام العربون والعمل عليه = عامل تأكيد التزام العربون.
+  try { await settleLegObligation(b.id, 'booking_deposit', 'قدّم المنفذ إثبات التنفيذ'); } catch (e) { /* لا يعطّل الإثبات */ }
   await notify(b.client_id, 'booking', `حجز #${b.id}: المنفذ قدم إثبات التنفيذ — أكد الاستلام`, `booking:${b.id}`);
   res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
 });
@@ -1180,7 +1378,30 @@ app.get('/api/guest/:token/fee-info', async (req, res) => {
   const b = await guestBookingByToken(req.params.token);
   if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
   if (b.status !== 'awaiting_fee' || b.fee_status === 'confirmed') return res.status(400).json({ error: 'خطوة العمولة غير مفتوحة الآن' });
-  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency });
+  const ob = await getOrCreateObligation({
+    kind: 'booking_commission', booking_id: b.id, user_id: b.talent_id,
+    base_amount: bookingLegAmounts(b).fee, currency: b.currency,
+    guest_token: b.guest_token, payee: 'owner',
+  });
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency, obligation: await payerObligationView(ob, await guestCountryByToken(req.params.token)) });
+});
+
+/* التزام خطوة دفع الضيف (عربون/أخيرة): يُعرض للدافع الضيف برمز متابعته فقط. */
+app.get('/api/guest/:token/obligation', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  const kind = String(req.query.kind || '');
+  const stageFor = { booking_deposit: 'awaiting_deposit', booking_final: 'awaiting_rest' };
+  if (!stageFor[kind]) return res.status(400).json({ error: 'نوع التزام غير صحيح' });
+  const existing = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status IN ('open','claimed','confirmed','auto_confirmed') ORDER BY id DESC LIMIT 1`).get(kind, b.id);
+  if (!existing && b.status !== stageFor[kind]) return res.status(400).json({ error: 'خطوة الدفع ليست مفتوحة الآن' });
+  const amounts = bookingLegAmounts(b);
+  const ob = existing || await getOrCreateObligation({
+    kind, booking_id: b.id, user_id: b.talent_id,
+    base_amount: kind === 'booking_deposit' ? amounts.deposit : amounts.rest, currency: b.currency,
+    guest_token: b.guest_token, payee: `user:${b.talent_id}`, payee_user_id: b.talent_id,
+  });
+  res.json({ obligation: await payerObligationView(ob, await guestCountryByToken(req.params.token)) });
 });
 
 app.post('/api/guest/:token/agree', async (req, res) => {
@@ -1198,6 +1419,7 @@ app.post('/api/guest/:token/pay', async (req, res) => {
   if (!ref) return res.status(400).json({ error: 'مرجع العملية مطلوب' });
   const r = await applyClientPayment(b, kind, ref);
   if (r.error) return res.status(400).json({ error: r.error });
+  try { await claimObligationForPayment(r.booking, kind, ref, 'guest'); } catch (e) { /* الربط لا يعطّل الدفع */ }
   res.json({ booking: await guestBookingView(r.booking) });
 });
 
@@ -1586,7 +1808,12 @@ app.get('/api/star/payment-info', auth, async (req, res) => {
   const st = await myStarState(req.user.id);
   if (st.state === 'active') return res.status(400).json({ error: 'اشتراكك في نجم Deal نشط بالفعل' });
   if (st.state === 'pending') return res.status(400).json({ error: 'عندك اشتراك قيد التحقق بالفعل — استنى تأكيد الاستلام' });
-  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: STAR_PRICE, currency: STAR_CURRENCY });
+  // فتح خطوة الدفع ينشئ/يجلب التزام الاشتراك بمرجعه المالي (كود + مبلغ ببصمة).
+  const ob = await getOrCreateObligation({
+    kind: 'star_subscription', user_id: req.user.id, base_amount: STAR_PRICE,
+    currency: STAR_CURRENCY, payer_user_id: req.user.id, payee: 'owner',
+  });
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: STAR_PRICE, currency: STAR_CURRENCY, obligation: await payerObligationView(ob, req.user.country) });
 });
 app.post('/api/star/subscribe', auth, async (req, res) => {
   const u = req.user;
@@ -1601,11 +1828,32 @@ app.post('/api/star/subscribe', auth, async (req, res) => {
   const st = await myStarState(u.id);
   if (st.state === 'active') return res.status(400).json({ error: 'اشتراكك في نجم Deal نشط بالفعل', state: 'active', subscription: st.subscription });
   if (st.state === 'pending') return res.status(400).json({ error: 'عندك اشتراك قيد التحقق بالفعل — استنى تأكيد الاستلام', state: 'pending', subscription: st.subscription });
-  const info = await db.prepare(`INSERT INTO star_subscriptions (user_id,amount,currency,ref,status,terms_version,terms_accepted_at,created_at)
-    VALUES (?,?,?,?, 'pending', ?, ?, ?)`)
-    .run(u.id, STAR_PRICE, STAR_CURRENCY, String(ref).trim().slice(0, 120), STAR_TERMS_VERSION, now(), now());
+  const cleanRef = String(ref).trim().slice(0, 120);
+  /* التزام الاشتراك بمرجعه المالي: يُجلب/يُنشأ الآن ويُدّعى بمرجع الدافع. */
+  const ob = await getOrCreateObligation({
+    kind: 'star_subscription', user_id: u.id, base_amount: STAR_PRICE,
+    currency: STAR_CURRENCY, payer_user_id: u.id, payee: 'owner',
+  });
+  /* تحويلة مؤكدة تلقائياً بالإيصال قبل إرسال النموذج؟ الاشتراك يولد «نشطاً»
+     فوراً (قبول الشروط سُجّل في هذا الطلب نفسه) — لا انتظار ولا تأكيد يدوي. */
+  if (ob.status === 'auto_confirmed') {
+    const t = now();
+    const info = await db.prepare(`INSERT INTO star_subscriptions (user_id,amount,currency,ref,status,terms_version,terms_accepted_at,created_at,decided_at,activated_at,expires_at,obligation_id)
+      VALUES (?,?,?,?, 'active', ?, ?, ?, ?, ?, ?, ?)`)
+      .run(u.id, STAR_PRICE, STAR_CURRENCY, cleanRef, STAR_TERMS_VERSION, t, t, t, t, t + STAR_DURATION_MS, ob.id);
+    await moneyLedger(ob.id, 'auto_confirmed', 'auto_confirmed', 'system', 'رُبط باشتراك فُعّل فوراً عند قبول الشروط');
+    await notifyOwner('star_pending', `⭐ اشتراك «نجم Deal» فُعّل تلقائياً بالإيصال من ${u.name} — ${ob.code}`, `star:${info.lastInsertRowid}`);
+    const sub = await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(info.lastInsertRowid);
+    return res.json({ state: 'active', subscription: starSubView(sub) });
+  }
+  const info = await db.prepare(`INSERT INTO star_subscriptions (user_id,amount,currency,ref,status,terms_version,terms_accepted_at,created_at,obligation_id)
+    VALUES (?,?,?,?, 'pending', ?, ?, ?, ?)`)
+    .run(u.id, STAR_PRICE, STAR_CURRENCY, cleanRef, STAR_TERMS_VERSION, now(), now(), ob.id);
+  if (ob.status === 'open') {
+    await setObligationStatus(ob, 'claimed', 'user', 'سجّل المشترك مرجع التحويلة مع قبول الشروط', { transfer_ref: cleanRef });
+  }
   const founder = await db.prepare('SELECT id FROM users WHERE is_platform_founder=1').get();
-  if (founder) await notify(founder.id, 'star_pending', `⭐ اشتراك «نجم Deal» قيد التحقق من ${u.name} — مرجع ${String(ref).trim().slice(0, 60)}`, `star:${info.lastInsertRowid}`);
+  if (founder) await notify(founder.id, 'star_pending', `⭐ اشتراك «نجم Deal» قيد التحقق من ${u.name} — مرجع ${cleanRef.slice(0, 60)}`, `star:${info.lastInsertRowid}`);
   const sub = await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(info.lastInsertRowid);
   res.json({ state: 'pending', subscription: starSubView(sub) });
 });
@@ -1675,6 +1923,13 @@ app.post('/api/owner/star/:id/confirm', auth, ownerOnly, async (req, res) => {
   const t = now();
   await db.prepare(`UPDATE star_subscriptions SET status='active', decided_at=?, decided_by=?, activated_at=?, expires_at=? WHERE id=?`)
     .run(t, req.user.id, t, t + STAR_DURATION_MS, s.id);
+  // التزام الاشتراك المالي يتحرك مع قرار المالك نفسه (سجل واحد متّسق).
+  if (s.obligation_id) {
+    const ob = await getObligation(s.obligation_id);
+    if (ob && ['open', 'claimed'].includes(ob.status)) {
+      await setObligationStatus(ob, 'confirmed', 'owner', 'أكّد المالك وصول تحويلة الاشتراك من سجل الباقة', { decided_by: req.user.id, decided_at: t });
+    }
+  }
   await notify(s.user_id, 'star_active', `⭐ مبروك! اتفعّل اشتراكك في «نجم Deal» — مزاياك شغالة من دلوقتي ولمدة 30 يوم`, 'star');
   res.json({ ok: true, subscription: starSubView(await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(s.id)) });
 });
@@ -1684,8 +1939,250 @@ app.post('/api/owner/star/:id/reject', auth, ownerOnly, async (req, res) => {
   const reason = String((req.body || {}).reason || 'مرجع التحويلة غير صحيح').slice(0, 300);
   await db.prepare(`UPDATE star_subscriptions SET status='rejected', decided_at=?, decided_by=?, reject_reason=? WHERE id=?`)
     .run(now(), req.user.id, reason, s.id);
+  if (s.obligation_id) {
+    const ob = await getObligation(s.obligation_id);
+    if (ob && ['open', 'claimed'].includes(ob.status)) {
+      await setObligationStatus(ob, 'rejected', 'owner', `رفض المالك اشتراك الباقة: ${reason}`, { decided_by: req.user.id, decided_at: now() });
+    }
+  }
   await notify(s.user_id, 'star_rejected', `اشتراك «نجم Deal» لم يُفعَّل: ${reason} — راجع مرجع التحويلة واشترك من جديد`, 'star');
   res.json({ ok: true });
+});
+
+/* ---------------- المرجع المالي: عرض الالتزام للدافع وحده ----------------
+   الدافع المصرح له فقط يرى التزامه: صاحب الاشتراك نفسه، أو عميل الحجز المسجل،
+   أو ضيف الحجز برمز متابعته. التزام غيرك لا يُكشف أبداً (403/404). */
+app.get('/api/money/obligation', async (req, res) => {
+  const kind = String(req.query.kind || '');
+  const viewer = await optionalViewer(req);
+  if (kind === 'star_subscription') {
+    if (!viewer) return res.status(401).json({ error: 'سجل الدخول أولاً' });
+    if (viewer.is_platform_founder || !['creator', 'provider'].includes(viewer.role)) {
+      return res.status(400).json({ error: 'باقة نجم Deal للصناع ومقدمي الخدمة فقط' });
+    }
+    if (await activeStarSub(viewer.id)) return res.status(400).json({ error: 'اشتراكك في نجم Deal نشط بالفعل' });
+    const ob = await getOrCreateObligation({
+      kind, user_id: viewer.id, base_amount: STAR_PRICE, currency: STAR_CURRENCY,
+      payer_user_id: viewer.id, payee: 'owner',
+    });
+    return res.json({ obligation: await payerObligationView(ob, viewer.country) });
+  }
+  if (['booking_commission', 'booking_deposit', 'booking_final'].includes(kind)) {
+    const b = await getBooking(+req.query.booking_id || 0);
+    if (!b) return res.status(404).json({ error: 'غير موجود' });
+    const guestTok = String(req.query.guest_token || '');
+    const isPayer = (viewer && b.client_id && viewer.id === b.client_id) || (guestTok && b.guest_token && guestTok === b.guest_token);
+    if (!isPayer) return res.status(403).json({ error: 'الالتزام يظهر للدافع وحده' });
+    const stageFor = { booking_commission: 'awaiting_fee', booking_deposit: 'awaiting_deposit', booking_final: 'awaiting_rest' };
+    const existing = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status IN ('open','claimed','confirmed','auto_confirmed') ORDER BY id DESC LIMIT 1`).get(kind, b.id);
+    if (!existing && b.status !== stageFor[kind]) return res.status(400).json({ error: 'خطوة الدفع ليست مفتوحة الآن' });
+    const amounts = bookingLegAmounts(b);
+    const base = kind === 'booking_commission' ? amounts.fee : kind === 'booking_deposit' ? amounts.deposit : amounts.rest;
+    const ob = existing || await getOrCreateObligation({
+      kind, booking_id: b.id, user_id: b.talent_id, base_amount: base, currency: b.currency,
+      payer_user_id: b.client_id || null, guest_token: b.guest_token || '',
+      payee: kind === 'booking_commission' ? 'owner' : `user:${b.talent_id}`,
+      payee_user_id: kind === 'booking_commission' ? null : b.talent_id,
+    });
+    return res.json({ obligation: await payerObligationView(ob, viewer ? viewer.country : await guestCountryByToken(guestTok)) });
+  }
+  return res.status(400).json({ error: 'نوع التزام غير صحيح' });
+});
+
+/* ---------------- التأكيد التلقائي بالإيصال (مدفوعات المالك فقط) ----------------
+   قواعد صارمة — كلها معاً وإلا «مراجعة مالك» (لا تأكيد جزئي ولا رفض آلي):
+   (أ) المبلغ المستخرج == المبلغ بالبصمة حرفياً، (ب) أرقام المستلم تطابق رقم
+   عمولات المالك (آخر 4 أرقام على الأقل)، (ج) مرجع التحويلة غير مستخدم في أي
+   التزام/إيصال آخر، (د) بصمة الصورة غير مكررة إطلاقاً، (هـ) التاريخ خلال 48
+   ساعة، (و) بصمة العميل المرسلة تطابق بصمة الخادم المحسوبة من الصورة نفسها. */
+function parseReceiptDate(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number' && isFinite(v)) return v < 1e12 ? v * 1000 : v;
+  const s = String(v).trim();
+  const dm = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(s);
+  if (dm) return new Date(+dm[3], +dm[2] - 1, +dm[1], 12).getTime();
+  const p = Date.parse(s);
+  return isNaN(p) ? 0 : p;
+}
+function recipientMatches(extractedDigits) {
+  const phone = String(COMMISSION_PHONE || '').replace(/\D/g, '');
+  const rec = String(extractedDigits || '').replace(/\D/g, '');
+  if (!phone || rec.length < 4) return false;
+  if (!phone.endsWith(rec.slice(-4))) return false;
+  if (rec.length <= phone.length) return phone.endsWith(rec) || rec.length === 4;
+  return rec.endsWith(phone);
+}
+app.post('/api/money/verify-receipt', async (req, res) => {
+  const { obligation_code, image, image_hash, extracted = {}, guest_token } = req.body || {};
+  const ob0 = obligation_code ? await db.prepare('SELECT * FROM money_obligations WHERE code=?').get(String(obligation_code)) : null;
+  if (!ob0) return res.status(404).json({ error: 'كود معاملة غير موجود' });
+  if (ob0.payee !== 'owner') return res.status(400).json({ error: 'التأكيد بالإيصال متاح لمدفوعات المنصة فقط' });
+  // تفويض الرافع: صاحب الالتزام بجلسة، أو ضيف الحجز برمز متابعته.
+  const viewer = await optionalViewer(req);
+  const asUser = viewer && ob0.payer_user_id && viewer.id === ob0.payer_user_id;
+  const asGuest = guest_token && ob0.guest_token && String(guest_token) === ob0.guest_token;
+  if (!asUser && !asGuest) return res.status(403).json({ error: 'الإيصال يُرفع من الدافع وحده' });
+  let ob = ob0;
+  if (ob.receipt_locked) return res.status(400).json({ error: 'قُفل رفع الإيصالات على هذه المعاملة — هي عند المالك للمراجعة اليدوية' });
+  if (!['open', 'claimed'].includes(ob.status)) return res.status(400).json({ error: 'هذه المعاملة تم البت فيها' });
+  // حد معدل: إيصالات الرافع الواحد في آخر ساعة.
+  const hourAgo = now() - 3600 * 1000;
+  const recentCount = asUser
+    ? (await db.prepare('SELECT COUNT(*) c FROM money_receipts WHERE uploader_user_id=? AND created_at>?').get(viewer.id, hourAgo)).c
+    : (await db.prepare('SELECT COUNT(*) c FROM money_receipts WHERE guest_token=? AND created_at>?').get(String(guest_token), hourAgo)).c;
+  if (recentCount >= RECEIPT_HOURLY_CAP) return res.status(429).json({ error: 'محاولات كثيرة — حاول بعد قليل' });
+  // الصورة: data URL بحجم ≤2MB، وبصمتها تُحسب خادمياً من البايتات نفسها.
+  const m = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=\s]+)$/.exec(String(image || ''));
+  if (!m) return res.status(400).json({ error: 'صورة إيصال غير صالحة' });
+  const imgBytes = Buffer.from(m[2], 'base64');
+  if (!imgBytes.length || imgBytes.length > RECEIPT_MAX_BYTES) return res.status(400).json({ error: 'صورة الإيصال أكبر من 2MB' });
+  const serverHash = crypto.createHash('sha256').update(imgBytes).digest('hex');
+  const exAmount = extracted && extracted.amount != null && extracted.amount !== '' ? +extracted.amount : null;
+  const exRecipient = String((extracted && extracted.recipient_digits) || '');
+  const exRef = String((extracted && extracted.transfer_ref) || '').trim().slice(0, 120);
+  const exDate = parseReceiptDate(extracted && extracted.date);
+  /* كشف الاحتيال أولاً: صورة مكررة إطلاقاً، أو مرجع تحويلة مستخدم في التزام
+     آخر — علم احتيال يصل المالك، ولا يُحفظ إيصال ولا يتقدم أي تأكيد. */
+  const dupImage = await db.prepare('SELECT id, obligation_id FROM money_receipts WHERE image_hash=?').get(serverHash);
+  const dupRef = exRef ? (await db.prepare(`SELECT id FROM money_obligations WHERE transfer_ref=? AND id!=?`).get(exRef, ob.id)
+    || await db.prepare(`SELECT id FROM money_receipts WHERE extracted_ref=? AND obligation_id!=?`).get(exRef, ob.id)) : null;
+  if (dupImage || dupRef) {
+    await setObligationStatus(ob, ob.status, asUser ? 'user' : 'guest', `اشتباه احتيال: ${dupImage ? 'صورة إيصال مكررة' : 'مرجع تحويلة مستخدم من قبل'}`, { fraud_flag: 1 });
+    await notifyOwner('money_fraud', `🚨 اشتباه احتيال على معاملة ${ob.code}: ${dupImage ? 'نفس صورة الإيصال قُدّمت من قبل' : 'مرجع تحويلة مستخدم في معاملة أخرى'}`, `money:${ob.code}`);
+    return res.status(409).json({ error: 'الإيصال أو مرجع التحويلة مستخدم من قبل — تم إبلاغ الإدارة وستُراجع المعاملة يدوياً', fraud: true });
+  }
+  // حفظ الإيصال (صورته للمالك فقط عند المراجعة) ثم تقييم القواعد الصارمة.
+  const rcInfo = await db.prepare(`INSERT INTO money_receipts (obligation_id,uploader_user_id,guest_token,image,image_hash,extracted_amount,extracted_recipient,extracted_ref,extracted_date,verdict,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,'review',?)`)
+    .run(ob.id, asUser ? viewer.id : null, asGuest ? String(guest_token) : '', String(image), serverHash,
+      exAmount, exRecipient.slice(0, 40), exRef, exDate, now());
+  const failed = [];
+  if (exAmount == null || !isFinite(exAmount) || mround(exAmount) !== mround(ob.exact_amount)) failed.push('amount');
+  if (!recipientMatches(exRecipient)) failed.push('recipient');
+  if (!exRef) failed.push('ref');
+  if (!exDate || now() - exDate > RECEIPT_DATE_WINDOW_MS || exDate > now() + 3600 * 1000) failed.push('date');
+  if (image_hash && String(image_hash).toLowerCase() !== serverHash) failed.push('hash');
+  const attempts = (ob.receipt_attempts || 0) + 1;
+  if (!failed.length) {
+    ob = await setObligationStatus(ob, 'auto_confirmed', 'system', 'تأكيد تلقائي: إيصال مطابق لكل الشروط الصارمة', {
+      transfer_ref: ob.transfer_ref || exRef, receipt_hash: serverHash,
+      receipt_attempts: attempts, decided_at: now(),
+    });
+    await db.prepare(`UPDATE money_receipts SET verdict='auto_confirmed' WHERE id=?`).run(rcInfo.lastInsertRowid);
+    await applyObligationEffect(ob, 'system');
+    const amtTxt = `${mround(ob.exact_amount).toFixed(2)} ${ob.currency}`;
+    if (ob.kind === 'star_subscription') {
+      await notifyOwner('money_auto', `⚡ تفعيل تلقائي — اشتراك ${ob.code} بمبلغ ${amtTxt}`, `money:${ob.code}`);
+    } else {
+      await notifyOwner('money_auto', `⚡ تأكيد تلقائي — عمولة حجز #${ob.booking_id} (${ob.code}) بمبلغ ${amtTxt}`, `money:${ob.code}`);
+      if (ob.payer_user_id) await notify(ob.payer_user_id, 'money_auto', `⚡ اتأكدت عمولة حجزك #${ob.booking_id} تلقائياً من الإيصال`, `booking:${ob.booking_id}`);
+    }
+    return res.json({ verdict: 'auto_confirmed', obligation: obligationView(ob) });
+  }
+  /* أي شرط ناقص/مشكوك: لا تأكيد — المعاملة «مُدّعاة» عند المالك للمراجعة. */
+  const patch = { receipt_attempts: attempts, transfer_ref: ob.transfer_ref || exRef, receipt_hash: serverHash };
+  if (attempts >= RECEIPT_MAX_ATTEMPTS) patch.receipt_locked = 1;
+  ob = await setObligationStatus(ob, 'claimed', asUser ? 'user' : 'guest',
+    `إيصال يحتاج مراجعة المالك (شروط ناقصة: ${failed.join(', ')})${patch.receipt_locked ? ' — قُفل الرفع بعد 5 محاولات' : ''}`, patch);
+  await notifyOwner('money_review', `🧾 إيصال على معاملة ${ob.code} يحتاج مراجعتك (شروط غير مكتملة)`, `money:${ob.code}`);
+  return res.json({ verdict: 'review', failed_checks: failed, locked: !!patch.receipt_locked, obligation: obligationView(ob) });
+});
+
+/* ---------------- لوحة المالك: المعاملات المالية ---------------- */
+async function moneyItemView(ob) {
+  const payer = ob.payer_user_id ? await getUser(ob.payer_user_id) : null;
+  const payeeUser = ob.payee_user_id ? await getUser(ob.payee_user_id) : null;
+  const bk = ob.booking_id ? await getBooking(ob.booking_id) : null;
+  const subUser = ob.user_id ? await getUser(ob.user_id) : null;
+  const receiptCount = (await db.prepare('SELECT COUNT(*) c FROM money_receipts WHERE obligation_id=?').get(ob.id)).c;
+  return {
+    ...obligationView(ob), id: ob.id,
+    base_amount: ob.base_amount, fingerprint_cents: ob.fingerprint_cents,
+    transfer_ref: ob.transfer_ref, fraud_flag: !!ob.fraud_flag,
+    receipt_attempts: ob.receipt_attempts || 0, receipt_locked: !!ob.receipt_locked,
+    receipts: receiptCount, created_at: ob.created_at, decided_at: ob.decided_at,
+    payer_name: payer ? payer.name : (bk ? (bk.guest_name || 'عميل ضيف') : (subUser ? subUser.name : '—')),
+    payee_name: ob.payee === 'owner' ? 'مالك المنصة (عمولات Deal)' : (payeeUser ? payeeUser.name : '—'),
+    subject_name: subUser ? subUser.name : '',
+  };
+}
+app.get('/api/owner/money', auth, ownerOnly, async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM money_obligations ORDER BY created_at DESC, id DESC LIMIT 200').all();
+  res.json({ items: await Promise.all(rows.map(moneyItemView)) });
+});
+/* «وصلني مبلغ…»: المالك يكتب المبلغ بكسوره فيُعرف التزامه فوراً. */
+app.get('/api/owner/money/lookup', auth, ownerOnly, async (req, res) => {
+  const amt = +req.query.amount;
+  if (!isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'اكتب المبلغ برقمين عشريين كما وصلك (مثال 199.43)' });
+  const rows = await db.prepare('SELECT * FROM money_obligations WHERE ABS(exact_amount - ?) < 0.001 ORDER BY created_at DESC LIMIT 10').all(mround(amt));
+  res.json({ items: await Promise.all(rows.map(moneyItemView)) });
+});
+app.get('/api/owner/money/:id', auth, ownerOnly, async (req, res) => {
+  const ob = await getObligation(+req.params.id);
+  if (!ob) return res.status(404).json({ error: 'معاملة غير موجودة' });
+  const ledger = await db.prepare('SELECT * FROM money_ledger WHERE obligation_id=? ORDER BY id ASC').all(ob.id);
+  const receipts = (await db.prepare('SELECT id,extracted_amount,extracted_recipient,extracted_ref,extracted_date,verdict,created_at FROM money_receipts WHERE obligation_id=? ORDER BY id ASC').all(ob.id));
+  res.json({ obligation: await moneyItemView(ob), ledger, receipts });
+});
+/* صورة الإيصال: للمالك فقط لغرض المراجعة — لا تخرج لأي طرف آخر أبداً. */
+app.get('/api/owner/money/:id/receipt', auth, ownerOnly, async (req, res) => {
+  const ob = await getObligation(+req.params.id);
+  if (!ob) return res.status(404).json({ error: 'معاملة غير موجودة' });
+  const rc = await db.prepare('SELECT * FROM money_receipts WHERE obligation_id=? ORDER BY id DESC LIMIT 1').get(ob.id);
+  if (!rc) return res.status(404).json({ error: 'لا إيصال محفوظ لهذه المعاملة' });
+  res.json({ image: rc.image, extracted: { amount: rc.extracted_amount, recipient: rc.extracted_recipient, ref: rc.extracted_ref, date: rc.extracted_date }, verdict: rc.verdict, created_at: rc.created_at });
+});
+app.post('/api/owner/money/:id/confirm', auth, ownerOnly, async (req, res) => {
+  let ob = await getObligation(+req.params.id);
+  if (!ob) return res.status(404).json({ error: 'معاملة غير موجودة' });
+  if (!['open', 'claimed'].includes(ob.status)) return res.status(400).json({ error: 'هذه المعاملة تم البت فيها' });
+  ob = await setObligationStatus(ob, 'confirmed', 'owner', 'أكّد المالك وصول التحويلة من لوحته', { decided_by: req.user.id, decided_at: now() });
+  await applyObligationEffect(ob, 'owner');
+  res.json({ ok: true, obligation: await moneyItemView(ob) });
+});
+app.post('/api/owner/money/:id/reject', auth, ownerOnly, async (req, res) => {
+  let ob = await getObligation(+req.params.id);
+  if (!ob) return res.status(404).json({ error: 'معاملة غير موجودة' });
+  if (!['open', 'claimed'].includes(ob.status)) return res.status(400).json({ error: 'هذه المعاملة تم البت فيها' });
+  const reason = String((req.body || {}).reason || 'التحويلة لم تصل فعلياً').slice(0, 300);
+  ob = await setObligationStatus(ob, 'rejected', 'owner', `رفض المالك: ${reason}`, { decided_by: req.user.id, decided_at: now() });
+  if (ob.kind === 'star_subscription') {
+    const sub = await db.prepare(`SELECT * FROM star_subscriptions WHERE obligation_id=? AND status='pending' ORDER BY id DESC LIMIT 1`).get(ob.id);
+    if (sub) {
+      await db.prepare(`UPDATE star_subscriptions SET status='rejected', decided_at=?, decided_by=?, reject_reason=? WHERE id=?`).run(now(), req.user.id, reason, sub.id);
+      await notify(sub.user_id, 'star_rejected', `اشتراك «نجم Deal» لم يُفعَّل: ${reason} — راجع مرجع التحويلة واشترك من جديد`, 'star');
+    }
+  }
+  res.json({ ok: true, obligation: await moneyItemView(ob) });
+});
+/* إلغاء تأكيد (تلقائي أو يدوي): تُسحب المزايا/تتراجع الخطوة + تجميد اختياري للدافع. */
+app.post('/api/owner/money/:id/revoke', auth, ownerOnly, async (req, res) => {
+  let ob = await getObligation(+req.params.id);
+  if (!ob) return res.status(404).json({ error: 'معاملة غير موجودة' });
+  if (!['auto_confirmed', 'confirmed'].includes(ob.status)) return res.status(400).json({ error: 'لا يوجد تأكيد قابل للإلغاء' });
+  const freezePayer = !!(req.body || {}).freeze_payer;
+  if (ob.kind === 'star_subscription') {
+    const sub = await db.prepare(`SELECT * FROM star_subscriptions WHERE obligation_id=? AND status='active' ORDER BY id DESC LIMIT 1`).get(ob.id);
+    if (sub) {
+      await db.prepare(`UPDATE star_subscriptions SET status='rejected', decided_at=?, decided_by=?, reject_reason=? WHERE id=?`)
+        .run(now(), req.user.id, 'أُلغي التأكيد — التحويلة لم تصل فعلياً', sub.id);
+      await notify(sub.user_id, 'star_rejected', 'أُلغي تفعيل اشتراك «نجم Deal» — التحويلة لم تصل فعلياً. لو حوّلت فعلاً تواصل مع الدعم بإيصالك', 'star');
+    }
+  } else if (ob.kind === 'booking_commission') {
+    const b = await getBooking(ob.booking_id);
+    if (b && b.fee_status === 'confirmed' && b.status === 'awaiting_deposit') {
+      await db.prepare(`UPDATE payments SET status='revoked' WHERE booking_id=? AND kind='fee'`).run(b.id);
+      await db.prepare(`UPDATE bookings SET fee_status='none', fee_ref='', fee_confirmed_at=0, status='awaiting_fee' WHERE id=?`).run(b.id);
+      await notify(b.talent_id, 'booking', `حجز #${b.id}: أُلغي تأكيد العمولة — رجعت خطوة العمولة`, `booking:${b.id}`);
+      if (b.client_id) await notify(b.client_id, 'booking', `حجز #${b.id}: أُلغي تأكيد العمولة — أعد خطوة العمولة`, `booking:${b.id}`);
+    }
+  }
+  ob = await setObligationStatus(ob, 'revoked', 'owner', 'ألغى المالك التأكيد — التحويلة لم تصل فعلياً', { decided_by: req.user.id, decided_at: now() });
+  if (freezePayer && ob.payer_user_id) {
+    await db.prepare('UPDATE users SET frozen=1 WHERE id=?').run(ob.payer_user_id);
+    await notify(ob.payer_user_id, 'penalty', 'تم تجميد حسابك بعد إلغاء تأكيد تحويلة — تواصل مع الدعم لو فيه خطأ', '');
+  }
+  res.json({ ok: true, obligation: await moneyItemView(ob) });
 });
 
 /* ---------------- creator stats ---------------- */

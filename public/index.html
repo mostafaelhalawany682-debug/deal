@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deal — الشغل هو اللي بيدوّر عليك</title>
+<meta name="description" content="سوق يربط صناع المحتوى الصغار بمحلات وبراندات مدينتهم — بحجز محمي وضمان Deal.">
+<meta name="theme-color" content="#07271d">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<style>
+:root{--bg:#07271d;--bg2:#0a2f23;--card:#0d3527;--line:#1c4d3a;--txt:#f2f7f4;--mut:#9fc4b2;
+--em:#0e9f6e;--or:#e8720c;--gold:#d4a017;--grad:linear-gradient(90deg,#0e9f6e,#e8720c,#d4a017)}
+*{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--txt)}
+a{color:var(--gold)}button{cursor:pointer;font-family:inherit}
+.grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.btn{border:0;border-radius:12px;padding:11px 20px;font-weight:700;background:var(--grad);color:#fff;font-size:15px}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+.btn.sm{padding:7px 13px;font-size:13px;border-radius:9px}
+.btn:disabled{opacity:.5}
+header{position:sticky;top:0;z-index:20;background:rgba(7,39,29,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.hwrap{max-width:1150px;margin:auto;display:flex;align-items:center;gap:14px;padding:10px 16px}
+.logo{display:flex;align-items:center;gap:9px;font-weight:900;font-size:21px}
+.logo img{width:34px;height:34px;border-radius:9px}
+nav{display:flex;gap:4px;flex-wrap:wrap;margin-inline-start:8px}
+nav button{background:none;border:0;color:var(--mut);padding:8px 11px;border-radius:9px;font-size:14.5px}
+nav button.on{background:var(--card);color:var(--txt);border:1px solid var(--line)}
+.sp{flex:1}.bell{position:relative;background:none;border:0;font-size:20px}
+.bell b{position:absolute;top:-4px;inset-inline-start:-4px;background:#e03131;color:#fff;font-size:11px;border-radius:50%;min-width:18px;height:18px;display:grid;place-items:center}
+.hero{max-width:1150px;margin:auto;padding:56px 16px 30px;text-align:center}
+.hero h1{font-size:clamp(28px,5.4vw,50px);line-height:1.25;margin:0 0 10px}
+.hero p{color:var(--mut);font-size:17px;margin:0 0 22px}
+.wrap{max-width:1150px;margin:auto;padding:10px 16px 60px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.card h3{margin:6px 0 4px;font-size:17px}
+.mut{color:var(--mut);font-size:13.5px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12.5px;color:var(--mut)}
+.price{font-weight:800;color:var(--gold)}
+.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:26px 0}
+.seal{width:22px;height:22px;vertical-align:-5px}
+input,select,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;margin:5px 0 11px;font-family:inherit}
+label{font-size:13.5px;color:var(--mut)}
+dialog{background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:18px;max-width:560px;width:94%;padding:22px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.step{border-inline-start:3px solid var(--line);padding:8px 12px;margin:9px 0;background:var(--card);border-radius:8px}
+.step.done{border-color:var(--em)}.step.open{border-color:var(--gold)}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{border-bottom:1px solid var(--line);padding:8px;text-align:start}
+.toast{position:fixed;bottom:18px;inset-inline-start:50%;transform:translateX(50%);background:#123f2e;border:1px solid var(--gold);padding:11px 18px;border-radius:12px;z-index:50;display:none}
+.badge-ic{width:20px;height:20px;border-radius:50%;display:inline-grid;place-items:center;font-size:11px;color:#fff;vertical-align:-4px}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi .card{text-align:center}.kpi .n{font-size:26px;font-weight:900}
+.guarantee{border:1px dashed var(--gold);border-radius:14px;padding:13px 16px;margin:16px 0;background:rgba(212,160,23,.06)}
+footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;color:var(--mut);font-size:13.5px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header><div class="hwrap">
+  <div class="logo"><img src="/icons/icon-192.png" alt="Deal"><span>Deal</span></div>
+  <nav id="nav">
+    <button data-tab="market" class="on">السوق</button>
+    <button data-tab="services">الخدمات</button>
+    <button data-tab="campaigns">الحملات</button>
+    <button data-tab="opps" data-auth>فرص ليك</button>
+    <button data-tab="bookings" data-auth>حجوزاتي</button>
+    <button data-tab="dash" data-auth>لوحتي</button>
+    <button data-tab="owner" id="ownerTab" class="hide">لوحة المالك</button>
+  </nav>
+  <div class="sp"></div>
+  <button class="bell" id="bellBtn" title="التنبيهات">🔔<b id="bellCount" class="hide">0</b></button>
+  <button class="btn ghost sm" id="langBtn">EN</button>
+  <span id="authArea"><button class="btn sm" onclick="openAuth()">دخول / تسجيل</button></span>
+</div></header>
+
+<section class="hero">
+  <h1>انتهى زمن اللف على الشغل…<br><span class="grad-text">الشغل هو اللي بيدوّر عليك</span></h1>
+  <p>فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.</p>
+  <div class="row" style="justify-content:center">
+    <button class="btn" onclick="openAuth('creator')">سجّل كصانع</button>
+    <button class="btn ghost" onclick="showTab('market')">تصفح السوق</button>
+    <button class="btn ghost" id="installBtn" style="display:none">ثبّت Deal على موبايلك</button>
+  </div>
+  <div class="why wrap" style="padding-bottom:0">
+    <div class="card"><h3>فرص بتيجي لك</h3><div class="mut">طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.</div></div>
+    <div class="card"><h3>سمعة موثقة بتكبر</h3><div class="mut">تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.</div></div>
+    <div class="card"><h3>قبض محمي بضمان Deal</h3><div class="mut">دفع على مراحل، عمولة التطبيق أولاً، وإثبات تنفيذ يحمي الطرفين.</div></div>
+  </div>
+</section>
+
+<main class="wrap">
+  <!-- MARKET -->
+  <section id="tab-market">
+    <div class="row">
+      <input id="q" placeholder="ابحث باسم، مجال، مدينة…" style="max-width:320px">
+      <select id="fNiche" style="max-width:190px"><option value="">كل المجالات</option></select>
+      <select id="fCity" style="max-width:170px"><option value="">كل المدن</option></select>
+      <button class="btn sm" onclick="loadMarket()">بحث</button>
+    </div>
+    <div class="grid" id="marketGrid" style="margin-top:14px"></div>
+    <div class="guarantee">🛡️ <b>ضمان Deal:</b> كل حجز هنا «حجز محمي بضمان Deal» — دفع مرحلي موثق، وبديل موثّق من نفس مدينتك ومجالك لو المنفذ أخلّ.</div>
+    <h3>طلبات محلات مفتوحة</h3>
+    <div class="grid" id="reqGrid"></div>
+  </section>
+
+  <!-- SERVICES -->
+  <section id="tab-services" class="hide">
+    <h3>خدمات متكاملة — بنفس حماية Deal</h3>
+    <div class="row"><button class="btn sm" onclick="loadServices('ads')">إدارة إعلانات ممولة</button>
+    <button class="btn ghost sm" onclick="loadServices('support')">حلول مشاكل الحسابات</button></div>
+    <div class="grid" id="svcGrid" style="margin-top:14px"></div>
+  </section>
+
+  <!-- CAMPAIGNS -->
+  <section id="tab-campaigns" class="hide">
+    <div class="row"><h3 style="margin:0">حملات البراندات</h3><div class="sp"></div>
+    <button class="btn sm" data-auth onclick="openCampaign()">+ حملة جديدة</button></div>
+    <div class="grid" id="campGrid" style="margin-top:14px"></div>
+  </section>
+
+  <!-- OPPORTUNITIES -->
+  <section id="tab-opps" class="hide">
+    <h3>فرص ليك — مطابقة تلقائية لملفك</h3>
+    <div id="oppList"></div>
+  </section>
+
+  <!-- BOOKINGS -->
+  <section id="tab-bookings" class="hide">
+    <h3>حجوزاتي</h3>
+    <div id="bookList"></div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="tab-dash" class="hide">
+    <div id="dashBody"></div>
+  </section>
+
+  <!-- OWNER -->
+  <section id="tab-owner" class="hide">
+    <h3>لوحة المالك</h3>
+    <div id="ownerBody"></div>
+  </section>
+</main>
+
+<footer>Deal — منصة صناع المحتوى والمحلات المحلية · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal</footer>
+<div class="toast" id="toast"></div>
+
+<dialog id="authDlg"><form method="dialog">
+  <h3 id="authTitle">تسجيل حساب جديد</h3>
+  <div class="row"><button type="button" class="btn ghost sm" onclick="authMode('register')">تسجيل</button>
+  <button type="button" class="btn ghost sm" onclick="authMode('login')">دخول</button></div>
+  <div id="regFields">
+    <label>الاسم</label><input id="aName">
+    <label>أنا…</label><select id="aRole" onchange="roleFx()">
+      <option value="creator">صانع محتوى</option><option value="provider">مقدم خدمة</option>
+      <option value="shop">محل</option><option value="brand">براند</option></select>
+    <div id="provCat" class="hide"><label>فئة الخدمة</label><select id="aProvCat">
+      <option value="ads">إدارة إعلانات ممولة</option><option value="support">حلول مشاكل الحسابات</option></select></div>
+    <label>المجال / التخصص</label><input id="aNiche" placeholder="كوميديا، طبخ، مراجعات…">
+    <div class="row"><div style="flex:1"><label>المدينة</label><input id="aCity"></div>
+    <div style="flex:1"><label>الدولة</label><select id="aCountry"><option>EG</option><option>SA</option><option>AE</option><option>US</option></select></div>
+    <div style="flex:1"><label>العملة</label><select id="aCurr"><option>EGP</option><option>SAR</option><option>AED</option><option>USD</option></select></div></div>
+    <label>عدد المتابعين (للصناع)</label><input id="aFollowers" type="number" value="0">
+    <label>سعرك المعلن لفيديو/خدمة</label><input id="aPrice" type="number" value="0">
+    <label>روابط حساباتك العلنية (للتوثيق)</label><input id="aLinks" placeholder="https://…">
+  </div>
+  <label>رقم الهاتف أو الإيميل (هو وسيلة الدخول)</label><input id="aContact" placeholder="01xxxxxxxxx أو you@mail.com">
+  <div class="row"><button type="button" class="btn" onclick="doAuth()">متابعة</button>
+  <button class="btn ghost">إغلاق</button></div>
+</form></dialog>
+
+<dialog id="bookDlg"><div id="bookBody"></div></dialog>
+<dialog id="talentDlg"><div id="talentBody"></div></dialog>
+<dialog id="campDlg"><form method="dialog"><h3>حملة براند جديدة</h3>
+  <label>العنوان</label><input id="cTitle"><label>البريف</label><textarea id="cBrief"></textarea>
+  <label>المجال</label><input id="cNiche"><label>المدينة</label><input id="cCity">
+  <label>الميزانية</label><input id="cBudget" type="number">
+  <div class="row"><button type="button" class="btn" onclick="doCampaign()">نشر الحملة</button><button class="btn ghost">إغلاق</button></div>
+</form></dialog>
+<dialog id="reqDlg"><form method="dialog"><h3>طلب محل جديد</h3>
+  <label>العنوان</label><input id="rTitle"><label>المجال المطلوب</label><input id="rNiche">
+  <label>الميزانية</label><input id="rBudget" type="number"><label>تفاصيل</label><textarea id="rDetails"></textarea>
+  <div class="row"><button type="button" class="btn" onclick="doRequest()">نشر الطلب</button><button class="btn ghost">إغلاق</button></div>
+</form></dialog>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let ME=null, TOKEN=localStorage.getItem('deal_token')||'';
+const api=async(p,o={})=>{const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{})}});
+  const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'خطأ'); return j;};
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3200)}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+const SEAL={founder:'👑',verified:'✔️'};
+function seal(u){if(u.is_platform_founder)return ' <span title="مؤسس Deal">👑</span>';
+  if(u.verified)return ' <span title="موثّق Deal" style="color:var(--gold)">✔️</span>';return ''}
+function badgeDots(u){return (u.badges||[]).map(k=>`<span class="badge-ic" style="background:#1c4d3a" title="${k}">🏅</span>`).join(' ')}
+function talentCard(u){return `<div class="card">
+  <div class="row"><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>${u.pioneer?'<span class="chip">رائد المدينة</span>':''}${u.is_founder_member?'<span class="chip">عضو مؤسس</span>':''}</div>
+  <div class="mut">${esc(u.niche||u.provider_category||'')} · ${esc(u.city)} · ${u.followers||0} متابع</div>
+  <div class="row" style="margin:7px 0"><span class="chip">إتمام ${u.completion_rate}%</span>
+  <span class="chip">⭐ ${u.avg_stars??'—'} (${u.positive_pct??'—'}% إيجابي)</span>${badgeDots(u)}</div>
+  <div class="row"><span class="price">${u.price} ${u.currency}</span><div class="sp"></div>
+  <button class="btn ghost sm" onclick="openTalent(${u.id})">الملف</button>
+  <button class="btn sm" onclick="quickBook(${u.id})">احجز</button></div></div>`}
+
+async function loadMarket(){
+  const q=encodeURIComponent($('#q').value||''), n=encodeURIComponent($('#fNiche').value||''), c=encodeURIComponent($('#fCity').value||'');
+  const d=await api(`/api/directory?q=${q}&niche=${n}&city=${c}`);
+  $('#marketGrid').innerHTML=d.items.length?d.items.map(talentCard).join(''):'<div class="mut">السوق فاضي لسه — كن أول صانع يسجل.</div>';
+  const niches=[...new Set(d.items.map(i=>i.niche).filter(Boolean))], cities=[...new Set(d.items.map(i=>i.city).filter(Boolean))];
+  $('#fNiche').innerHTML='<option value="">كل المجالات</option>'+niches.map(x=>`<option>${esc(x)}</option>`).join('');
+  $('#fCity').innerHTML='<option value="">كل المدن</option>'+cities.map(x=>`<option>${esc(x)}</option>`).join('');
+  const r=await api('/api/requests');
+  $('#reqGrid').innerHTML=r.items.map(x=>`<div class="card"><h3>${esc(x.title)}</h3>
+    <div class="mut">${esc(x.shop_name)} · ${esc(x.niche)} · ${esc(x.city)}</div>
+    <div class="row"><span class="price">${x.budget} ${x.currency}</span><div class="sp"></div>
+    ${ME&&ME.user.role==='shop'?'' : ''}<button class="btn ghost sm" onclick="document.querySelector('[data-tab=opps]').click()">شوف فرصك</button></div></div>`).join('')
+    +(ME&&ME.user.role==='shop'?'<div class="card"><h3>+ عندك شغلانة؟</h3><button class="btn sm" onclick="document.getElementById(\'reqDlg\').showModal()">انشر طلب</button></div>':'');
+}
+async function loadServices(cat){
+  const d=await api('/api/directory?role=provider');
+  const items=d.items.filter(i=>i.provider_category===cat);
+  $('#svcGrid').innerHTML=items.length?items.map(talentCard).join(''):'<div class="mut">لا يوجد مقدمو خدمة في هذه الفئة بعد.</div>';
+}
+async function loadCampaigns(){
+  const d=await api('/api/campaigns');
+  $('#campGrid').innerHTML=d.items.length?d.items.map(c=>`<div class="card"><h3>${esc(c.title)}</h3>
+    <div class="mut">${esc(c.brand_name)} · ${esc(c.niche)} · ${esc(c.city)}</div><p class="mut">${esc(c.brief)}</p>
+    <div class="row"><span class="price">${c.budget} ${c.currency}</span><div class="sp"></div>
+    ${ME&&ME.user.role==='creator'?`<button class="btn sm" onclick="applyCamp(${c.id})">قدّم</button>
+    <button class="btn ghost sm" onclick="viewApps(${c.id})">متقدمون</button>`:''}
+    ${ME&&ME.user.id===c.brand_user_id?`<button class="btn ghost sm" onclick="viewApps(${c.id})">المتقدمون</button>`:''}</div></div>`).join('')
+    :'<div class="mut">لا حملات مفتوحة بعد.</div>';
+}
+async function loadOpps(){
+  if(!ME) return;
+  const d=await api('/api/opportunities');
+  $('#oppList').innerHTML=d.items.length?d.items.map(o=>`<div class="card" style="margin-bottom:10px">
+    <div class="row"><h3 style="margin:0">${esc(o.title)}</h3><span class="chip">مطابقة ${o.score}%</span>
+    <span class="chip">${o.kind==='campaign'?'حملة براند':'طلب محل'}</span></div>
+    <div class="mut">${(o.reasons||[]).join(' · ')} · ${esc(o.city)} · ${esc(o.niche)}</div>
+    <div class="row"><span class="price">${o.budget} ${o.currency}</span><div class="sp"></div>
+    ${o.kind==='campaign'?`<button class="btn sm" onclick="applyCamp(${o.id})">قدّم عليها</button>`:''}</div></div>`).join('')
+    :'<div class="mut">لا فرص مطابقة لملفك الآن — حدّث مدينتك ومجالك وحدّك الأدنى للسعر من لوحتك.</div>';
+}
+const STAGES=['pending_agreement','awaiting_fee','awaiting_deposit','in_progress','proof_submitted','awaiting_rest','completed'];
+const STAGE_AR={pending_agreement:'اتفاق الطرفين',awaiting_fee:'عمولة Deal أولاً',awaiting_deposit:'عربون الصانع',in_progress:'التنفيذ',proof_submitted:'إثبات التنفيذ',awaiting_rest:'باقي القبض',completed:'اكتمل القبض',disputed:'نزاع مفتوح',cancelled:'ملغي'};
+async function loadBookings(){
+  if(!ME) return;
+  const d=await api('/api/bookings');
+  $('#bookList').innerHTML=d.items.length?d.items.map(b=>`<div class="card" style="margin-bottom:10px">
+    <div class="row"><h3 style="margin:0">#${b.id} ${esc(b.title)}</h3><span class="chip">${STAGE_AR[b.status]||b.status}</span>
+    <span class="chip">🛡️ حجز محمي بضمان Deal</span></div>
+    <div class="mut">العميل: ${esc(b.client.name)} · المنفذ: ${esc(b.talent.name)} · الإجمالي ${b.price} ${b.currency} (العمولة ${b.fee} أولاً، والصافي ${b.net} على دفعتين ${b.deposit}+${b.rest})</div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="openBooking(${b.id})">فتح الحجز</button>
+    ${b.talent.phone?`<a class="btn ghost sm" target="_blank" href="https://wa.me/${String(b.talent.phone||'').replace(/\D/g,'')}?text=${encodeURIComponent('جالك شغل جديد على Deal — حجز #'+b.id)}">📱 نبّه الصانع واتساب</a>`:''}</div></div>`).join('')
+    :'<div class="mut">لا حجوزات بعد.</div>';
+}
+async function openBooking(id){
+  const {booking:b}=await api('/api/bookings/'+id);
+  const meId=ME.user.id, isClient=b.client_id===meId, isTalent=b.talent_id===meId;
+  const step=(key,label,state,inner)=>`<div class="step ${state}"><b>${label}</b>${inner||''}</div>`;
+  let h=`<h3>حجز #${b.id} — ${esc(b.title)}</h3><div class="mut">🛡️ حجز محمي بضمان Deal · الحالة: ${STAGE_AR[b.status]||b.status}</div>`;
+  h+=step('agree','١) اتفاق الطرفين',b.status!=='pending_agreement'?'done':(isClient||isTalent?'open':''),
+    b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">العميل ${b.agreed_client?'✔ وافق':'بانتظار'}</span><span class="chip">المنفذ ${b.agreed_talent?'✔ وافق':'بانتظار'}</span>
+    ${((isClient&&!b.agreed_client)||(isTalent&&!b.agreed_talent))?`<button class="btn sm" onclick="act(${b.id},'agree')">أوافق</button>`:''}</div>`:'');
+  h+=step('fee','٢) عمولة Deal أولاً — '+b.fee+' '+b.currency, b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'&&isClient?'open':''),
+    b.status==='awaiting_fee'&&isClient?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="feeInfo(${b.id})">إظهار حساب عمولات Deal</button> <span id="feeInfo"></span>
+    <input id="feeRef" placeholder="مرجع عملية التحويل"><button class="btn sm" onclick="pay(${b.id},'fee','feeRef')">سجلت التحويل — تأكيد تلقائي</button></div>`
+    :(b.fee_status==='confirmed'?'<div class="mut">اتأكدت تلقائياً ✓</div>':''));
+  h+=step('dep','٣) عربون المنفذ — '+b.deposit+' '+b.currency, ['in_progress','proof_submitted','awaiting_rest','completed'].includes(b.status)?'done':(b.status==='awaiting_deposit'&&isClient?'open':''),
+    b.status==='awaiting_deposit'&&isClient?`<input id="depRef" placeholder="مرجع تحويل العربون للمنفذ"><button class="btn sm" onclick="pay(${b.id},'deposit','depRef')">سجلت التحويل</button>`:'');
+  h+=step('proof','٤) إثبات التنفيذ', ['awaiting_rest','completed'].includes(b.status)?'done':(b.status==='in_progress'&&isTalent?'open':''),
+    b.status==='in_progress'&&isTalent?`<input id="proofUrl" placeholder="رابط العمل المنشور علناً"><button class="btn sm" onclick="proof(${b.id})">إرسال الإثبات (يتحقق منه التطبيق)</button>`
+    :(b.proof_url?`<div class="mut">الإثبات: <a target="_blank" href="${esc(b.proof_url)}">${esc(b.proof_url)}</a> — ${b.proof_check==='verified'?'✔ تم التحقق وخُتم بوقته':''}</div>`:''));
+  if(b.status==='proof_submitted'&&isClient) h+=`<div class="step open"><b>أكد الاستلام</b><div class="mut">لو ما رديتش خلال 48 ساعة من الإثبات، الاستلام بيتأكد تلقائياً حمايةً للمنفذ.</div><button class="btn sm" onclick="act(${b.id},'confirm-receipt')">أكدت الاستلام</button></div>`;
+  h+=step('rest','٥) باقي القبض — '+b.rest+' '+b.currency, b.status==='completed'?'done':(b.status==='awaiting_rest'&&isClient?'open':''),
+    b.status==='awaiting_rest'&&isClient?`<input id="restRef" placeholder="مرجع تحويل الباقي"><button class="btn sm" onclick="pay(${b.id},'rest','restRef')">سجلت التحويل</button>`:'');
+  if(b.status==='completed') h+=`<div class="step done"><b>اكتمل القبض ✓</b>${b.can_review?`<div style="margin-top:7px"><div class="row"><select id="rvS" style="max-width:150px"><option value="positive">إيجابي 👍</option><option value="negative">سلبي 👎</option></select>
+    <select id="rvStars" style="max-width:110px"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
+    <input id="rvC" placeholder="تعليق (اختياري)"><button class="btn sm" onclick="review(${b.id})">إرسال التقييم (مرة واحدة، بلا تعديل)</button></div>`:'<div class="mut">قيّمت هذا الحجز ✓</div>'}</div>`;
+  if(!['completed','cancelled','disputed'].includes(b.status)) h+=`<div class="row" style="margin-top:10px"><button class="btn ghost sm" onclick="dispute(${b.id})">فتح نزاع</button></div>`;
+  if(b.status==='disputed'&&b.alternatives&&b.alternatives.length) h+=`<div class="guarantee">ضمان Deal — بدائل موثقة من نفس المدينة والمجال: ${b.alternatives.map(a=>esc(a.name)).join('، ')}</div>`;
+  h+=`<div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="document.getElementById('bookDlg').close()">إغلاق</button></div>`;
+  $('#bookBody').innerHTML=h; $('#bookDlg').showModal();
+}
+async function act(id,a){try{await api(`/api/bookings/${id}/${a}`,{method:'POST',body:'{}'});toast('تم');openBooking(id);loadBookings()}catch(e){toast(e.message)}}
+async function pay(id,kind,inputId){const ref=document.getElementById(inputId).value.trim();if(!ref)return toast('اكتب مرجع العملية');
+  try{await api(`/api/bookings/${id}/pay`,{method:'POST',body:JSON.stringify({kind,ref})});toast('اتسجلت الدفعة');openBooking(id);loadBookings()}catch(e){toast(e.message)}}
+async function feeInfo(id){try{const f=await api(`/api/bookings/${id}/fee-info`);
+  document.getElementById('feeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`}catch(e){toast(e.message)}}
+async function proof(id){const url=document.getElementById('proofUrl').value.trim();
+  try{await api(`/api/bookings/${id}/proof`,{method:'POST',body:JSON.stringify({url})});toast('الإثبات اتختم ✓');openBooking(id);loadBookings()}catch(e){toast(e.message)}}
+async function review(id){try{await api(`/api/bookings/${id}/review`,{method:'POST',body:JSON.stringify({sentiment:$('#rvS').value,stars:+$('#rvStars').value,comment:$('#rvC').value})});toast('اتسجل تقييمك');openBooking(id)}catch(e){toast(e.message)}}
+async function dispute(id){const reason=prompt('سبب النزاع؟')||'';try{await api(`/api/bookings/${id}/dispute`,{method:'POST',body:JSON.stringify({reason})});toast('اتفتح النزاع — الإدارة هتراجعه');openBooking(id);loadBookings()}catch(e){toast(e.message)}}
+async function quickBook(talentId){if(!ME)return openAuth();
+  try{const r=await api('/api/bookings',{method:'POST',body:JSON.stringify({talent_id:talentId})});toast('اتفتح الحجز #'+r.booking.id);showTab('bookings')}catch(e){toast(e.message)}}
+async function openTalent(id){const d=await api('/api/talent/'+id);const u=d.user;
+  $('#talentBody').innerHTML=`<h3>${esc(u.name)}${seal(u)}</h3>
+  <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · عضو منذ ${new Date(u.member_since).toLocaleDateString('ar-EG')}</div>
+  <div class="row" style="margin:8px 0"><span class="chip">صفقات مكتملة ${d.stats.completed_deals}</span><span class="chip">إتمام ${d.stats.completion_rate}%</span><span class="chip">إيجابي ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span></div>
+  <p>${esc(u.bio||'')}</p>
+  <h4>خزانة الشارات</h4>${d.badges.map(b=>`<div class="row"><span class="badge-ic" style="background:${b.earned?b.color:'#444'}">🏅</span><span>${b.name}</span><span class="mut">${b.earned?'مكتسبة ✓':b.progress}</span></div>`).join('')}
+  <h4>معرض الأعمال</h4>${u.portfolio&&u.portfolio.length?u.portfolio.map(l=>`<div><a target="_blank" href="${esc(l)}">${esc(l)}</a></div>`).join(''):'<div class="mut">لا أعمال منشورة بعد.</div>'}
+  <h4>أحدث تقييمات العملاء</h4>${d.reviews.length?d.reviews.map(r=>`<div class="step">${r.sentiment==='positive'?'👍':'👎'} ⭐${r.stars} — ${esc(r.comment||'')} <span class="mut">(${esc(r.reviewer_name)})</span></div>`).join(''):'<div class="mut">لا تقييمات بعد.</div>'}
+  <div class="row" style="margin-top:12px"><button class="btn sm" onclick="quickBook(${u.id})">احجز بـ ${u.price} ${u.currency}</button>
+  <button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">إغلاق</button></div>`;
+  $('#talentDlg').showModal();}
+
+async function loadDash(){
+  if(!ME) return;
+  const [me,stats]=await Promise.all([api('/api/me'),api('/api/my/stats')]);
+  const u=me.user;
+  $('#dashBody').innerHTML=`<div class="row"><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
+  ${u.is_platform_founder?'<span class="chip">مؤسس Deal 👑</span>':''}${u.is_founder_member?'<span class="chip">عضو مؤسس</span>':''}${u.pioneer?'<span class="chip">رائد المدينة</span>':''}
+  <span class="chip">حالتك: ${u.penalty_level==='none'?'سليم':u.penalty_level}${u.frozen?' · الرصيد مجمّد':''}</span></div>
+  <div class="kpi" style="margin:14px 0">
+    <div class="card"><div class="n">${stats.views}</div><div class="mut">مشاهدات ملفك</div></div>
+    <div class="card"><div class="n">${stats.opportunities_open}</div><div class="mut">فرص مفتوحة الآن</div></div>
+    <div class="card"><div class="n">${stats.conversion}%</div><div class="mut">تحويل حجوزاتك لصفقات</div></div>
+    <div class="card"><div class="n">${stats.earnings_total}</div><div class="mut">أرباحك المقبوضة</div></div>
+    <div class="card"><div class="n">${stats.record.completed_deals}</div><div class="mut">صفقات مكتملة</div></div>
+  </div>
+  <div class="card"><h3>التوثيق الآلي</h3><div class="mut">الحالة: ${me.verify_status}</div>
+    ${me.verify_status!=='verified'?`<button class="btn sm" onclick="vReq()">١) اطلب كود الملكية</button>
+    <div id="vCode" class="mut" style="margin:6px 0">${me.verify_code?'كودك الحالي: <b>'+me.verify_code+'</b> — حطه في بايو حسابك العلني':''}</div>
+    <input id="vUrl" placeholder="٢) رابط حسابك العلني بعد وضع الكود">
+    <button class="btn sm" onclick="vCheck()">٣) افحص دلوقتي</button>`:'<div>حسابك موثّق ✔️ بشارة Deal الذهبية</div>'}</div>
+  <div class="card" style="margin-top:12px"><h3>تفضيلات الفرص</h3>
+    <label>الحد الأدنى للسعر في «فرص ليك»</label><input id="prefMin" type="number" value="${''}">
+    <button class="btn sm" onclick="savePrefs()">حفظ</button>
+    <button class="btn ghost sm" onclick="document.querySelector('[data-tab=opps]').click()">افتح فرص ليك</button></div>
+  ${u.role==='shop'?'<div class="card" style="margin-top:12px"><h3>عندك شغلانة؟</h3><button class="btn sm" onclick="document.getElementById(\'reqDlg\').showModal()">انشر طلب محل</button></div>':''}`;
+}
+async function vReq(){try{const r=await api('/api/verify/request',{method:'POST',body:'{}'});
+  document.getElementById('vCode').innerHTML='كودك: <b>'+r.code+'</b> — '+r.instructions}catch(e){toast(e.message)}}
+async function vCheck(){try{const r=await api('/api/verify/check',{method:'POST',body:JSON.stringify({url:$('#vUrl').value.trim()})});
+  toast(r.status==='verified'?'مبروك! بقيت موثّق ✔️':(r.status==='exceptional'?'راحت لمراجعة استثنائية':'اترفضت: '+(r.reason||'')));loadDash()}catch(e){toast(e.message)}}
+async function savePrefs(){try{await api('/api/me/prefs',{method:'POST',body:JSON.stringify({min_price_pref:+$('#prefMin').value||0})});toast('اتحفظ')}catch(e){toast(e.message)}}
+
+async function loadOwner(){
+  const d=await api('/api/owner/dashboard');
+  $('#ownerBody').innerHTML=`<div class="kpi">
+    <div class="card"><div class="n">${d.commissions.today}</div><div class="mut">عمولات اليوم</div></div>
+    <div class="card"><div class="n">${d.commissions.month}</div><div class="mut">عمولات الشهر</div></div>
+    <div class="card"><div class="n">${d.commissions.total}</div><div class="mut">إجمالي العمولات</div></div>
+    <div class="card"><div class="n">${d.platform.creators}</div><div class="mut">صناع (${d.platform.founders} مؤسسون · ${d.platform.verified} موثقون)</div></div>
+    <div class="card"><div class="n">${d.platform.completed}/${d.platform.bookings}</div><div class="mut">صفقات مكتملة/الكل</div></div></div>
+  <h4>النزاعات المفتوحة</h4>${d.disputes.length?d.disputes.map(x=>`<div class="step">حجز #${x.booking_id} — ${esc(x.reason)} <button class="btn sm" onclick="resolveD(${x.id},'restore')">حل وإرجاع الحجز</button> <button class="btn ghost sm" onclick="resolveD(${x.id},'cancel')">حل وإلغاء</button></div>`).join(''):'<div class="mut">لا نزاعات.</div>'}
+  <h4>مراجعات توثيق استثنائية</h4>${d.exceptional.length?d.exceptional.map(x=>`<div class="step">${esc(x.name)} — ${esc(x.city)}/${esc(x.niche)} <a target="_blank" href="${esc(x.verify_url)}">الرابط</a> <button class="btn sm" onclick="vExc(${x.id},true)">قبول</button> <button class="btn ghost sm" onclick="vExc(${x.id},false)">رفض</button></div>`).join(''):'<div class="mut">لا طلبات.</div>'}
+  <h4>حسابات معاقبة/مجمدة</h4>${d.penalized.length?d.penalized.map(x=>`<div class="step">${esc(x.name)} — ${x.penalty_level}${x.frozen?' · مجمّد':''}${x.banned?' · محظور':''} <button class="btn sm" onclick="pen(${x.id})">فك التجميد ورفع العقوبة</button></div>`).join(''):'<div class="mut">لا حسابات معاقبة.</div>'}`;
+}
+async function resolveD(id,a){await api(`/api/owner/disputes/${id}/resolve`,{method:'POST',body:JSON.stringify({action:a})});toast('اتحل');loadOwner()}
+async function vExc(id,ok){await api(`/api/owner/verify-exceptional/${id}`,{method:'POST',body:JSON.stringify({approve:ok})});toast('تم');loadOwner()}
+async function pen(id){await api(`/api/owner/users/${id}/penalty`,{method:'POST',body:JSON.stringify({level:'none',frozen:false})});toast('اترفعت العقوبة');loadOwner()}
+
+async function applyCamp(id){try{await api(`/api/campaigns/${id}/apply`,{method:'POST',body:JSON.stringify({pitch:''})});toast('قدمت ✓')}catch(e){toast(e.message)}}
+async function viewApps(id){try{const d=await api(`/api/campaigns/${id}/applications`);
+  alert(d.items.length?d.items.map(a=>`${a.creator.name} — ${a.status}`).join('\n'):'لا متقدمين بعد')}catch(e){toast(e.message)}}
+function openCampaign(){if(!ME)return openAuth();$('#campDlg').showModal()}
+async function doCampaign(){try{await api('/api/campaigns',{method:'POST',body:JSON.stringify({title:$('#cTitle').value,brief:$('#cBrief').value,niche:$('#cNiche').value,city:$('#cCity').value,budget:+$('#cBudget').value||0})});$('#campDlg').close();toast('اتنشرت الحملة');loadCampaigns()}catch(e){toast(e.message)}}
+async function doRequest(){try{await api('/api/requests',{method:'POST',body:JSON.stringify({title:$('#rTitle').value,niche:$('#rNiche').value,budget:+$('#rBudget').value||0,details:$('#rDetails').value})});$('#reqDlg').close();toast('اتنشر الطلب');loadMarket()}catch(e){toast(e.message)}}
+
+/* auth */
+let AMODE='register';
+function openAuth(role){if(role){$('#aRole').value=role;roleFx()}$('#authDlg').showModal()}
+function authMode(m){AMODE=m;$('#regFields').style.display=m==='register'?'block':'none';$('#authTitle').textContent=m==='register'?'تسجيل حساب جديد':'تسجيل الدخول'}
+function roleFx(){$('#provCat').classList.toggle('hide',$('#aRole').value!=='provider')}
+async function doAuth(){
+  try{
+    const r=AMODE==='register'
+      ?await api('/api/auth/register',{method:'POST',body:JSON.stringify({name:$('#aName').value,role:$('#aRole').value,niche:$('#aNiche').value,provider_category:$('#aProvCat').value,city:$('#aCity').value,country:$('#aCountry').value,currency:$('#aCurr').value,contact:$('#aContact').value,followers:+$('#aFollowers').value||0,price:+$('#aPrice').value||0,links:$('#aLinks').value})})
+      :await api('/api/auth/login',{method:'POST',body:JSON.stringify({contact:$('#aContact').value})});
+    TOKEN=r.token;localStorage.setItem('deal_token',TOKEN);ME={user:r.user};
+    $('#authDlg').close();renderAuth();toast('أهلاً بيك في Deal');refresh();
+  }catch(e){toast(e.message)}
+}
+function renderAuth(){
+  if(ME){$('#authArea').innerHTML=`<span class="mut">${esc(ME.user.name)}</span> <button class="btn ghost sm" onclick="logout()">خروج</button>`;
+    $('#ownerTab').classList.toggle('hide',!ME.user.is_platform_founder);
+    $$('#nav [data-auth]').forEach(b=>b.style.display='');}
+  else{$('#authArea').innerHTML='<button class="btn sm" onclick="openAuth()">دخول / تسجيل</button>';$('#ownerTab').classList.add('hide')}
+}
+function logout(){TOKEN='';ME=null;localStorage.removeItem('deal_token');renderAuth();showTab('market')}
+async function bell(){
+  if(!ME)return openAuth();
+  const d=await api('/api/notifications');
+  alert(d.items.length?d.items.map(n=>(n.is_read?'':'🆕 ')+n.text).join('\n\n'):'لا تنبيهات');
+  await api('/api/notifications/read',{method:'POST',body:'{}'});bellCount();
+}
+async function bellCount(){if(!ME)return;const d=await api('/api/notifications');const b=$('#bellCount');
+  b.textContent=d.unread;b.classList.toggle('hide',!d.unread)}
+$('#bellBtn').onclick=bell;
+
+/* tabs */
+function showTab(t){$$('main section').forEach(s=>s.classList.add('hide'));$('#tab-'+t).classList.remove('hide');
+  $$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
+  ({market:loadMarket,services:()=>loadServices('ads'),campaigns:loadCampaigns,opps:loadOpps,bookings:loadBookings,dash:loadDash,owner:loadOwner}[t]||(()=>{}))();}
+$$('#nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+$('#langBtn').onclick=()=>toast('English UI is partial in this standalone build — Arabic is the primary experience.');
+async function refresh(){loadMarket();bellCount()}
+(async()=>{ if(TOKEN){try{const m=await api('/api/me');ME={user:m.user};renderAuth()}catch(e){TOKEN='';localStorage.removeItem('deal_token')}} refresh(); })();
+
+/* PWA install */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#installBtn').style.display=''});
+$('#installBtn').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;$('#installBtn').style.display='none'}
+  else toast('من قائمة المتصفح ⋮ اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»')};
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+</script>
+</body>
+</html>

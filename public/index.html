@@ -177,6 +177,20 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
     <div id="bookList"></div>
   </section>
 
+  <!-- MESSAGES -->
+  <section id="tab-messages" class="hide">
+    <h3 data-i18n="messages_t">رسائلي</h3>
+    <div id="convList"></div>
+    <div id="threadView" class="hide">
+      <div class="row"><button class="btn ghost sm" onclick="closeThread()">← <span data-i18n="back_btn">رجوع</span></button>
+      <h3 style="margin:0" id="threadName"></h3></div>
+      <div id="threadMsgs" class="chatlog" style="margin-top:12px"></div>
+      <div class="err" id="msgErr"></div>
+      <div class="row" style="margin-top:8px"><input id="msgInput" data-i18n-ph="msg_ph" placeholder="اكتب رسالتك…" style="flex:1" maxlength="1000">
+      <button class="btn sm" onclick="sendMsg(this)" data-i18n="send">إرسال</button></div>
+    </div>
+  </section>
+
   <!-- DASHBOARD -->
   <section id="tab-dash" class="hide">
     <div id="dashBody"></div>
@@ -245,6 +259,31 @@ footer{border-top:1px solid var(--line);padding:22px 16px;text-align:center;colo
     <div class="row"><button class="btn ghost" data-i18n="close">إغلاق</button></div>
   </div>
 </form></dialog>
+
+<dialog id="guestBookDlg"><form method="dialog">
+  <h3 data-i18n="start_booking">ابدأ حجز</h3>
+  <div class="err" id="guestBookErr"></div>
+  <label data-i18n="price_prompt">سعر الشغلانة للعميل؟</label>
+  <input id="gbPrice" type="number" min="0">
+  <div class="row" style="margin-top:10px"><button type="button" class="btn" onclick="doBookGuest(this)" data-i18n="start_booking">ابدأ حجز</button>
+  <button class="btn ghost" data-i18n="close">إغلاق</button></div>
+</form></dialog>
+
+<dialog id="disputeDlg"><form method="dialog">
+  <h3 data-i18n="dispute_btn">فتح نزاع</h3>
+  <div class="err" id="disputeErr"></div>
+  <label data-i18n="dispute_prompt">سبب النزاع؟</label>
+  <textarea id="dpReason"></textarea>
+  <div class="row" style="margin-top:10px"><button type="button" class="btn" onclick="doDispute(this)" data-i18n="dispute_btn">فتح نزاع</button>
+  <button class="btn ghost" data-i18n="close">إغلاق</button></div>
+</form></dialog>
+
+<dialog id="appsDlg">
+  <div class="row"><h3 style="margin:0" data-i18n="applicants_btn">المتقدمون</h3><div class="sp"></div>
+  <button class="btn ghost sm" onclick="document.getElementById('appsDlg').close()">✕</button></div>
+  <div class="err" id="appsErr"></div>
+  <div id="appsBody" style="margin-top:10px"></div>
+</dialog>
 
 <dialog id="bookDlg"><div id="bookBody"></div></dialog>
 <dialog id="talentDlg"><div id="talentBody"></div></dialog>
@@ -335,7 +374,8 @@ status_w:'حالتك',status_ok:'سليم',frozen_w:'الرصيد مجمّد',kp
 ow_today:'عمولات اليوم',ow_month:'عمولات الشهر',ow_total:'إجمالي العمولات',ow_creators:'صناع',ow_founders:'مؤسسون',ow_verified:'موثقون',ow_completed:'صفقات مكتملة/الكل',ow_disputes:'النزاعات المفتوحة',ow_restore:'حل وإرجاع الحجز',ow_cancel:'حل وإلغاء',ow_no_disputes:'لا نزاعات.',ow_exceptional:'مراجعات توثيق استثنائية',ow_link:'الرابط',ow_accept:'قبول',ow_reject:'رفض',ow_no_requests:'لا طلبات.',ow_penalized:'حسابات معاقبة/مجمدة',ow_frozen:'مجمّد',ow_banned:'محظور',ow_unfreeze:'فك التجميد ورفع العقوبة',ow_no_penalized:'لا حسابات معاقبة.',ow_support:'رسائل الدعم',ow_unread:'غير مقروءة',ow_no_support:'لا رسائل دعم محفوظة.',ow_mark_read:'تعليم الكل كمقروء',ow_resolved:'اتحل',ow_penalty_lifted:'اترفعت العقوبة',
 auth_reg_t:'تسجيل حساب جديد',auth_login_t:'تسجيل الدخول',welcome_t:'أهلاً بيك في Deal',logout:'خروج',
 gp_request:'طلبك على Deal',gp_published:'منشور — الصناع بيشوفوه وهيتواصلوا معاك واتساب',gp_booked:'اتحجز — بيتحول لحجز',gp_booking:'حجزك على Deal',gp_invalid:'رابط متابعة غير صحيح.',gp_working:'المنفذ شغال على التنفيذ…',
-m_support:'الدعم',m_language:'اللغة',m_profile:'ملفي الشخصي',notif_empty:'لا تنبيهات بعد.',notif_login:'سجل دخولك لعرض الإشعارات',applied_t:'قدمت ✓',camp_published:'اتنشرت الحملة',req_published:'اتنشر الطلب',no_applicants:'لا متقدمين بعد',price_prompt:'سعر الشغلانة للعميل؟',guest_booked_suffix:' — العميل هيكمّل خطواته من رابط متابعته',install_hint:'من قائمة المتصفح ⋮ اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»',short_added:'اتضاف النموذج ✓',short_deleted:'اتحذف النموذج',delete_w:'حذف'},
+m_support:'الدعم',m_language:'اللغة',m_profile:'ملفي الشخصي',notif_empty:'لا تنبيهات بعد.',notif_login:'سجل دخولك لعرض الإشعارات',applied_t:'قدمت ✓',camp_published:'اتنشرت الحملة',req_published:'اتنشر الطلب',no_applicants:'لا متقدمين بعد',price_prompt:'سعر الشغلانة للعميل؟',guest_booked_suffix:' — العميل هيكمّل خطواته من رابط متابعته',install_hint:'من قائمة المتصفح ⋮ اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»',short_added:'اتضاف النموذج ✓',short_deleted:'اتحذف النموذج',delete_w:'حذف',
+follow_btn:'متابعة',following_btn:'أتابع ✓',followed_t:'بقيت تتابع',unfollowed_t:'ألغيت المتابعة',deal_followers:'متابِع على Deal',social_t:'المتابعة على Deal',my_followers:'متابِعيني',my_following:'من أتابعهم',no_followers_yet:'لا متابِعين بعد.',no_following_yet:'لا تتابع أحداً بعد — تابع صناعاً من السوق.',msg_btn:'مراسلة',nav_messages:'الرسائل',messages_t:'رسائلي',msg_ph:'اكتب رسالتك…',msg_empty:'لا محادثات بعد.',msg_no_thread:'لا رسائل بعد — ابدأ المحادثة.',msg_unread:'غير مقروءة',back_btn:'رجوع',open_msgs:'فتح الرسائل'},
 en:{loading:'Loading…',copied:'Copied ✓',nav_market:'Market',nav_services:'Services',nav_campaigns:'Campaigns',nav_opps:'Opportunities',nav_bookings:'My bookings',nav_dash:'My dashboard',nav_owner:'Owner panel',post_job_btn:'📣 Post a job',menu:'Menu',main_menu:'Main menu',login_register:'Login / Register',hero_l1:'No more chasing work…',hero_l2:'Work comes looking for you',hero_sub:'Opportunities from shops and brands in your city, delivered to you — with a protected booking and the Deal Guarantee.',register_creator:'Register as a creator',browse_market:'Browse the market',install_app:'Install Deal on your phone',hero_guest_note:'Own a shop or a brand? Post your job in a minute — no registration, and creators will reach you on WhatsApp.',why1_t:'Opportunities come to you',why1_d:'Requests and campaigns matched to your city and niche — without searching.',why2_t:'A verified reputation that grows',why2_d:'Ratings, completion rate and achievement badges accumulate on your profile.',why3_t:'Protected payment with Deal Guarantee',why3_d:'Staged payments, the app fee first, and delivery proof that protects both sides.',search_ph:'Search by name, niche, city…',search:'Search',all_niches:'All niches',all_cities:'All cities',guarantee_t:'Deal Guarantee:',guarantee_d:'Every booking here is a "Deal-Guaranteed booking" — documented staged payments, and a verified alternative from your city and niche if the creator defaults.',open_requests:'Open shop requests',post_job_short:'📣 Post a job — no registration',services_t:'Integrated services — with the same Deal protection',svc_ads:'Sponsored ads management',svc_support:'Account problem solutions',campaigns_t:'Brand campaigns',new_campaign:'+ New campaign',opps_t:'Opportunities for you — auto-matched to your profile',bookings_t:'My bookings',footer:'Deal — the platform for local content creators and shops · The official Deal seal 🛡️ Deal-Guaranteed booking',register:'Register',login:'Login',f_name:'Name',f_iam:'I am a…',role_creator:'Content creator',role_provider:'Service provider',role_shop:'Shop',role_brand:'Brand',f_provcat:'Service category',f_niche:'Niche / specialty',niche_ph:'Comedy, cooking, reviews…',f_city:'City',f_country:'Country',f_currency:'Currency',f_followers:'Follower count (for creators)',f_price:'Your listed price per video/service',f_links:'Your public account links (for verification)',f_contact:'Phone number or email (your login)',contact_ph:'01xxxxxxxxx or you@mail.com',continue_btn:'Continue',close:'Close',guest_title:'Post a job — no registration',g_biz:'Business / shop name',g_phone:'WhatsApp number (Egyptian mobile)',g_niche:'Ad type / niche',g_niche_ph:'Restaurants, clothes, real estate…',g_budget:'Approximate budget (EGP)',g_details:'Describe the job',g_details_ph:'I need an ad video about…',g_publish:'Publish request',g_done_t:'Your request is published ✓',g_done_d:'Creators can see it now and will contact you on WhatsApp. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',copy_link:'Copy link',camp_title:'New brand campaign',c_title:'Title',c_brief:'Brief',c_budget:'Budget',c_publish:'Publish campaign',req_title:'New shop request',req_niche:'Needed niche',req_details:'Details',edit_profile:'Edit profile',pf_photo:'Profile photo',pf_photo_hint:'Automatically cropped to a small square (≤256px).',pf_phone:'Phone number (WhatsApp)',pf_bio:'Bio',save_changes:'Save changes',shorts_title:'Shorts samples',shorts_hint:'Maximum 3 videos — shown as embedded playable videos on your public profile.',short_url:'Short video link (YouTube Shorts / Facebook / Instagram / TikTok)',short_title:'Sample title (optional)',short_add:'+ Add sample',notifications:'Notifications',support_title:'Deal Support — instant auto-replies',support_hint:'Pick a ready question or type yours — replies are instant from the FAQ base.',support_contact:'Contact (optional) — if you want the team to get back to you',support_ph:'Type your question here…',send:'Send',
 followers_w:'followers',completion_w:'Completion',positive_w:'positive',profile_btn:'Profile',book_btn:'Book',founder_seal:'👑 Deal Founder',founder_only:'Founder account — display only',pioneer_w:'City Pioneer',founder_member_w:'Founding Member',empty_market:'The market is still empty — be the first creator to register.',guest_chip:'Guest client request — no account',whatsapp:'💬 WhatsApp',wa_msg:'Hi, I saw your request on Deal and I can do it',start_booking:'Start booking',view_opps:'See your opportunities',shop_job_card:'+ Have a job?',publish_request:'Publish request',no_providers:'No providers in this category yet.',no_campaigns:'No open campaigns yet.',apply_btn:'Apply',applicants_btn:'Applicants',match_w:'Match',kind_campaign:'Brand campaign',kind_request:'Shop request',no_opps:'No opportunities match your profile right now — update your city, niche and minimum price from your dashboard.',no_bookings:'No bookings yet.',open_booking:'Open booking',notify_talent:'📱 Notify creator on WhatsApp',wa_booking_msg:'You have new work on Deal — booking #',guaranteed_chip:'🛡️ Deal-Guaranteed booking',client_w:'Client',talent_w:'Creator',total_w:'Total',fee_w:'fee',first_w:'first',net_two_w:'and the net in two payments',
 stage_pending_agreement:'Agreement',stage_awaiting_fee:'Deal fee first',stage_awaiting_deposit:'Creator deposit',stage_in_progress:'In progress',stage_proof_submitted:'Proof of delivery',stage_awaiting_rest:'Remaining payment',stage_completed:'Fully paid',stage_disputed:'Dispute open',stage_cancelled:'Cancelled',
@@ -345,10 +385,11 @@ status_w:'Your status',status_ok:'Good standing',frozen_w:'Balance frozen',kpi_v
 ow_today:'Fees today',ow_month:'Fees this month',ow_total:'Total fees',ow_creators:'Creators',ow_founders:'founders',ow_verified:'verified',ow_completed:'Completed/total deals',ow_disputes:'Open disputes',ow_restore:'Resolve & restore booking',ow_cancel:'Resolve & cancel',ow_no_disputes:'No disputes.',ow_exceptional:'Exceptional verification reviews',ow_link:'Link',ow_accept:'Approve',ow_reject:'Reject',ow_no_requests:'No requests.',ow_penalized:'Penalized/frozen accounts',ow_frozen:'Frozen',ow_banned:'Banned',ow_unfreeze:'Unfreeze & lift penalty',ow_no_penalized:'No penalized accounts.',ow_support:'Support messages',ow_unread:'unread',ow_no_support:'No saved support messages.',ow_mark_read:'Mark all as read',ow_resolved:'Resolved',ow_penalty_lifted:'Penalty lifted',
 auth_reg_t:'Create a new account',auth_login_t:'Login',welcome_t:'Welcome to Deal',logout:'Logout',
 gp_request:'Your request on Deal',gp_published:'Published — creators can see it and will contact you on WhatsApp',gp_booked:'Booked — converting to a booking',gp_booking:'Your booking on Deal',gp_invalid:'Invalid follow-up link.',gp_working:'The creator is working on delivery…',
-m_support:'Support',m_language:'Language',m_profile:'My profile',notif_empty:'No notifications yet.',notif_login:'Log in to view your notifications',applied_t:'Applied ✓',camp_published:'Campaign published',req_published:'Request published',no_applicants:'No applicants yet',price_prompt:'Price for the client?',guest_booked_suffix:' — the client will complete their steps from their follow-up link',install_hint:'From the browser menu ⋮ choose "Install app" or "Add to Home screen"',short_added:'Sample added ✓',short_deleted:'Sample deleted',delete_w:'Delete'}
+m_support:'Support',m_language:'Language',m_profile:'My profile',notif_empty:'No notifications yet.',notif_login:'Log in to view your notifications',applied_t:'Applied ✓',camp_published:'Campaign published',req_published:'Request published',no_applicants:'No applicants yet',price_prompt:'Price for the client?',guest_booked_suffix:' — the client will complete their steps from their follow-up link',install_hint:'From the browser menu ⋮ choose "Install app" or "Add to Home screen"',short_added:'Sample added ✓',short_deleted:'Sample deleted',delete_w:'Delete',
+follow_btn:'Follow',following_btn:'Following ✓',followed_t:'You are now following',unfollowed_t:'Unfollowed',deal_followers:'Deal followers',social_t:'Following on Deal',my_followers:'My followers',my_following:'People I follow',no_followers_yet:'No followers yet.',no_following_yet:'You are not following anyone yet — follow creators from the market.',msg_btn:'Message',nav_messages:'Messages',messages_t:'My messages',msg_ph:'Type your message…',msg_empty:'No conversations yet.',msg_no_thread:'No messages yet — start the conversation.',msg_unread:'unread',back_btn:'Back',open_msgs:'Open messages'}
 };
 const t=k=>(DICT[LANG]&&DICT[LANG][k])||DICT.ar[k]||k;
-const ERR_EN={'سجل الدخول أولاً':'Log in first','حساب غير موجود':'Account not found','هذا الحساب محظور':'This account is banned','الاسم والدور ووسيلة التواصل مطلوبة':'Name, role and contact are required','دور غير صحيح':'Invalid role','وسيلة التواصل مسجلة من قبل — سجل الدخول':'This contact is already registered — please log in','لا يوجد حساب بهذه البيانات — سجل أولاً':'No account with these details — register first','غير موجود':'Not found','حدد سعراً صحيحاً':'Enter a valid price','لا يمكنك حجز نفسك':'You cannot book yourself','حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً':'Founder account — display only, no bookings or contact','هذا الطلب اتحجز خلاص — لا يمكن تحويله مرتين':'This request is already booked — it cannot be converted twice','طلب ضيف غير موجود':'Guest request not found','اكتب مرجع العملية':'Enter the transfer reference','مرجع العملية مطلوب':'Transfer reference is required','رابط فيديو غير مدعوم — الصق رابط شورتس من يوتيوب أو فيسبوك أو إنستجرام أو تيك توك':'Unsupported video link — paste a shorts link from YouTube, Facebook, Instagram or TikTok','وصلت إلى الحد الأقصى: 3 فيديوهات شورتس — احذف واحداً أولاً':'You reached the maximum: 3 shorts videos — delete one first','الصورة أكبر من 200KB — صغّرها وحاول مجدداً':'Image is larger than 200KB — shrink it and try again','رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian mobile number is required (01xxxxxxxxx)','رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian phone number is required (01xxxxxxxxx)','المدينة مطلوبة':'City is required','اسم النشاط مطلوب':'Business name is required','اوصف الشغلانة المطلوبة':'Describe the job','خطأ في الخادم':'Server error','خطأ':'Error'};
+const ERR_EN={'سجل الدخول أولاً':'Log in first','حساب غير موجود':'Account not found','هذا الحساب محظور':'This account is banned','الاسم والدور ووسيلة التواصل مطلوبة':'Name, role and contact are required','دور غير صحيح':'Invalid role','وسيلة التواصل مسجلة من قبل — سجل الدخول':'This contact is already registered — please log in','لا يوجد حساب بهذه البيانات — سجل أولاً':'No account with these details — register first','غير موجود':'Not found','حدد سعراً صحيحاً':'Enter a valid price','لا يمكنك حجز نفسك':'You cannot book yourself','حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً':'Founder account — display only, no bookings or contact','هذا الطلب اتحجز خلاص — لا يمكن تحويله مرتين':'This request is already booked — it cannot be converted twice','طلب ضيف غير موجود':'Guest request not found','اكتب مرجع العملية':'Enter the transfer reference','مرجع العملية مطلوب':'Transfer reference is required','رابط فيديو غير مدعوم — الصق رابط شورتس من يوتيوب أو فيسبوك أو إنستجرام أو تيك توك':'Unsupported video link — paste a shorts link from YouTube, Facebook, Instagram or TikTok','وصلت إلى الحد الأقصى: 3 فيديوهات شورتس — احذف واحداً أولاً':'You reached the maximum: 3 shorts videos — delete one first','الصورة أكبر من 200KB — صغّرها وحاول مجدداً':'Image is larger than 200KB — shrink it and try again','رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian mobile number is required (01xxxxxxxxx)','رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian phone number is required (01xxxxxxxxx)','المدينة مطلوبة':'City is required','اسم النشاط مطلوب':'Business name is required','اوصف الشغلانة المطلوبة':'Describe the job','خطأ في الخادم':'Server error','خطأ':'Error','لا يمكنك متابعة نفسك':'You cannot follow yourself','هذا الحساب غير متاح للمتابعة حالياً':'This account is not available for following right now','لا يمكنك مراسلة نفسك':'You cannot message yourself','حساب المؤسس خارج المراسلة — عرضه ومتابعته فقط':'The founder account is outside messaging — display and follow only','هذا الحساب غير متاح للمراسلة حالياً':'This account is not available for messaging right now','اكتب رسالة أولاً':'Write a message first','الرسالة أطول من الحد الأقصى (1000 حرف)':'Message exceeds the maximum length (1000 characters)'};
 const errT=m=>LANG==='en'?(ERR_EN[m]||m):m;
 function applyI18n(){
   document.documentElement.lang=LANG;document.documentElement.dir=LANG==='ar'?'rtl':'ltr';
@@ -372,18 +413,45 @@ function seal(u){if(u.is_platform_founder)return ` <span class="founder-seal">${
 function badgeDots(u){return (u.badges||[]).map(k=>`<span class="badge-ic" style="background:#1c4d3a" title="${k}">🏅</span>`).join(' ')}
 function avatarHtml(u,big=false){if(u.avatar)return `<img class="avatar${big?' big':''}" src="${u.avatar}" alt="">`;
   return `<span class="avatar-fb${big?' big':''}">${esc((u.name||'?').trim().charAt(0)||'?')}</span>`}
+/* زر المتابعة: يظهر لكل صانع (والمؤسس استثناءً وحيداً مسموحاً على بطاقته) —
+   للضيف يفتح الدخول، وللمسجل يبدّل الحالة في مكانه بلا إعادة تحميل الصفحة. */
+function followBtn(u){
+  if(ME&&ME.user.id===u.id) return '';
+  const on=!!u.is_following;
+  return `<button class="btn ${on?'':'ghost'} sm" data-follow="${u.id}" data-state="${on?1:0}" onclick="toggleFollow(this,${u.id})">${on?t('following_btn'):t('follow_btn')}</button>`;
+}
+async function toggleFollow(btn,id){
+  if(!ME) return openAuth();
+  const on=btn.dataset.state==='1';
+  await withBusy(btn,async()=>{
+    try{
+      const r=await api(`/api/users/${id}/${on?'unfollow':'follow'}`,{method:'POST',body:'{}'});
+      $$(`[data-follow="${id}"]`).forEach(b=>{b.dataset.state=r.is_following?'1':'0';
+        b.classList.toggle('ghost',!r.is_following);b.textContent=r.is_following?t('following_btn'):t('follow_btn')});
+      $$(`[data-fcount="${id}"]`).forEach(e=>e.textContent=r.followers_count);
+      toast(r.is_following?t('followed_t'):t('unfollowed_t'));
+    }catch(e){toast(errT(e.message))}
+  });
+}
+/* زر المراسلة: للصناع العاديين فقط — المؤسس خارج المراسلة تماماً، ولا مراسلة للنفس. */
+function msgBtn(u){
+  if(!ME||ME.user.id===u.id||u.is_platform_founder) return '';
+  return `<button class="btn ghost sm" onclick="openThread(this,${u.id})">${t('msg_btn')}</button>`;
+}
 function talentCard(u){
   if(u.is_platform_founder)return `<div class="card founder-card">
     <div class="row"><h3 style="margin:0">${esc(u.name)}</h3>${seal(u)}</div>
-    <div class="mut" style="margin-top:6px">${esc(u.niche||'')} · ${esc(u.city)}</div>
+    <div class="mut" style="margin-top:6px">${esc(u.niche||'')} · ${esc(u.city)} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
     <div class="row" style="margin-top:10px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span><div class="sp"></div>
+    ${followBtn(u)}
     <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button></div></div>`;
   return `<div class="card">
   <div class="row">${avatarHtml(u)}<h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}</div>
-  <div class="mut" style="margin-top:6px">${esc(u.niche||u.provider_category||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}</div>
+  <div class="mut" style="margin-top:6px">${esc(u.niche||u.provider_category||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
   <div class="row" style="margin:7px 0"><span class="chip">${t('completion_w')} ${u.completion_rate}%</span>
   <span class="chip">⭐ ${u.avg_stars??'—'} (${u.positive_pct??'—'}% ${t('positive_w')})</span>${badgeDots(u)}</div>
   <div class="row"><span class="price">${u.price} ${u.currency}</span><div class="sp"></div>
+  ${followBtn(u)}${msgBtn(u)}
   <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button>
   <button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_btn')}</button></div></div>`}
 
@@ -418,7 +486,9 @@ async function loadRequests(){
     :`<button class="btn ghost sm" onclick="showTab('opps')">${t('view_opps')}</button>`}</div></div>`).join('')
     +(ME&&ME.user.role==='shop'?`<div class="card"><h3>${t('shop_job_card')}</h3><button class="btn sm" onclick="document.getElementById('reqDlg').showModal()">${t('publish_request')}</button></div>`:'');
 }
+let SVC_CAT='ads';
 async function loadServices(cat,btn){
+  SVC_CAT=cat;
   const work=async()=>{
     const d=await api('/api/directory?role=provider');
     const items=d.items.filter(i=>i.provider_category===cat);
@@ -449,8 +519,19 @@ async function loadOpps(){
     :`<div class="mut">${t('no_opps')}</div>`;
 }
 async function applyCamp(btn,id){await withBusy(btn,async()=>{try{await api(`/api/campaigns/${id}/apply`,{method:'POST',body:JSON.stringify({pitch:''})});toast(t('applied_t'))}catch(e){toast(errT(e.message))}})}
-async function viewApps(btn,id){await withBusy(btn,async()=>{try{const d=await api(`/api/campaigns/${id}/applications`);
-  alert(d.items.length?d.items.map(a=>`${a.creator.name} — ${a.status}`).join('\n'):t('no_applicants'))}catch(e){toast(errT(e.message))}})}
+async function viewApps(btn,id){
+  await withBusy(btn,async()=>{
+    hideErr('appsErr');
+    try{
+      const d=await api(`/api/campaigns/${id}/applications`);
+      $('#appsBody').innerHTML=d.items.length?d.items.map(a=>`<div class="step">${esc(a.creator.name)} — ${esc(a.status)}</div>`).join(''):`<div class="mut">${t('no_applicants')}</div>`;
+    }catch(e){
+      $('#appsBody').innerHTML='';
+      showErr('appsErr',errT(e.message));
+    }
+    $('#appsDlg').showModal();
+  });
+}
 function openCampaign(){if(!ME)return openAuth();hideErr('campErr');$('#campDlg').showModal()}
 async function doCampaign(btn){hideErr('campErr');await withBusy(btn,async()=>{try{await api('/api/campaigns',{method:'POST',body:JSON.stringify({title:$('#cTitle').value,brief:$('#cBrief').value,niche:$('#cNiche').value,city:$('#cCity').value,budget:+$('#cBudget').value||0})});$('#campDlg').close();toast(t('camp_published'));loadCampaigns()}catch(e){showErr('campErr',errT(e.message))}})}
 async function doRequest(btn){hideErr('reqErr');await withBusy(btn,async()=>{try{await api('/api/requests',{method:'POST',body:JSON.stringify({title:$('#rTitle').value,niche:$('#rNiche').value,budget:+$('#rBudget').value||0,details:$('#rDetails').value})});$('#reqDlg').close();toast(t('req_published'));loadMarket()}catch(e){showErr('reqErr',errT(e.message))}})}
@@ -509,19 +590,50 @@ async function feeInfo(btn,id){await withBusy(btn,async()=>{try{const f=await ap
 async function proof(btn,id){const url=document.getElementById('proofUrl').value.trim();
   await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/proof`,{method:'POST',body:JSON.stringify({url})});toast(t('proof_done'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
 async function review(btn,id){await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/review`,{method:'POST',body:JSON.stringify({sentiment:$('#rvS').value,stars:+$('#rvStars').value,comment:$('#rvC').value})});toast(t('review_saved'));await openBooking(null,id)}catch(e){toast(errT(e.message))}})}
-async function dispute(btn,id){const reason=prompt(t('dispute_prompt'))||'';await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/dispute`,{method:'POST',body:JSON.stringify({reason})});toast(t('dispute_opened'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
-async function quickBook(btn,talentId){if(!ME)return openAuth();
-  await withBusy(btn,async()=>{try{const r=await api('/api/bookings',{method:'POST',body:JSON.stringify({talent_id:talentId})});toast(t('booking_opened')+r.booking.id);showTab('bookings')}catch(e){toast(errT(e.message))}})}
-async function bookGuestReq(btn,id,budget){
-  if(!ME)return openAuth();
-  const price=prompt(t('price_prompt'),budget||'');if(price===null)return;
+/* فتح نزاع — حوار داخل الصفحة بدل حوار المتصفح الأصلي لسبب النزاع، من نفس فئة
+   هشاشة «ابدأ حجز»: الحوار الأصلي يُخمَد في ويب-فيو واتساب/فيسبوك وبعض المتصفحات
+   فيموت المعالج بصمت قبل أي استدعاء. الآن: فتح الحوار فقط، والتأكيد يستدعي نفس
+   مسار الـ API القائم، وأي فشل يظهر كرسالة خطأ داخل الحوار — لا صمت أبداً. */
+let DP_BOOKING_ID=null;
+function dispute(btn,id){
+  DP_BOOKING_ID=id; hideErr('disputeErr');
+  $('#dpReason').value='';
+  $('#disputeDlg').showModal();
+}
+async function doDispute(btn){
+  hideErr('disputeErr');
   await withBusy(btn,async()=>{
     try{
-      const r=await api(`/api/guest-requests/${id}/book`,{method:'POST',body:JSON.stringify({price:+price||undefined})});
+      await api(`/api/bookings/${DP_BOOKING_ID}/dispute`,{method:'POST',body:JSON.stringify({reason:$('#dpReason').value||''})});
+      $('#disputeDlg').close();
+      toast(t('dispute_opened'));
+      await openBooking(null,DP_BOOKING_ID); loadBookings();
+    }catch(e){showErr('disputeErr',errT(e.message))}
+  });
+}
+async function quickBook(btn,talentId){if(!ME)return openAuth();
+  await withBusy(btn,async()=>{try{const r=await api('/api/bookings',{method:'POST',body:JSON.stringify({talent_id:talentId})});toast(t('booking_opened')+r.booking.id);showTab('bookings')}catch(e){toast(errT(e.message))}})}
+/* تحويل طلب ضيف إلى حجز — إصلاح جذري: النسخة السابقة كانت تبدأ بـ prompt() الأصلي،
+   وفي أي بيئة يُخمَد فيها حوار المتصفح (متصفحات الفحص الآلي، ويب-فيو واتساب/فيسبوك،
+   بعض متصفحات الموبايل) يعيد null فيموت المعالج بصمت قبل withBusy وقبل أي استدعاء.
+   الآن: حوار سعر داخل الصفحة — لا اعتماد على أي حوار أصلي، ولا صمت أبداً. */
+let GB_REQ_ID=null;
+function bookGuestReq(btn,id,budget){
+  if(!ME)return openAuth();
+  GB_REQ_ID=id; hideErr('guestBookErr');
+  $('#gbPrice').value=budget||'';
+  $('#guestBookDlg').showModal();
+}
+async function doBookGuest(btn){
+  hideErr('guestBookErr');
+  await withBusy(btn,async()=>{
+    try{
+      const r=await api(`/api/guest-requests/${GB_REQ_ID}/book`,{method:'POST',body:JSON.stringify({price:+$('#gbPrice').value||undefined})});
+      $('#guestBookDlg').close();
       toast(t('booking_opened')+r.booking.id+t('guest_booked_suffix'));
       showTab('bookings');
       await openBooking(null,r.booking.id);
-    }catch(e){toast(errT(e.message))}
+    }catch(e){showErr('guestBookErr',errT(e.message))}
   });
 }
 
@@ -538,21 +650,23 @@ async function openTalent(btn,id){
       <div style="font-size:44px">👑</div>
       <h3 style="margin:6px 0">${esc(u.name)}</h3>
       <div>${seal(u)}</div>
-      <div class="mut" style="margin-top:8px">${esc(u.niche||'')} · ${esc(u.city)}</div>
+      <div class="mut" style="margin-top:8px">${esc(u.niche||'')} · ${esc(u.city)} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
       <div style="margin-top:12px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span></div>
+      <div class="row" style="margin-top:12px;justify-content:center">${followBtn(u)}</div>
       </div>
       <div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">${t('close')}</button></div>`;
       $('#talentDlg').showModal();return;
     }
     $('#talentBody').innerHTML=`<div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${t('member_since')} ${new Date(u.member_since).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div></div></div>
-    <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span></div>
+    <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span></div>
     <p>${esc(u.bio||'')}</p>
     ${shortsEmbeds(d.shorts)}
     <h4>${t('badges_vault')}</h4>${d.badges.map(b=>`<div class="row"><span class="badge-ic" style="background:${b.earned?b.color:'#444'}">🏅</span><span>${b.name}</span><span class="mut">${b.earned?t('badge_earned'):b.progress}</span></div>`).join('')}
     <h4>${t('work_gallery')}</h4>${u.portfolio&&u.portfolio.length?u.portfolio.map(l=>`<div><a target="_blank" href="${esc(l)}">${esc(l)}</a></div>`).join(''):`<div class="mut">${t('no_work')}</div>`}
     <h4>${t('reviews_t')}</h4>${d.reviews.length?d.reviews.map(r=>`<div class="step">${r.sentiment==='positive'?'👍':'👎'} ⭐${r.stars} — ${esc(r.comment||'')} <span class="mut">(${esc(r.reviewer_name)})</span></div>`).join(''):`<div class="mut">${t('no_reviews')}</div>`}
     <div class="row" style="margin-top:12px">${ME&&ME.user.id===u.id?'':`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_for')} ${u.price} ${u.currency}</button>`}
+    ${followBtn(u)}${msgBtn(u)}
     <button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">${t('close')}</button></div>`;
     $('#talentDlg').showModal();
   };
@@ -567,6 +681,15 @@ async function loadDash(){
   const [me,stats]=await Promise.all([api('/api/me'),api('/api/my/stats')]);
   ME.user=me.user;
   const u=me.user;
+  let social={followers_count:0,following_count:0,followers:[],following:[]};
+  try{ social=await api('/api/me/social');
+    const followingIds=new Set(social.following.map(x=>x.id));
+    social.following.forEach(x=>x.is_following=true);
+    social.followers.forEach(x=>x.is_following=followingIds.has(x.id));
+  }catch(e){ /* قسم المتابعة إضافي */ }
+  let msgUnread=0;
+  try{ msgUnread=(await api('/api/messages')).unread_total||0; }catch(e){ /* قسم الرسائل إضافي */ }
+  const socialRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x)}<div class="mut">${esc(x.niche||'')} · ${esc(x.city||'')}</div></span>${followBtn(x)}${msgBtn(x)}<button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
   $('#dashBody').innerHTML=`<div class="card">
     <div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}${u.is_platform_founder?'':` · <span class="price">${u.price} ${u.currency}</span>`}</div>
@@ -581,6 +704,12 @@ async function loadDash(){
     <div class="card"><div class="n">${stats.conversion}%</div><div class="mut">${t('kpi_conv')}</div></div>
     <div class="card"><div class="n">${stats.earnings_total}</div><div class="mut">${t('kpi_earn')}</div></div>
     <div class="card"><div class="n">${stats.record.completed_deals}</div><div class="mut">${t('kpi_done')}</div></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h3>${t('social_t')}</h3>
+    <div class="row"><span class="chip"><span data-fcount="${u.id}">${social.followers_count}</span> ${t('my_followers')}</span><span class="chip">${social.following_count} ${t('my_following')}</span>
+    <div class="sp"></div><button class="btn sm" onclick="showTab('messages')">${t('open_msgs')}${msgUnread?` (${msgUnread} ${t('msg_unread')})`:''}</button></div>
+    <h4>${t('my_followers')}</h4>${social.followers.length?social.followers.map(socialRow).join(''):`<div class="mut">${t('no_followers_yet')}</div>`}
+    <h4>${t('my_following')}</h4>${social.following.length?social.following.map(socialRow).join(''):`<div class="mut">${t('no_following_yet')}</div>`}
   </div>
   <div class="card"><h3>${t('verify_t')}</h3><div class="mut">${t('verify_status')}: ${me.verify_status}</div>
     ${me.verify_status!=='verified'?`<button class="btn sm" onclick="vReq(this)">${t('v_req')}</button>
@@ -720,7 +849,14 @@ function renderAuth(){
   }
   buildMenu();
 }
-function logout(){TOKEN='';ME=null;localStorage.removeItem('deal_token');renderAuth();toggleMenu(false);showTab('market')}
+function logout(){TOKEN='';ME=null;localStorage.removeItem('deal_token');
+  /* مسح كامل لحالة الجلسة المحلية: القوائم المخزنة في الصفحة (حجوزات/فرص/لوحات/تنبيهات)
+     وشارة الجرس — ثم إعادة رسم فورية كزائر (السوق يُجلب بلا جلسة فتختفي بطاقة المؤسس). */
+  FILTERS_READY=false; MSG_UNREAD=0; THREAD_WITH=null;
+  ['bookList','oppList','dashBody','ownerBody','notifBody','convList','threadMsgs'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML=''});
+  closeThread();
+  const bc=$('#bellCount'); if(bc){bc.textContent='0';bc.classList.add('hide')}
+  renderAuth();toggleMenu(false);showTab('market')}
 
 /* ================= القائمة الرئيسية (كل الأيقونات في مكان واحد) ================= */
 function toggleMenu(open){
@@ -739,12 +875,65 @@ function buildMenu(){
     item('🛠️',t('nav_services'),"toggleMenu(false);showTab('services')")+
     item('📣',t('post_job_btn').replace('📣 ',''),"toggleMenu(false);openGuest()")+
     item('📖',t('nav_bookings'),"toggleMenu(false);showTab('bookings')",!!ME)+
+    item('✉️',t('nav_messages')+(MSG_UNREAD?` (${MSG_UNREAD})`:''),"toggleMenu(false);showTab('messages')",!!ME)+
     item('👤',t('m_profile'),"toggleMenu(false);showTab('dash')",!!ME)+
     item('🔔',t('notifications'),"toggleMenu(false);bell()")+
     item('🎧',t('m_support'),"toggleMenu(false);openSupport()")+
     item('👑',t('nav_owner'),"toggleMenu(false);showTab('owner')",!!(ME&&ME.user.is_platform_founder))+
     item('🌐',t('m_language')+': '+(LANG==='ar'?'EN':'عربي'),"toggleMenu(false);setLang(LANG==='ar'?'en':'ar')")+
     (ME?item('🚪',t('logout'),"logout()"):item('🔑',t('login_register'),"toggleMenu(false);openAuth()"));
+}
+
+/* ================= المراسلة الداخلية 1:1 ================= */
+let MSG_UNREAD=0, THREAD_WITH=null;
+async function msgCount(){ if(!ME){MSG_UNREAD=0;return} try{const d=await api('/api/messages');
+  MSG_UNREAD=d.unread_total||0; buildMenu(); }catch(e){} }
+async function loadConversations(){
+  if(!ME) return;
+  closeThread();
+  try{
+    const d=await api('/api/messages'); MSG_UNREAD=d.unread_total||0; buildMenu();
+    $('#convList').innerHTML=d.items.length?d.items.map(c=>`<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openThread(null,${c.user.id})">
+      <div class="row">${avatarHtml(c.user)}<div style="flex:1"><b>${esc(c.user.name)}</b>${seal(c.user)}
+      <div class="mut">${c.last.mine?'↩ ':''}${esc(c.last.body.slice(0,80))}</div></div>
+      ${c.unread?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${c.unread} ${t('msg_unread')}</span>`:''}
+      <span class="mut">${new Date(c.last.created_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</span></div></div>`).join('')
+      :`<div class="mut">${t('msg_empty')}</div>`;
+  }catch(e){toast(errT(e.message))}
+}
+async function openThread(btn,id){
+  if(!ME) return openAuth();
+  const work=async()=>{
+    document.getElementById('talentDlg').close();
+    showTab('messages');
+    hideErr('msgErr');
+    const d=await api('/api/messages/'+id);
+    THREAD_WITH=id;
+    $('#convList').classList.add('hide'); $('#threadView').classList.remove('hide');
+    $('#threadName').textContent=d.user.name;
+    $('#threadMsgs').innerHTML=d.items.length?d.items.map(m=>`<div class="msg ${m.mine?'me':'bot'}">${esc(m.body)}</div>`).join(''):`<div class="mut">${t('msg_no_thread')}</div>`;
+    const log=$('#threadMsgs'); log.scrollTop=log.scrollHeight;
+    msgCount();
+  };
+  if(btn) return withBusy(btn,work); return work();
+}
+function closeThread(){ THREAD_WITH=null;
+  const tv=$('#threadView'), cl=$('#convList');
+  if(tv)tv.classList.add('hide'); if(cl)cl.classList.remove('hide'); }
+async function sendMsg(btn){
+  const inp=$('#msgInput'); const body=inp.value.trim();
+  if(!body) return showErr('msgErr',errT('اكتب رسالة أولاً'));
+  hideErr('msgErr');
+  await withBusy(btn,async()=>{
+    try{
+      const r=await api('/api/messages/'+THREAD_WITH,{method:'POST',body:JSON.stringify({body})});
+      inp.value='';
+      const log=$('#threadMsgs');
+      const empty=log.querySelector('.mut'); if(empty) log.innerHTML='';
+      const d=document.createElement('div'); d.className='msg me'; d.textContent=r.message.body;
+      log.appendChild(d); log.scrollTop=log.scrollHeight;
+    }catch(e){showErr('msgErr',errT(e.message))}
+  });
 }
 
 /* ================= الإشعارات ================= */
@@ -758,8 +947,11 @@ async function bell(){
     const b=$('#bellCount'); b.textContent='0'; b.classList.add('hide');
   }catch(e){toast(errT(e.message))}
 }
-async function bellCount(){if(!ME)return;try{const d=await api('/api/notifications');const b=$('#bellCount');
-  b.textContent=d.unread;b.classList.toggle('hide',!d.unread)}catch(e){}}
+/* شارة الجرس تُشتق من عناصر القائمة نفسها التي تعرضها اللوحة — فلا يمكن أن
+   تُظهر عدداً بينما اللوحة فارغة أو مختلفة عنه. */
+async function bellCount(){if(!ME)return;try{const d=await api('/api/notifications');
+  const unread=(d.items||[]).filter(n=>!n.is_read).length;
+  const b=$('#bellCount'); b.textContent=unread;b.classList.toggle('hide',!unread)}catch(e){}}
 $('#bellBtn').onclick=()=>bell();
 
 /* ================= الدعم بالرد التلقائي ================= */
@@ -804,6 +996,7 @@ function handleSupportAnswer(r){
   }
 }
 $('#supportInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();askSupport(null)}});
+$('#msgInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendMsg(null)}});
 
 /* ================= التبويبات والتوجيه ================= */
 let CURTAB='market';
@@ -812,10 +1005,15 @@ function showTab(tb){
   CURTAB=tb;
   $$('main section').forEach(s=>s.classList.add('hide'));$('#tab-'+tb).classList.remove('hide');
   $$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tb));
-  ({market:()=>loadMarket(),services:()=>loadServices('ads'),campaigns:loadCampaigns,opps:loadOpps,bookings:loadBookings,dash:loadDash,owner:loadOwner}[tb]||(()=>{}))();
+  ({market:()=>loadMarket(),services:()=>loadServices('ads'),campaigns:loadCampaigns,opps:loadOpps,bookings:loadBookings,messages:loadConversations,dash:loadDash,owner:loadOwner}[tb]||(()=>{}))();
 }
 $$('#nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
-async function refresh(){ FILTERS_READY=false; if(CURTAB==='market') loadMarket(); else showTab(CURTAB); bellCount(); }
+/* إعادة رسم شاملة عند تبديل اللغة (وفي الدخول): كل القوائم الديناميكية تُعاد
+   تهيئتها فوراً في الاتجاهين — لا بطاقة تبقى بلغة سابقة في أي قسم حتى إعادة التحميل. */
+async function refresh(){ FILTERS_READY=false;
+  loadMarket(); loadServices(SVC_CAT); loadCampaigns();
+  if(ME){ loadOpps(); loadBookings(); if(CURTAB==='dash')loadDash(); if(CURTAB==='owner')loadOwner(); if(CURTAB==='messages')loadConversations(); }
+  bellCount(); msgCount(); }
 
 /* ================= الضيف: نشر طلب + صفحة الرمز ================= */
 function waNum(p){const d=String(p||'').replace(/\D/g,'');return d.startsWith('0')?'20'+d.slice(1):d}
@@ -893,7 +1091,7 @@ window.addEventListener('hashchange',()=>{if(!routeHash()){ $('#hero').classList
   if(TOKEN){try{const m=await api('/api/me');ME={user:m.user};}catch(e){TOKEN='';localStorage.removeItem('deal_token')}}
   renderAuth();
   if(!routeHash()) loadMarket();
-  bellCount();
+  bellCount(); msgCount();
 })();
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#installBtn').style.display=''});

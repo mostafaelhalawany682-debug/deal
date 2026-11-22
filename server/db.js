@@ -21,8 +21,19 @@ if (!DATABASE_URL) {
 }
 const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(DATABASE_URL);
 
+// رابط Supabase Pooler يحمل sslmode=require، وإصدارات pg الحديثة تفسّره كتحقق
+// صارم (verify-full) فيفشل أمام سلسلة شهادات الـ Pooler رغم ضبط ssl أدناه —
+// لأن باراميتر الرابط يتغلب على إعداد الكائن. الحل: حذف sslmode من الرابط
+// والاعتماد على إعداد ssl الصريح في التجميعة.
+let connStr = DATABASE_URL;
+try {
+  const u = new URL(DATABASE_URL);
+  u.searchParams.delete('sslmode');
+  connStr = u.toString();
+} catch { /* إن فشل التحليل نستخدم الرابط كما هو */ }
+
 const pool = new Pool({
-  connectionString: DATABASE_URL,
+  connectionString: connStr,
   // Supabase يتطلب SSL من خارج شبكته؛ الاتصال المحلي (اختبار) بلا SSL.
   ssl: isLocal ? false : { rejectUnauthorized: false },
   // تجميعة صغيرة لكل نسخة serverless حتى لا نستنفد اتصالات الـ Pooler.

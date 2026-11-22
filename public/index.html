@@ -769,7 +769,7 @@ async function loadDash(){
   /* «أقرب شارة»: أعلى نسبة تقدم غير مكتملة من نفس بيانات /api/me/badges-progress. */
   const unearned=(bdg.items||[]).filter(b=>!b.earned);
   const closest=unearned.length?unearned.reduce((a,b)=>b.pct>a.pct?b:a,unearned[0]):null;
-  const closestHtml=closest&&closest.pct>0?`<div class="row" style="margin-top:10px"><span class="chip" style="border-color:var(--gold);color:var(--gold);cursor:pointer" onclick="document.getElementById('dashBadges').scrollIntoView({behavior:'smooth'})">🏅 ${t('bp_closest')}: ${esc(t('bdg_'+closest.key))} — ${closest.pct}%</span></div>`:'';
+  const closestHtml=closest?`<div class="row" style="margin-top:10px"><span class="chip" style="border-color:var(--gold);color:var(--gold);cursor:pointer" onclick="document.getElementById('dashBadges').scrollIntoView({behavior:'smooth'})">🏅 ${t('bp_closest')}: ${esc(t('bdg_'+closest.key))} — ${t('bp_done_w')} ${closest.current} ${t('bp_of_w')} ${closest.target}${closest.pct>0?` · ${closest.pct}%`:''}</span></div>`:'';
   const ovStrip=ov?`<div class="card ov-strip" style="margin-bottom:12px"><div style="font-size:16px">✨ ${t('ov_tagline')}</div>
     <div class="kpi" style="margin-top:10px">
     ${ovCard(ov.opportunities,t('ov_opps'),"showTab('opps')")}

@@ -15,7 +15,7 @@ const { Pool, types } = require('pg');
 types.setTypeParser(20, (v) => (v === null ? null : Number(v)));   // int8 / COUNT / SUM
 types.setTypeParser(1700, (v) => (v === null ? null : Number(v))); // numeric / AVG
 
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 if (!DATABASE_URL) {
   throw new Error('DATABASE_URL is not set — اضبط رابط اتصال Postgres (Supabase) في متغيرات البيئة');
 }

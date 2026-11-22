@@ -38,16 +38,60 @@ nav button.on{background:var(--card);color:var(--txt);border:1px solid var(--lin
 .sp{flex:1}.bell{position:relative;background:none;border:0;font-size:20px;color:var(--txt)}
 .bell b{position:absolute;top:-4px;inset-inline-start:-4px;background:#e03131;color:#fff;font-size:11px;border-radius:50%;min-width:18px;height:18px;display:grid;place-items:center}
 .hbtn{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:14px;font-weight:700}
-.hero{max-width:1150px;margin:auto;padding:72px 16px 34px;text-align:center;position:relative;overflow:hidden}
-.hero::before{content:'';position:absolute;inset:-30% -12%;pointer-events:none;
-background:radial-gradient(closest-side,rgba(212,160,23,.20),transparent 70%) 18% 22%/52% 52% no-repeat,
-radial-gradient(closest-side,rgba(14,159,110,.24),transparent 70%) 84% 12%/58% 58% no-repeat,
-radial-gradient(closest-side,rgba(232,114,12,.12),transparent 70%) 55% 88%/46% 46% no-repeat;
-animation:heroGlow 15s ease-in-out infinite alternate}
-@keyframes heroGlow{from{opacity:.5;transform:scale(1) translateY(0)}to{opacity:1;transform:scale(1.07) translateY(12px)}}
+/* ===== الهيرو السينمائي الجديد: أورورا شبكية (mesh) + ملمس حبيبي (noise) +
+   مسرح بصري بموبايل CSS وطبقات عائمة — تغيير شكلي كامل لا تلميع ===== */
+.hero{position:relative;overflow:hidden;text-align:center;background:
+radial-gradient(1100px 620px at 85% -10%,rgba(212,160,23,.14),transparent 60%),
+radial-gradient(900px 700px at 8% 112%,rgba(139,92,246,.10),transparent 60%),
+linear-gradient(180deg,#04160f,#07271d 55%,#0a2f23)}
+.hero::before{content:'';position:absolute;inset:-25% -10%;pointer-events:none;z-index:0;
+background:radial-gradient(closest-side,rgba(14,159,110,.30),transparent 70%) 12% 18%/55% 55% no-repeat,
+radial-gradient(closest-side,rgba(212,160,23,.24),transparent 70%) 88% 8%/50% 50% no-repeat,
+radial-gradient(closest-side,rgba(139,92,246,.16),transparent 70%) 78% 88%/46% 46% no-repeat,
+radial-gradient(closest-side,rgba(232,114,12,.14),transparent 70%) 30% 95%/42% 42% no-repeat;
+animation:heroGlow 16s ease-in-out infinite alternate}
+@keyframes heroGlow{from{opacity:.55;transform:scale(1) translate3d(0,0,0)}to{opacity:1;transform:scale(1.08) translate3d(0,14px,0)}}
+.hero::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:2;opacity:.05;
+background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.6'/></svg>")}
 .hero>*{position:relative;z-index:1}
-.hero h1{font-size:clamp(34px,6.8vw,64px);font-weight:900;line-height:1.22;margin:0 0 12px;letter-spacing:-.5px}
-.hero p{color:var(--mut);font-size:18px;margin:0 0 24px}
+.hero-stage{max-width:1150px;margin:auto;padding:84px 16px 58px;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;text-align:start}
+.hero h1{font-size:clamp(38px,6.4vw,68px);font-weight:900;line-height:1.18;margin:0 0 14px;letter-spacing:-.5px}
+.hero-sub{color:var(--mut);font-size:19px;margin:0 0 26px;line-height:1.7}
+.glass-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+.glass-chip{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px);
+border-radius:999px;padding:7px 14px;font-size:13.5px;color:var(--txt);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.hero-stats{display:flex;gap:32px;margin-top:32px;flex-wrap:wrap}
+.hstat .n{font-size:34px;font-weight:900;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.1}
+.hstat .l{color:var(--mut);font-size:13.5px;margin-top:2px}
+.hero-visual{position:relative;perspective:1200px;will-change:transform}
+.phone{width:min(300px,80vw);margin:auto;background:linear-gradient(170deg,#101613,#070a08);border:3px solid #2c332e;border-radius:44px;
+padding:16px 13px 20px;box-shadow:0 44px 90px rgba(0,0,0,.6),inset 0 0 0 2px #000,0 0 90px rgba(14,159,110,.14);
+transform:rotateX(7deg) rotateY(-11deg);position:relative}
+[dir="rtl"] .phone{transform:rotateX(7deg) rotateY(11deg)}
+.ph-notch{width:92px;height:19px;background:#000;border-radius:11px;margin:0 auto 14px}
+.ph-top{display:flex;align-items:center;gap:7px;margin-bottom:12px}
+.ph-logo{width:24px;height:24px;border-radius:7px;background:var(--grad);display:grid;place-items:center;font-size:13px;flex:none}
+.ph-card{background:linear-gradient(165deg,#14402c,#0d3527);border:1px solid var(--line);border-radius:18px;padding:13px;box-shadow:var(--shadow-sm)}
+.ph-ava{width:46px;height:46px;border-radius:50%;background:var(--grad);display:grid;place-items:center;font-weight:900;font-size:19px;color:#fff;flex:none;border:2px solid rgba(255,255,255,.35)}
+.ph-bar{height:9px;border-radius:99px;background:rgba(255,255,255,.18)}
+.ph-bar.gold{background:linear-gradient(90deg,var(--gold),#f3cd6b)}
+.ph-pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11px;color:var(--mut)}
+.ph-steps{display:flex;align-items:center;gap:5px;margin-top:13px}
+.ph-dot{width:11px;height:11px;border-radius:50%;background:#234636;flex:none}
+.ph-dot.on{background:var(--em);box-shadow:0 0 8px rgba(14,159,110,.8)}
+.ph-dot.gold{background:var(--gold);box-shadow:0 0 8px rgba(212,160,23,.8)}
+.ph-line{flex:1;height:2px;background:#1c4d3a;border-radius:2px}
+.float-wrap{position:absolute;z-index:3;will-change:transform}
+.float-card{background:rgba(10,38,27,.78);border:1px solid rgba(212,160,23,.5);border-radius:15px;padding:10px 14px;
+backdrop-filter:blur(9px);box-shadow:0 18px 38px rgba(0,0,0,.5);font-size:13.5px;font-weight:700;white-space:nowrap;
+animation:floaty 5.5s ease-in-out infinite alternate}
+.float-card small{display:block;color:var(--mut);font-weight:400;font-size:11.5px;margin-top:2px}
+@keyframes floaty{from{transform:translateY(0) rotate(var(--fr,0deg))}to{transform:translateY(-11px) rotate(var(--fr,0deg))}}
+.fw1{top:5%;inset-inline-start:-4%}
+.fw2{bottom:13%;inset-inline-end:-5%}
+.fw3{top:45%;inset-inline-end:-9%}
+.fw2 .float-card{animation-duration:6.5s;animation-delay:.7s}
+.fw3 .float-card{animation-duration:7.5s;animation-delay:1.2s}
 .wrap{max-width:1150px;margin:auto;padding:10px 16px 60px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:14px}
 @keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -128,11 +172,100 @@ box-shadow:0 0 0 2px #0d1013,0 0 0 4px rgba(212,160,23,.55),0 6px 14px rgba(0,0,
 .chipbtn{background:var(--card);border:1px solid var(--gold);color:var(--txt);border-radius:999px;padding:6px 12px;font-size:13px;margin:3px}
 .notif-item{border-bottom:1px solid var(--line);padding:9px 2px;font-size:14.5px}
 .notif-item.unread{border-inline-start:3px solid var(--gold);padding-inline-start:9px}
+/* ===== الشريط المتحرك (marquee): مجالات ومدن — اتجاه داخلي موحّد لضمان حلقة سلسة ===== */
+.marquee{border-top:1px solid rgba(212,160,23,.35);border-bottom:1px solid rgba(212,160,23,.35);
+background:linear-gradient(90deg,rgba(212,160,23,.13),rgba(14,159,110,.10),rgba(212,160,23,.13));
+overflow:hidden;padding:11px 0;direction:ltr}
+.mq-in{display:inline-flex;white-space:nowrap;animation:mqMove 34s linear infinite;will-change:transform}
+.mq-in span{font-weight:800;font-size:15px;color:#e9d9a8;padding:0 6px}
+@keyframes mqMove{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+/* ===== «إزاي بتشتغل»: بطاقات زجاجية مرقّمة ضخمة على الداكن + نمط ختم Deal النقطي ===== */
+.seal-dots{background-image:radial-gradient(rgba(212,160,23,.09) 1.5px,transparent 1.7px);background-size:22px 22px}
+.how-sec{max-width:1150px;margin:auto;padding:58px 16px 10px;text-align:center}
+.how-sec h2{font-size:clamp(26px,4.4vw,40px);font-weight:900;margin:0 0 8px}
+.how-card{position:relative;text-align:start;background:linear-gradient(168deg,rgba(255,255,255,.055),rgba(255,255,255,.02));
+border:1px solid rgba(255,255,255,.13);border-radius:22px;padding:22px;backdrop-filter:blur(6px);
+box-shadow:0 16px 36px rgba(0,0,0,.35);overflow:hidden;transition:transform .18s ease,box-shadow .18s ease}
+.how-card:hover{transform:translateY(-3px);box-shadow:0 22px 44px rgba(0,0,0,.45)}
+.how-num{font-size:56px;font-weight:900;line-height:1;background:linear-gradient(180deg,rgba(212,160,23,.9),rgba(212,160,23,.10));
+-webkit-background-clip:text;background-clip:text;color:transparent}
+.how-card h3{margin:10px 0 5px;font-size:18px}
+/* ===== مقاعد المؤسسين: قسم فاتح ذهبي بالتناوب مع الداكن + بطاقة ذهبية بعدّاد بصري ===== */
+.seats-sec{margin-top:54px;background:linear-gradient(135deg,#f8ecd2,#f0d9a4 55%,#e9cd8d);color:#2a1f04;
+padding:54px 16px 60px;text-align:center;position:relative;overflow:hidden}
+.seats-sec::before{content:'';position:absolute;inset:0;pointer-events:none;
+background-image:radial-gradient(rgba(122,84,4,.13) 1.5px,transparent 1.7px);background-size:22px 22px}
+.seats-card{position:relative;max-width:760px;margin:auto;background:linear-gradient(165deg,#2b2103,#171204);color:#fdf6e0;
+border:2px solid var(--gold);border-radius:26px;padding:30px 26px;
+box-shadow:0 30px 60px rgba(90,64,0,.35),0 0 0 6px rgba(212,160,23,.18)}
+.seats-card h2{margin:0 0 8px;font-size:clamp(24px,4vw,34px);font-weight:900}
+.seats-dots{display:flex;gap:5px;margin:18px 0 8px;animation:seatsPulse 3.2s ease-in-out infinite alternate}
+.seats-dots i{flex:1;height:14px;border-radius:6px;background:linear-gradient(180deg,#f3cd6b,#a87c0e);box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+@keyframes seatsPulse{from{opacity:.72}to{opacity:1}}
+/* ===== شريط التنقل السفلي (للمسجلين فقط): ثابت كالتطبيقات + حبة عائمة على الواسع ===== */
+.tabbar{position:fixed;bottom:0;left:0;right:0;z-index:65;display:flex;gap:2px;
+background:rgba(6,32,23,.94);backdrop-filter:blur(12px);border-top:1px solid var(--line);
+padding:7px 6px calc(7px + env(safe-area-inset-bottom));box-shadow:0 -10px 30px rgba(0,0,0,.4)}
+.tabbar.hide{display:none}
+.tabbar button{flex:1;background:none;border:0;color:var(--mut);display:flex;flex-direction:column;align-items:center;gap:3px;
+font-size:11.5px;font-weight:700;padding:7px 2px 3px;border-radius:13px;position:relative;transition:color .15s ease}
+.tabbar button svg{width:23px;height:23px}
+.tabbar button.on{color:var(--gold)}
+.tabbar button.on::before{content:'';position:absolute;top:-7px;left:22%;right:22%;height:3px;border-radius:0 0 4px 4px;background:var(--grad)}
+.tb-badge{position:absolute;top:1px;inset-inline-start:calc(50% + 3px);background:#e03131;color:#fff;font-size:10.5px;
+border-radius:99px;min-width:17px;height:17px;display:grid;place-items:center;padding:0 4px}
+html.has-tabbar body{padding-bottom:88px}
+html.has-tabbar .fab{bottom:102px}
+html.has-tabbar .toast{bottom:102px}
+@media (min-width:821px){
+  .tabbar{left:50%;right:auto;transform:translateX(-50%);bottom:16px;width:auto;border:1px solid var(--line);border-radius:999px;padding:7px 10px}
+  .tabbar button{padding:8px 18px 5px;border-radius:999px}
+  .tabbar button.on::before{top:auto;bottom:-1px;left:26%;right:26%;border-radius:4px}
+  html.has-tabbar body{padding-bottom:106px}
+  html.has-tabbar .fab{bottom:112px}
+}
+/* ===== بطاقات الصناع الجديدة: ترويسة غلاف متدرجة من لون المجال + صورة متداخلة + شرائح ===== */
+.tcard{padding:0;overflow:hidden}
+.tcover{height:66px;position:relative;flex:none}
+.tcover.tall{height:86px}
+.tcover::after{content:'';position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.15) 1.2px,transparent 1.4px);background-size:16px 16px}
+.tbody{padding:0 16px 16px}
+.tava{display:inline-block;margin-top:-26px;position:relative;z-index:2}
+.tava.big{margin-top:-38px}
+.tava .avatar,.tava .avatar-fb{border:3px solid var(--card);box-shadow:0 8px 18px rgba(0,0,0,.4)}
+/* ===== هيدر «لوحتي» الجديد + بلاطات KPI بمتدرجات مختلفة لكل بلاطة ===== */
+.dash-hero{background:linear-gradient(120deg,#0e4d33,#0a2f23 55%,#14402c);border:1px solid rgba(212,160,23,.35);position:relative;overflow:hidden}
+.dash-hero:not(.founder-card)::before{content:'';position:absolute;inset:0;pointer-events:none;
+background-image:radial-gradient(rgba(212,160,23,.10) 1.5px,transparent 1.7px);background-size:22px 22px}
+.dash-hero>*{position:relative}
+.kpi .card.g1{border-top:3px solid #0e9f6e}.kpi .card.g2{border-top:3px solid #e8720c}
+.kpi .card.g3{border-top:3px solid #d4a017}.kpi .card.g4{border-top:3px solid #8b5cf6}
+.kpi .card.g5{border-top:3px solid #2aa7c9}
+.kpi .card.g1 .n,.kpi .card.g2 .n,.kpi .card.g3 .n,.kpi .card.g4 .n,.kpi .card.g5 .n{-webkit-background-clip:text;background-clip:text;color:transparent}
+.kpi .card.g1 .n{background-image:linear-gradient(90deg,#0e9f6e,#8ff0c0)}
+.kpi .card.g2 .n{background-image:linear-gradient(90deg,#e8720c,#ffb37a)}
+.kpi .card.g3 .n{background-image:linear-gradient(90deg,#d4a017,#ffe08a)}
+.kpi .card.g4 .n{background-image:linear-gradient(90deg,#8b5cf6,#cfb3ff)}
+.kpi .card.g5 .n{background-image:linear-gradient(90deg,#2aa7c9,#9be6ff)}
+#tab-dash .card>h3{border-inline-start:4px solid var(--gold);padding-inline-start:10px}
+/* ===== حالة تحميل هيكلية (skeleton) بنبض opacity ===== */
+.skel{pointer-events:none}
+.sk{border-radius:10px;background:rgba(255,255,255,.08);animation:skPulse 1.3s ease-in-out infinite alternate}
+@keyframes skPulse{from{opacity:.4}to{opacity:1}}
+/* ===== ظهور متدرج عند التمرير — لا يخفي شيئاً إن غابت الجافاسكريبت ===== */
+.jsfx .rv{opacity:0;transform:translateY(20px);transition:opacity .65s ease,transform .65s ease}
+.jsfx .rv.in{opacity:1;transform:none}
 @media (max-width:820px){
   nav{display:none}
   #langBtn,#authArea{display:none}
   .hwrap{gap:7px;padding:9px 10px}
-  .hero{padding:46px 14px 24px}
+  .hero-stage{grid-template-columns:1fr;padding:54px 14px 40px;gap:34px;text-align:center}
+  .hero-copy .row,.glass-row,.hero-stats{justify-content:center}
+  .fw1{inset-inline-start:-2%}
+  .fw2{inset-inline-end:-2%}
+  .fw3{display:none}
+  .how-sec{padding:44px 14px 4px}
+  .seats-sec{padding:44px 14px 48px}
 }
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
@@ -168,19 +301,70 @@ box-shadow:0 0 0 2px #0d1013,0 0 0 4px rgba(212,160,23,.55),0 6px 14px rgba(0,0,
 </aside>
 
 <section class="hero" id="hero">
-  <h1><span data-i18n="hero_l1">انتهى زمن اللف على الشغل…</span><br><span class="grad-text" data-i18n="hero_l2">الشغل هو اللي بيدوّر عليك</span></h1>
-  <p data-i18n="hero_sub">فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.</p>
-  <div class="row" style="justify-content:center">
-    <button class="btn" style="font-size:18px;padding:14px 28px" onclick="openGuest()" data-i18n="post_job_btn">📣 انشر شغلانة</button>
-    <button class="btn" onclick="openAuth('creator')" data-i18n="register_creator">سجّل كصانع</button>
-    <button class="btn ghost" onclick="showTab('market')" data-i18n="browse_market">تصفح السوق</button>
-    <button class="btn ghost" id="installBtn" style="display:none" data-i18n="install_app">ثبّت Deal على موبايلك</button>
+  <div class="hero-stage">
+    <div class="hero-copy">
+      <h1><span data-i18n="hero_l1">انتهى زمن اللف على الشغل…</span><br><span class="grad-text" data-i18n="hero_l2">الشغل هو اللي بيدوّر عليك</span></h1>
+      <p class="hero-sub" data-i18n="hero_sub">فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.</p>
+      <div class="row">
+        <button class="btn" style="font-size:18px;padding:14px 28px" onclick="openGuest()" data-i18n="post_job_btn">📣 انشر شغلانة</button>
+        <button class="btn" onclick="openAuth('creator')" data-i18n="register_creator">سجّل كصانع</button>
+        <button class="btn ghost" onclick="showTab('market')" data-i18n="browse_market">تصفح السوق</button>
+        <button class="btn ghost" id="installBtn" style="display:none" data-i18n="install_app">ثبّت Deal على موبايلك</button>
+      </div>
+      <p class="mut" style="margin-top:12px" data-i18n="hero_guest_note">عندك محل أو براند؟ انشر شغلانتك في دقيقة — من غير تسجيل، والصناع هيتواصلوا معاك واتساب.</p>
+      <div class="glass-row">
+        <span class="glass-chip" data-i18n="trust_1">🛡️ حجز محمي بضمان Deal</span>
+        <span class="glass-chip" data-i18n="trust_2">✔️ توثيق آلي فوري</span>
+        <span class="glass-chip" data-i18n="trust_3">💬 تواصل واتساب مباشر</span>
+      </div>
+      <div class="hero-stats">
+        <div class="hstat"><div class="n"><span class="cnt" data-count="100">100</span></div><div class="l" data-i18n="stat_seats">مقعد مؤسس لأوائل الصناع</div></div>
+        <div class="hstat"><div class="n"><span class="cnt" data-count="10">10</span>%</div><div class="l" data-i18n="stat_fee">عمولة فقط — والباقي كله ليك</div></div>
+        <div class="hstat"><div class="n"><span class="cnt" data-count="48">48</span></div><div class="l" data-i18n="stat_hours">ساعة تأكيد تلقائي يحمي قبضك</div></div>
+      </div>
+    </div>
+    <div class="hero-visual" data-plx="5">
+      <div class="phone">
+        <div class="ph-notch"></div>
+        <div class="ph-top"><span class="ph-logo">🤝</span><b style="font-size:14px">Deal</b><div class="sp"></div><span style="color:var(--gold)">🔔</span></div>
+        <div class="ph-card">
+          <div class="row" style="flex-wrap:nowrap"><span class="ph-ava">ص</span><div style="flex:1">
+            <div class="ph-bar" style="width:62%"></div>
+            <div class="ph-bar" style="width:40%;margin-top:6px"></div></div>
+            <span style="color:var(--gold);font-size:13px">✔️</span></div>
+          <div class="row" style="margin-top:10px"><span class="ph-pill" data-i18n="mock_niche">كوميديا</span><span class="ph-pill" data-i18n="mock_city">كفر الشيخ</span><span class="ph-pill">⭐ 5.0</span></div>
+          <div class="row" style="margin-top:11px"><span class="price" style="font-size:15px">500 <span data-i18n="mock_curr">جنيه</span></span><div class="sp"></div><span class="ph-bar gold" style="width:74px;height:24px;border-radius:8px"></span></div>
+          <div class="ph-steps"><span class="ph-dot on"></span><span class="ph-line"></span><span class="ph-dot on"></span><span class="ph-line"></span><span class="ph-dot gold"></span><span class="ph-line"></span><span class="ph-dot"></span></div>
+          <div class="mut" style="font-size:11px;margin-top:6px" data-i18n="mock_steps">اتفاق · عمولة Deal أولاً · عربون · تنفيذ · باقي القبض</div>
+        </div>
+        <div class="ph-card" style="margin-top:11px;padding:10px 13px">
+          <div class="row" style="flex-wrap:nowrap"><span>💰</span><div style="flex:1"><div class="ph-bar" style="width:55%"></div><div class="ph-bar" style="width:35%;margin-top:5px"></div></div><b style="color:var(--em);font-size:13px">+225</b></div>
+        </div>
+      </div>
+      <div class="float-wrap fw1" data-plx="16"><div class="float-card" style="--fr:-3deg">🛡️ <span data-i18n="mock_book">حجز محمي بضمان Deal</span><small data-i18n="mock_book_s">دفع على مراحل موثقة</small></div></div>
+      <div class="float-wrap fw2" data-plx="22"><div class="float-card" style="--fr:2deg">💰 <span data-i18n="mock_pay">وصلِك العربون</span><small>+225 · <span data-i18n="mock_pay_s">قبل ما تبدأ التنفيذ</span></small></div></div>
+      <div class="float-wrap fw3" data-plx="13"><div class="float-card" style="--fr:-2deg">✔️ <span data-i18n="mock_ver">حساب موثّق</span><small data-i18n="mock_ver_s">شارة Deal الذهبية</small></div></div>
+    </div>
   </div>
-  <p class="mut" style="margin-top:10px" data-i18n="hero_guest_note">عندك محل أو براند؟ انشر شغلانتك في دقيقة — من غير تسجيل، والصناع هيتواصلوا معاك واتساب.</p>
-  <div class="why wrap" style="padding-bottom:0">
-    <div class="card"><h3 data-i18n="why1_t">فرص بتيجي لك</h3><div class="mut" data-i18n="why1_d">طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.</div></div>
-    <div class="card"><h3 data-i18n="why2_t">سمعة موثقة بتكبر</h3><div class="mut" data-i18n="why2_d">تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.</div></div>
-    <div class="card"><h3 data-i18n="why3_t">قبض محمي بضمان Deal</h3><div class="mut" data-i18n="why3_d">دفع على مراحل، عمولة التطبيق أولاً، وإثبات تنفيذ يحمي الطرفين.</div></div>
+  <div class="marquee"><div class="mq-in"><span data-i18n="marquee_items">كوميديا ✦ طبخ ✦ رياضة ✦ جمال ✦ مراجعات ✦ تعليم ✦ ألعاب ✦ كفر الشيخ ✦ القاهرة ✦ الجيزة ✦ الإسكندرية ✦ المنصورة ✦ طنطا ✦ أسيوط ✦ </span><span data-i18n="marquee_items">كوميديا ✦ طبخ ✦ رياضة ✦ جمال ✦ مراجعات ✦ تعليم ✦ ألعاب ✦ كفر الشيخ ✦ القاهرة ✦ الجيزة ✦ الإسكندرية ✦ المنصورة ✦ طنطا ✦ أسيوط ✦ </span></div></div>
+  <div class="how-sec seal-dots">
+    <h2 data-i18n="how_t">إزاي بتشتغل؟</h2>
+    <p class="mut" data-i18n="how_sub">ثلاث خطوات بسيطة — والشغل بيوصلك لحد عندك</p>
+    <div class="why" style="text-align:start;margin-bottom:0">
+      <div class="how-card rv"><div class="how-num">01</div><h3 data-i18n="why1_t">فرص بتيجي لك</h3><div class="mut" data-i18n="why1_d">طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.</div></div>
+      <div class="how-card rv"><div class="how-num">02</div><h3 data-i18n="why2_t">سمعة موثقة بتكبر</h3><div class="mut" data-i18n="why2_d">تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.</div></div>
+      <div class="how-card rv"><div class="how-num">03</div><h3 data-i18n="why3_t">قبض محمي بضمان Deal</h3><div class="mut" data-i18n="why3_d">دفع على مراحل، عمولة التطبيق أولاً، وإثبات تنفيذ يحمي الطرفين.</div></div>
+    </div>
+  </div>
+  <div class="seats-sec">
+    <div class="seats-card rv">
+      <div style="font-size:30px">👑</div>
+      <h2 data-i18n="seats_t">مقاعد المؤسسين — أول ١٠٠ صانع</h2>
+      <p style="color:#e8dcc0;margin:0" data-i18n="seats_d">أول ١٠٠ صانع موثّق على Deal بياخدوا شارة «عضو مؤسس» الدائمة وأولوية الظهور في مدينتهم. المقاعد محدودة — احجز مكانك من دلوقتي.</p>
+      <div class="seats-dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div style="color:#cbbd93;font-size:13.5px" data-i18n="seats_total">برنامج المؤسسين: 100 مقعد فقط</div>
+      <div style="margin-top:16px"><button class="btn" style="font-size:16px;padding:13px 26px" onclick="openAuth('creator')" data-i18n="seats_cta">احجز مقعدك — سجّل كصانع</button></div>
+    </div>
   </div>
 </section>
 
@@ -264,6 +448,13 @@ box-shadow:0 0 0 2px #0d1013,0 0 0 4px rgba(212,160,23,.55),0 6px 14px rgba(0,0,
 </main>
 
 <footer data-i18n="footer">Deal — منصة كل صناع المحتوى · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal</footer>
+<nav class="tabbar hide" id="tabbar">
+  <button data-tbtab="market" class="on" onclick="showTab('market')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg><span data-i18n="tb_home">الرئيسية</span></button>
+  <button data-tbtab="campaigns" onclick="showTab('campaigns')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 4.5 4h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12v9h14v-9"/><path d="M9 21v-5h6v5"/></svg><span data-i18n="nav_market">السوق</span></button>
+  <button data-tbtab="dash" onclick="showTab('dash')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg><span data-i18n="nav_dash">لوحتي</span></button>
+  <button data-tbtab="messages" onclick="showTab('messages')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.6A8.5 8.5 0 1 1 21 11.5z"/></svg><span data-i18n="nav_messages">الرسائل</span><b class="tb-badge hide" id="tbMsgBadge">0</b></button>
+  <button onclick="toggleMenu(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span data-i18n="menu">القائمة</span></button>
+</nav>
 <div class="toast" id="toast"></div>
 <button class="fab" id="supportFab" onclick="openSupport()" title="الدعم">🎧</button>
 
@@ -434,7 +625,8 @@ follow_btn:'متابعة',following_btn:'أتابع ✓',followed_t:'بقيت ت
 copy_profile_link:'🔗 انسخ رابط ملفي',featured_chip:'⭐ صانع مميز',profile_locked_t:'هذا الملف غير متاح للزوار',profile_locked_d:'بعض الملفات (مثل ملف المؤسس) تظهر للصناع ومقدمي الخدمة المسجلين فقط — سجل دخولك أو تصفح السوق.',ov_tagline:'شغلك وقبضك ورسايلك وفرصك — كله في مكان واحد',ov_opps:'فرص مطابقة جديدة',ov_bookings:'حجوزات جارية',ov_msgs:'رسائل غير مقروءة',ov_followers:'متابِعون على Deal',ov_refs:'إحالات موثقة',referrals_t:'دعواتي — سجّلوا من رابطي',ref_total:'إجمالي المسجلين من رابطي',ref_verified:'موثّقون',ref_progress:'تقدمك نحو شارة «سفير Deal»',ref_empty:'لا دعوات بعد — شارك رابط ملفك وخلي الصناع يسجلوا من خلالك.',ref_state_verified:'موثّق ✓',ref_state_pending:'بانتظار التوثيق',ref_featured_active:'ظهورك المميز في السوق نشط الآن ⭐',ref_share_hint:'كل صانع يسجل من رابطك ويتوثّق بيقرّبك من شارة السفير وبيفعّل ظهورك المميز.',
 founder_ribbon:'المؤسس',bp_title:'شاراتي وتقدّمي',bp_closest:'أقرب شارة',bp_done_w:'أنجزت',bp_of_w:'من',bp_left_w:'باقي لك',bp_rate_now:'نسبتك الحالية',bp_pos_now:'إيجابيتك الحالية',bp_age_now:'عضويتك الآن',bp_day_w:'يوم',
 bdg_perfect:'إتمام مثالي',bdg_top_rated:'الأعلى تقييماً',bdg_fast:'تنفيذ سريع',bdg_rising:'صانع صاعد',bdg_ambassador:'سفير Deal',bdg_veteran:'مخضرم',
-bp_cond_perfect:'أكمل 10 صفقات بنسبة إتمام 100%',bp_cond_top_rated:'اجمع 10 تقييمات بإيجابية 95% فأكثر',bp_cond_fast:'سلّم إثبات التنفيذ قبل المهلة في آخر 5 صفقات مكتملة',bp_cond_rising:'أكمل 5 صفقات',bp_cond_ambassador:'5 صناع موثّقين سجّلوا من رابط ملفك',bp_cond_veteran:'أكمل 20 صفقة وعضوية 6 أشهر (180 يوم)'},
+bp_cond_perfect:'أكمل 10 صفقات بنسبة إتمام 100%',bp_cond_top_rated:'اجمع 10 تقييمات بإيجابية 95% فأكثر',bp_cond_fast:'سلّم إثبات التنفيذ قبل المهلة في آخر 5 صفقات مكتملة',bp_cond_rising:'أكمل 5 صفقات',bp_cond_ambassador:'5 صناع موثّقين سجّلوا من رابط ملفك',bp_cond_veteran:'أكمل 20 صفقة وعضوية 6 أشهر (180 يوم)',
+tb_home:'الرئيسية',trust_1:'🛡️ حجز محمي بضمان Deal',trust_2:'✔️ توثيق آلي فوري',trust_3:'💬 تواصل واتساب مباشر',stat_seats:'مقعد مؤسس لأوائل الصناع',stat_fee:'عمولة فقط — والباقي كله ليك',stat_hours:'ساعة تأكيد تلقائي يحمي قبضك',mock_niche:'كوميديا',mock_city:'كفر الشيخ',mock_curr:'جنيه',mock_steps:'اتفاق · عمولة Deal أولاً · عربون · تنفيذ · باقي القبض',mock_book:'حجز محمي بضمان Deal',mock_book_s:'دفع على مراحل موثقة',mock_pay:'وصلِك العربون',mock_pay_s:'قبل ما تبدأ التنفيذ',mock_ver:'حساب موثّق',mock_ver_s:'شارة Deal الذهبية',marquee_items:'كوميديا ✦ طبخ ✦ رياضة ✦ جمال ✦ مراجعات ✦ تعليم ✦ ألعاب ✦ كفر الشيخ ✦ القاهرة ✦ الجيزة ✦ الإسكندرية ✦ المنصورة ✦ طنطا ✦ أسيوط ✦ ',how_t:'إزاي بتشتغل؟',how_sub:'ثلاث خطوات بسيطة — والشغل بيوصلك لحد عندك',seats_t:'مقاعد المؤسسين — أول ١٠٠ صانع',seats_d:'أول ١٠٠ صانع موثّق على Deal بياخدوا شارة «عضو مؤسس» الدائمة وأولوية الظهور في مدينتهم. المقاعد محدودة — احجز مكانك من دلوقتي.',seats_total:'برنامج المؤسسين: 100 مقعد فقط',seats_cta:'احجز مقعدك — سجّل كصانع'},
 en:{loading:'Loading…',copied:'Copied ✓',nav_market:'Market',nav_services:'Services',nav_campaigns:'Campaigns',nav_opps:'Opportunities',nav_bookings:'My bookings',nav_dash:'My dashboard',nav_owner:'Owner panel',post_job_btn:'📣 Post a job',menu:'Menu',main_menu:'Main menu',login_register:'Login / Register',hero_l1:'No more chasing work…',hero_l2:'Work comes looking for you',hero_sub:'Opportunities from shops and brands in your city, delivered to you — with a protected booking and the Deal Guarantee.',register_creator:'Register as a creator',browse_market:'Browse the market',install_app:'Install Deal on your phone',hero_guest_note:'Own a shop or a brand? Post your job in a minute — no registration, and creators will reach you on WhatsApp.',why1_t:'Opportunities come to you',why1_d:'Requests and campaigns matched to your city and niche — without searching.',why2_t:'A verified reputation that grows',why2_d:'Ratings, completion rate and achievement badges accumulate on your profile.',why3_t:'Protected payment with Deal Guarantee',why3_d:'Staged payments, the app fee first, and delivery proof that protects both sides.',search_ph:'Search by name, niche, city…',search:'Search',all_niches:'All niches',all_cities:'All cities',guarantee_t:'Deal Guarantee:',guarantee_d:'Every booking here is a "Deal-Guaranteed booking" — documented staged payments, and a verified alternative from your city and niche if the creator defaults.',open_requests:'Open shop requests',post_job_short:'📣 Post a job — no registration',services_t:'Integrated services — with the same Deal protection',svc_ads:'Sponsored ads management',svc_support:'Account problem solutions',campaigns_t:'Brand campaigns',new_campaign:'+ New campaign',opps_t:'Opportunities for you — auto-matched to your profile',bookings_t:'My bookings',footer:'Deal — the platform of all content creators · The official Deal seal 🛡️ Deal-Guaranteed booking',register:'Register',login:'Login',f_name:'Name',f_iam:'I am a…',role_creator:'Content creator',role_provider:'Service provider',role_shop:'Shop',role_brand:'Brand',f_provcat:'Service category',f_niche:'Niche / specialty',niche_ph:'Comedy, cooking, reviews…',f_city:'City',f_country:'Country',f_currency:'Currency',f_followers:'Follower count (for creators)',f_price:'Your listed price per video/service',f_links:'Your public account links (for verification)',f_contact:'Phone number or email (your login)',contact_ph:'01xxxxxxxxx or you@mail.com',continue_btn:'Continue',close:'Close',guest_title:'Post a job — no registration',g_biz:'Business / shop name',g_phone:'WhatsApp number (Egyptian mobile)',g_niche:'Ad type / niche',g_niche_ph:'Restaurants, clothes, real estate…',g_budget:'Approximate budget (EGP)',g_details:'Describe the job',g_details_ph:'I need an ad video about…',g_publish:'Publish request',g_done_t:'Your request is published ✓',g_done_d:'Creators can see it now and will contact you on WhatsApp. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',copy_link:'Copy link',camp_title:'New brand campaign',c_title:'Title',c_brief:'Brief',c_budget:'Budget',c_publish:'Publish campaign',req_title:'New shop request',req_niche:'Needed niche',req_details:'Details',edit_profile:'Edit profile',pf_photo:'Profile photo',pf_photo_hint:'Automatically cropped to a small square (≤256px).',pf_phone:'Phone number (WhatsApp)',pf_bio:'Bio',save_changes:'Save changes',shorts_title:'Shorts samples',shorts_hint:'Maximum 3 videos — shown as embedded playable videos on your public profile.',short_url:'Short video link (YouTube Shorts / Facebook / Instagram / TikTok)',short_title:'Sample title (optional)',short_add:'+ Add sample',notifications:'Notifications',support_title:'Deal Support — instant auto-replies',support_hint:'Pick a ready question or type yours — replies are instant from the FAQ base.',support_contact:'Contact (optional) — if you want the team to get back to you',support_ph:'Type your question here…',send:'Send',
 followers_w:'followers',completion_w:'Completion',positive_w:'positive',profile_btn:'Profile',book_btn:'Book',founder_seal:'👑 Deal Founder',founder_only:'Founder account — display only',pioneer_w:'City Pioneer',founder_member_w:'Founding Member',empty_market:'The market is still empty — be the first creator to register.',guest_chip:'Guest client request — no account',whatsapp:'💬 WhatsApp',wa_msg:'Hi, I saw your request on Deal and I can do it',start_booking:'Start booking',view_opps:'See your opportunities',shop_job_card:'+ Have a job?',publish_request:'Publish request',no_providers:'No providers in this category yet.',no_campaigns:'No open campaigns yet.',apply_btn:'Apply',applicants_btn:'Applicants',match_w:'Match',kind_campaign:'Brand campaign',kind_request:'Shop request',no_opps:'No opportunities match your profile right now — update your city, niche and minimum price from your dashboard.',no_bookings:'No bookings yet.',open_booking:'Open booking',notify_talent:'📱 Notify creator on WhatsApp',wa_booking_msg:'You have new work on Deal — booking #',guaranteed_chip:'🛡️ Deal-Guaranteed booking',client_w:'Client',talent_w:'Creator',total_w:'Total',fee_w:'fee',first_w:'first',net_two_w:'and the net in two payments',
 stage_pending_agreement:'Agreement',stage_awaiting_fee:'Deal fee first',stage_awaiting_deposit:'Creator deposit',stage_in_progress:'In progress',stage_proof_submitted:'Proof of delivery',stage_awaiting_rest:'Remaining payment',stage_completed:'Fully paid',stage_disputed:'Dispute open',stage_cancelled:'Cancelled',
@@ -449,7 +641,8 @@ follow_btn:'Follow',following_btn:'Following ✓',followed_t:'You are now follow
 copy_profile_link:'🔗 Copy my profile link',featured_chip:'⭐ Featured creator',profile_locked_t:'This profile is not available to guests',profile_locked_d:'Some profiles (like the founder profile) are visible to registered creators and providers only — log in or browse the market.',ov_tagline:'Your work, payments, messages and opportunities — all in one place',ov_opps:'New matching opportunities',ov_bookings:'Active bookings',ov_msgs:'Unread messages',ov_followers:'Deal followers',ov_refs:'Verified referrals',referrals_t:'My invites — registered via my link',ref_total:'Total registered via my link',ref_verified:'Verified',ref_progress:'Your progress toward the "Deal Ambassador" badge',ref_empty:'No invites yet — share your profile link so creators register through you.',ref_state_verified:'Verified ✓',ref_state_pending:'Awaiting verification',ref_featured_active:'Your featured placement in the market is active ⭐',ref_share_hint:'Every creator who registers via your link and gets verified brings you closer to the Ambassador badge and activates your featured placement.',
 founder_ribbon:'FOUNDER',bp_title:'My badges & progress',bp_closest:'Closest badge',bp_done_w:'You completed',bp_of_w:'of',bp_left_w:'left for you',bp_rate_now:'Your current rate',bp_pos_now:'Your current positivity',bp_age_now:'Your membership so far',bp_day_w:'days',
 bdg_perfect:'Perfect Completion',bdg_top_rated:'Top Rated',bdg_fast:'Fast Delivery',bdg_rising:'Rising Creator',bdg_ambassador:'Deal Ambassador',bdg_veteran:'Veteran',
-bp_cond_perfect:'Complete 10 deals with a 100% completion rate',bp_cond_top_rated:'Collect 10 ratings with 95%+ positivity',bp_cond_fast:'Submit delivery proof before the deadline in your last 5 completed deals',bp_cond_rising:'Complete 5 deals',bp_cond_ambassador:'5 verified creators registered via your profile link',bp_cond_veteran:'Complete 20 deals and 6 months of membership (180 days)'}
+bp_cond_perfect:'Complete 10 deals with a 100% completion rate',bp_cond_top_rated:'Collect 10 ratings with 95%+ positivity',bp_cond_fast:'Submit delivery proof before the deadline in your last 5 completed deals',bp_cond_rising:'Complete 5 deals',bp_cond_ambassador:'5 verified creators registered via your profile link',bp_cond_veteran:'Complete 20 deals and 6 months of membership (180 days)',
+tb_home:'Home',trust_1:'🛡️ Deal-Guaranteed booking',trust_2:'✔️ Instant auto-verification',trust_3:'💬 Direct WhatsApp contact',stat_seats:'founding seats for early creators',stat_fee:'fee only — the rest is all yours',stat_hours:'hours of auto-confirm protection',mock_niche:'Comedy',mock_city:'Kafr El Sheikh',mock_curr:'EGP',mock_steps:'Agreement · Deal fee · Deposit · Delivery · Rest',mock_book:'Deal-Guaranteed booking',mock_book_s:'Documented staged payments',mock_pay:'Deposit received',mock_pay_s:'Before you start working',mock_ver:'Verified account',mock_ver_s:'The Deal gold badge',marquee_items:'Comedy ✦ Cooking ✦ Sports ✦ Beauty ✦ Reviews ✦ Education ✦ Gaming ✦ Kafr El Sheikh ✦ Cairo ✦ Giza ✦ Alexandria ✦ Mansoura ✦ Tanta ✦ Assiut ✦ ',how_t:'How it works',how_sub:'Three simple steps — and work comes to you',seats_t:'Founding seats — the first 100 creators',seats_d:'The first 100 verified creators on Deal get the permanent "Founding Member" badge and priority placement in their city. Seats are limited — claim yours now.',seats_total:'Founders program: only 100 seats',seats_cta:'Claim your seat — register as a creator'}
 };
 const t=k=>(DICT[LANG]&&DICT[LANG][k])||DICT.ar[k]||k;
 const ERR_EN={'سجل الدخول أولاً':'Log in first','حساب غير موجود':'Account not found','هذا الحساب محظور':'This account is banned','الاسم والدور ووسيلة التواصل مطلوبة':'Name, role and contact are required','دور غير صحيح':'Invalid role','وسيلة التواصل مسجلة من قبل — سجل الدخول':'This contact is already registered — please log in','لا يوجد حساب بهذه البيانات — سجل أولاً':'No account with these details — register first','غير موجود':'Not found','حدد سعراً صحيحاً':'Enter a valid price','لا يمكنك حجز نفسك':'You cannot book yourself','حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً':'Founder account — display only, no bookings or contact','هذا الطلب اتحجز خلاص — لا يمكن تحويله مرتين':'This request is already booked — it cannot be converted twice','طلب ضيف غير موجود':'Guest request not found','اكتب مرجع العملية':'Enter the transfer reference','مرجع العملية مطلوب':'Transfer reference is required','رابط فيديو غير مدعوم — الصق رابط شورتس من يوتيوب أو فيسبوك أو إنستجرام أو تيك توك':'Unsupported video link — paste a shorts link from YouTube, Facebook, Instagram or TikTok','وصلت إلى الحد الأقصى: 3 فيديوهات شورتس — احذف واحداً أولاً':'You reached the maximum: 3 shorts videos — delete one first','الصورة أكبر من 200KB — صغّرها وحاول مجدداً':'Image is larger than 200KB — shrink it and try again','رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian mobile number is required (01xxxxxxxxx)','رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian phone number is required (01xxxxxxxxx)','المدينة مطلوبة':'City is required','اسم النشاط مطلوب':'Business name is required','اوصف الشغلانة المطلوبة':'Describe the job','خطأ في الخادم':'Server error','خطأ':'Error','لا يمكنك متابعة نفسك':'You cannot follow yourself','هذا الحساب غير متاح للمتابعة حالياً':'This account is not available for following right now','لا يمكنك مراسلة نفسك':'You cannot message yourself','حساب المؤسس خارج المراسلة — عرضه ومتابعته فقط':'The founder account is outside messaging — display and follow only','هذا الحساب غير متاح للمراسلة حالياً':'This account is not available for messaging right now','اكتب رسالة أولاً':'Write a message first','الرسالة أطول من الحد الأقصى (1000 حرف)':'Message exceeds the maximum length (1000 characters)'};
@@ -505,7 +698,9 @@ function msgBtn(u){
   if(!ME||ME.user.id===u.id||u.is_platform_founder) return '';
   return `<button class="btn ghost sm" onclick="openThread(this,${u.id})">${t('msg_btn')}</button>`;
 }
-function talentCard(u){
+/* لون غلاف البطاقة مشتق حتمياً من اسم المجال — كل مجال له هويته اللونية الثابتة. */
+function nicheHue(s){let h=0;const str=String(s||'عام');for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))%360;return h}
+function talentCard(u,i){
   if(u.is_platform_founder)return `<div class="card founder-card">
     <div class="founder-ribbon">${t('founder_ribbon')}</div>
     <div class="row">${avatarHtml(u)}<h3 style="margin:0">${esc(u.name)}</h3>${seal(u,'big')}</div>
@@ -513,15 +708,18 @@ function talentCard(u){
     <div class="row" style="margin-top:10px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span><div class="sp"></div>
     ${followBtn(u)}
     <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button></div></div>`;
-  return `<div class="card">
-  <div class="row">${avatarHtml(u)}<h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.featured?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('featured_chip')}</span>`:''}</div>
-  <div class="mut" style="margin-top:6px">${esc(u.niche||u.provider_category||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')} · <span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</div>
+  const hue=nicheHue(u.niche||u.provider_category||'');
+  return `<div class="card tcard" style="animation-delay:${Math.min((i||0)*60,360)}ms">
+  <div class="tcover" style="background:linear-gradient(120deg,hsl(${hue},62%,34%),hsl(${(hue+45)%360},68%,17%))"></div>
+  <div class="tbody">
+  <div class="row"><span class="tava">${avatarHtml(u)}</span><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3></div>
+  <div class="row" style="margin:9px 0 0"><span class="chip">${esc(u.niche||u.provider_category||'')}</span><span class="chip">📍 ${esc(u.city)}</span><span class="chip">${u.followers||0} ${t('followers_w')}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.featured?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('featured_chip')}</span>`:''}</div>
   <div class="row" style="margin:7px 0"><span class="chip">${t('completion_w')} ${u.completion_rate}%</span>
   <span class="chip">⭐ ${u.avg_stars??'—'} (${u.positive_pct??'—'}% ${t('positive_w')})</span>${badgeDots(u)}</div>
   <div class="row"><span class="price">${u.price} ${u.currency}</span><div class="sp"></div>
   ${followBtn(u)}${msgBtn(u)}
   <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button>
-  <button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_btn')}</button></div></div>`}
+  <button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_btn')}</button></div></div></div>`}
 
 let FILTERS_READY=false;
 async function loadFilterOptions(){
@@ -534,8 +732,12 @@ async function loadFilterOptions(){
   fc.innerHTML=`<option value="">${t('all_cities')}</option>`+cities.map(x=>`<option ${x===vc?'selected':''}>${esc(x)}</option>`).join('');
   FILTERS_READY=true;
 }
+/* هيكل تحميل أنيق يظهر في شبكة السوق أثناء أول جلب — بدل فراغ يوحي بالعطل. */
+function skelHtml(){return Array.from({length:6},()=>`<div class="card skel"><div class="row"><div class="sk" style="width:42px;height:42px;border-radius:50%"></div><div style="flex:1"><div class="sk" style="height:12px;width:55%"></div><div class="sk" style="height:10px;width:35%;margin-top:7px"></div></div></div><div class="sk" style="height:10px;margin-top:13px"></div><div class="sk" style="height:10px;width:70%;margin-top:7px"></div></div>`).join('')}
 async function loadMarket(btn){
   const work=async()=>{
+    const mg=$('#marketGrid');
+    if(mg&&!mg.innerHTML.trim()) mg.innerHTML=skelHtml();
     if(!FILTERS_READY) await loadFilterOptions();
     const q=encodeURIComponent($('#q').value||''), n=encodeURIComponent($('#fNiche').value||''), c=encodeURIComponent($('#fCity').value||'');
     const d=await api(`/api/directory?q=${q}&niche=${n}&city=${c}`);
@@ -727,7 +929,8 @@ async function openTalent(btn,id){
       <div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">${t('close')}</button></div>`;
       $('#talentDlg').showModal();return;
     }
-    $('#talentBody').innerHTML=`<div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
+    $('#talentBody').innerHTML=`<div class="tcover tall" style="margin:-22px -22px 0;border-radius:20px 20px 0 0;background:linear-gradient(120deg,hsl(${nicheHue(u.niche||'')},62%,34%),hsl(${(nicheHue(u.niche||'')+45)%360},68%,17%))"></div>
+    <div class="row" style="padding:0 2px"><span class="tava big">${avatarHtml(u,true)}</span><div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${t('member_since')} ${new Date(u.member_since).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div></div></div>
     <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span></div>
     <p>${esc(u.bio||'')}</p>
@@ -805,20 +1008,21 @@ async function loadDash(){
       <div class="mut" style="margin-top:4px">${t('bp_done_w')} ${b.current} ${t('bp_of_w')} ${b.target} — ${t('bp_left_w')} ${b.remaining} · ${esc(bdgCond(b))}</div></div>`;
   const badgesCard=(bdg.items&&bdg.items.length)?`<div class="card" id="dashBadges" style="margin-top:12px"><h3>🏅 ${t('bp_title')}</h3>${bdg.items.map(bdgRow).join('')}</div>`:'';
   const socialRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x,'sm')}<div class="mut">${esc(x.niche||'')}${x.city?` · ${esc(x.city)}`:''}</div></span>${followBtn(x)}${msgBtn(x)}<button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
-  $('#dashBody').innerHTML=`${ovStrip}<div class="card${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
+  $('#dashBody').innerHTML=`${ovStrip}<div class="card dash-hero${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
     <div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}${u.is_platform_founder?'':` · <span class="price">${u.price} ${u.currency}</span>`}</div>
     <div class="row" style="margin-top:5px">${u.is_platform_founder?seal(u,'big'):''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}
-    <span class="chip">${t('status_w')}: ${u.penalty_level==='none'?t('status_ok'):u.penalty_level}${u.frozen?' · '+t('frozen_w'):''}</span></div></div>
+    <span class="chip">${t('status_w')}: ${u.penalty_level==='none'?t('status_ok'):u.penalty_level}${u.frozen?' · '+t('frozen_w'):''}</span>
+    ${(bdg.items&&bdg.items.length)?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">🏅 ${t('bp_title')}: ${bdg.items.filter(b=>b.earned).length}/${bdg.items.length}</span>`:''}</div></div>
     <div class="sp"></div><button class="btn ghost sm" onclick="copyProfileLink(this,${u.id})">${t('copy_profile_link')}</button><button class="btn sm" onclick="openProfile(this)">${t('edit_profile')}</button></div>
     ${u.bio?`<p style="margin:10px 0 0">${esc(u.bio)}</p>`:''}
   </div>
   <div class="kpi" style="margin:14px 0">
-    <div class="card"><div class="n">${stats.views}</div><div class="mut">${t('kpi_views')}</div></div>
-    <div class="card"><div class="n">${stats.opportunities_open}</div><div class="mut">${t('kpi_opps')}</div></div>
-    <div class="card"><div class="n">${stats.conversion}%</div><div class="mut">${t('kpi_conv')}</div></div>
-    <div class="card"><div class="n">${stats.earnings_total}</div><div class="mut">${t('kpi_earn')}</div></div>
-    <div class="card"><div class="n">${stats.record.completed_deals}</div><div class="mut">${t('kpi_done')}</div></div>
+    <div class="card g1"><div class="n">${stats.views}</div><div class="mut">${t('kpi_views')}</div></div>
+    <div class="card g2"><div class="n">${stats.opportunities_open}</div><div class="mut">${t('kpi_opps')}</div></div>
+    <div class="card g3"><div class="n">${stats.conversion}%</div><div class="mut">${t('kpi_conv')}</div></div>
+    <div class="card g4"><div class="n">${stats.earnings_total}</div><div class="mut">${t('kpi_earn')}</div></div>
+    <div class="card g5"><div class="n">${stats.record.completed_deals}</div><div class="mut">${t('kpi_done')}</div></div>
   </div>
   <div class="card" id="dashSocial" style="margin-top:12px"><h3>${t('social_t')}</h3>
     <div class="row"><span class="chip"><span data-fcount="${u.id}">${social.followers_count}</span> ${t('my_followers')}</span><span class="chip">${social.following_count} ${t('my_following')}</span>
@@ -956,6 +1160,8 @@ async function doAuth(btn){
   });
 }
 function renderAuth(){
+  const tbEl=$('#tabbar'); if(tbEl) tbEl.classList.toggle('hide',!ME);
+  document.documentElement.classList.toggle('has-tabbar',!!ME);
   if(ME){
     $('#authArea').innerHTML=`<span class="row" style="gap:7px">${avatarHtml(ME.user)}<span class="mut">${esc(ME.user.name)}</span></span> <button class="btn ghost sm" onclick="logout()">${t('logout')}</button>`;
     $('#ownerTab').classList.toggle('hide',!ME.user.is_platform_founder);
@@ -965,7 +1171,7 @@ function renderAuth(){
     $('#ownerTab').classList.add('hide');
     $$('[data-auth]').forEach(b=>b.style.display='none');
   }
-  buildMenu();
+  buildMenu(); syncTabbar();
 }
 function logout(){TOKEN='';ME=null;localStorage.removeItem('deal_token');
   /* مسح كامل لحالة الجلسة المحلية: القوائم المخزنة في الصفحة (حجوزات/فرص/لوحات/تنبيهات)
@@ -1005,7 +1211,7 @@ function buildMenu(){
 /* ================= المراسلة الداخلية 1:1 ================= */
 let MSG_UNREAD=0, THREAD_WITH=null;
 async function msgCount(){ if(!ME){MSG_UNREAD=0;return} try{const d=await api('/api/messages');
-  MSG_UNREAD=d.unread_total||0; buildMenu(); }catch(e){} }
+  MSG_UNREAD=d.unread_total||0; buildMenu(); syncTabbar(); }catch(e){} }
 async function loadConversations(){
   if(!ME) return;
   closeThread();
@@ -1124,9 +1330,49 @@ function showTab(tb){
   CURTAB=tb;
   $$('main section').forEach(s=>s.classList.add('hide'));$('#tab-'+tb).classList.remove('hide');
   $$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tb));
+  syncTabbar(tb);
   ({market:()=>loadMarket(),services:()=>loadServices('ads'),campaigns:loadCampaigns,opps:loadOpps,bookings:loadBookings,messages:loadConversations,dash:loadDash,owner:loadOwner}[tb]||(()=>{}))();
 }
 $$('#nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+/* مزامنة شريط التنقل السفلي: المؤشر النشط من التبويب الحالي نفسه (لا مسارات
+   تنقّل مكررة — أزرار الشريط تستدعي showTab/toggleMenu القائمتين)، وشارة
+   الرسائل من MSG_UNREAD نفسه الذي يغذي القائمة والجرس. */
+function syncTabbar(tb){
+  tb=tb||CURTAB;
+  $$('#tabbar [data-tbtab]').forEach(b=>b.classList.toggle('on',b.dataset.tbtab===tb));
+  const bd=$('#tbMsgBadge');
+  if(bd){ bd.textContent=MSG_UNREAD||''; bd.classList.toggle('hide',!MSG_UNREAD); }
+}
+/* مؤثرات الهيرو: parallax خفيف للطبقات العائمة (فأرة/لمس)، عدّادات تصعد عند
+   الظهور، وكشف متدرج للأقسام — كلها transform/opacity ومحروسة القدرات. */
+function animateCount(el){
+  const target=+el.dataset.count||0; if(!target){el.textContent='0';return}
+  const t0=performance.now(), dur=1250;
+  const stepFn=now=>{const p=Math.min(1,(now-t0)/dur);el.textContent=Math.round(target*(1-Math.pow(1-p,3)));if(p<1)requestAnimationFrame(stepFn)};
+  requestAnimationFrame(stepFn);
+}
+function initHeroFx(){
+  document.documentElement.classList.add('jsfx');
+  const hero=$('#hero'); if(!hero) return;
+  const layers=$$('[data-plx]');
+  if(layers.length&&typeof matchMedia==='function'&&matchMedia('(pointer:fine)').matches){
+    const move=(cx,cy)=>{const r=hero.getBoundingClientRect();if(!r.width)return;
+      const x=(cx-r.left)/r.width-.5, y=(cy-r.top)/r.height-.5;
+      layers.forEach(l=>{const d=+l.dataset.plx||8;l.style.transform=`translate3d(${(-x*d).toFixed(1)}px,${(-y*d).toFixed(1)}px,0)`})};
+    hero.addEventListener('mousemove',e=>move(e.clientX,e.clientY));
+    hero.addEventListener('touchmove',e=>{if(e.touches&&e.touches[0])move(e.touches[0].clientX,e.touches[0].clientY)},{passive:true});
+  }
+  const cnts=$$('.cnt');
+  if('IntersectionObserver' in window){
+    const io=new IntersectionObserver(es=>{es.forEach(en=>{if(en.isIntersecting){animateCount(en.target);io.unobserve(en.target)}})},{threshold:.4});
+    cnts.forEach(c=>io.observe(c));
+    const io2=new IntersectionObserver(es=>{es.forEach(en=>{if(en.isIntersecting){en.target.classList.add('in');io2.unobserve(en.target)}})},{threshold:.12});
+    $$('.rv').forEach(el=>io2.observe(el));
+  } else {
+    cnts.forEach(c=>{c.textContent=c.dataset.count});
+    $$('.rv').forEach(el=>el.classList.add('in'));
+  }
+}
 /* إعادة رسم شاملة عند تبديل اللغة (وفي الدخول): كل القوائم الديناميكية تُعاد
    تهيئتها فوراً في الاتجاهين — لا بطاقة تبقى بلغة سابقة في أي قسم حتى إعادة التحميل. */
 async function refresh(){ FILTERS_READY=false;
@@ -1250,14 +1496,17 @@ function profilePageHtml(d){
     <div style="margin-top:12px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span></div>
     <div class="row" style="margin-top:12px;justify-content:center">${followBtn(u)}${copyBtn}</div></div>${backRow}`;
   }
-  return `<div class="card">
-    <div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
+  return `<div class="card tcard">
+    <div class="tcover tall" style="background:linear-gradient(120deg,hsl(${nicheHue(u.niche||'')},62%,34%),hsl(${(nicheHue(u.niche||'')+45)%360},68%,17%))"></div>
+    <div class="tbody">
+    <div class="row"><span class="tava big">${avatarHtml(u,true)}</span><div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${t('member_since')} ${new Date(u.member_since).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div></div>
     <div class="sp"></div>${copyBtn}</div>
     <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${u.featured?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('featured_chip')}</span>`:''}</div>
     ${u.bio?`<p>${esc(u.bio)}</p>`:''}
     <div class="row" style="margin-top:10px">${mine?'':`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_for')} ${u.price} ${u.currency}</button>`}
     ${followBtn(u)}${msgBtn(u)}</div>
+    </div>
   </div>
   <div class="card" style="margin-top:12px">
     ${shortsEmbeds(d.shorts)}
@@ -1307,6 +1556,7 @@ window.addEventListener('hashchange',()=>{if(!routeHash()){ $('#hero').classList
 (async()=>{ applyI18n();
   if(TOKEN){try{const m=await api('/api/me');ME={user:m.user};}catch(e){TOKEN='';localStorage.removeItem('deal_token')}}
   renderAuth();
+  initHeroFx();
   if(!routeHash()) loadMarket();
   bellCount(); msgCount();
 })();

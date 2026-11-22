@@ -779,7 +779,7 @@ function msgBtn(u){
   return `<button class="btn ghost sm" onclick="openThread(this,${u.id})">${t('msg_btn')}</button>`;
 }
 /* لون غلاف البطاقة مشتق حتمياً من اسم المجال — كل مجال له هويته اللونية الثابتة. */
-function nicheHue(s){let h=0;const str=String(s||'عام');for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))%360;return h}
+function nicheHue(s){const str=String(s||'عام');if(str==='videoproduction')return 42;let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))%360;return h}
 /* ===== التصنيف الموحّد (مجالات + خدمات): المصدر الأصلي هو /api/taxonomy من
    الخادم؛ هذه النسخة احتياطية لعرض القوائم إن تعذر الجلب، ويطابقها فحص آلي مع
    قائمة الخادم حرفياً حتى لا تنحرفا. تُبنى منها: قائمة مجالات التسجيل، قائمة
@@ -787,6 +787,7 @@ function nicheHue(s){let h=0;const str=String(s||'عام');for(let i=0;i<str.len
 const TAX_FALLBACK = {
   "niches": ["كوميديا", "طبخ", "رياضة", "جمال", "مراجعات وتقنية", "تعليم", "ألعاب", "سفر", "أطفال", "ديني", "أخبار وتريند", "حرف وDIY", "سيارات", "عقارات", "صحة ولياقة", "موسيقى", "تصوير", "عام"],
   "services": [
+    { "key": "videoproduction", "ar": "إنتاج فيديوهات وإعلانات", "en": "Video & ad production" },
     { "key": "editing", "ar": "مونتاج فيديو", "en": "Video editing" },
     { "key": "design", "ar": "تصميم وموشن جرافيك", "en": "Design & motion graphics" },
     { "key": "filming", "ar": "تصوير", "en": "Filming & photography" },

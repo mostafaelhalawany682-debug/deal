@@ -277,6 +277,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read
 /* ترحيلات «طلب العميل كضيف»: آمنة للتكرار على قواعد قائمة (إنتاج Supabase)
    وعلى قواعد جديدة على حد سواء — كل عبارة idempotent. */
 const MIGRATIONS_SQL = `
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'EG';
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS is_guest INTEGER DEFAULT 0;
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_name TEXT DEFAULT '';
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_phone TEXT DEFAULT '';

@@ -229,8 +229,29 @@ CREATE TABLE IF NOT EXISTS support_messages (
   contact TEXT DEFAULT '',
   lang TEXT DEFAULT 'ar',
   is_read INTEGER DEFAULT 0,
+  priority INTEGER DEFAULT 0,
   created_at BIGINT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS star_subscriptions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  amount DOUBLE PRECISION NOT NULL,
+  currency TEXT DEFAULT 'EGP',
+  ref TEXT DEFAULT '',
+  status TEXT DEFAULT 'pending',
+  terms_version TEXT DEFAULT '',
+  terms_accepted_at BIGINT DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  decided_at BIGINT DEFAULT 0,
+  decided_by INTEGER DEFAULT NULL,
+  reject_reason TEXT DEFAULT '',
+  activated_at BIGINT DEFAULT 0,
+  expires_at BIGINT DEFAULT 0,
+  reminded_expiring INTEGER DEFAULT 0,
+  reminded_expired INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_star_subs_user ON star_subscriptions(user_id, status);
 
 CREATE TABLE IF NOT EXISTS follows (
   follower_id INTEGER NOT NULL,
@@ -314,6 +335,26 @@ CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by);
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS target_talent_id INTEGER DEFAULT NULL;
 CREATE INDEX IF NOT EXISTS idx_shop_requests_target ON shop_requests(target_talent_id) WHERE target_talent_id IS NOT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_custom TEXT DEFAULT '';
+ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 0;
+CREATE TABLE IF NOT EXISTS star_subscriptions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  amount DOUBLE PRECISION NOT NULL,
+  currency TEXT DEFAULT 'EGP',
+  ref TEXT DEFAULT '',
+  status TEXT DEFAULT 'pending',
+  terms_version TEXT DEFAULT '',
+  terms_accepted_at BIGINT DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  decided_at BIGINT DEFAULT 0,
+  decided_by INTEGER DEFAULT NULL,
+  reject_reason TEXT DEFAULT '',
+  activated_at BIGINT DEFAULT 0,
+  expires_at BIGINT DEFAULT 0,
+  reminded_expiring INTEGER DEFAULT 0,
+  reminded_expired INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_star_subs_user ON star_subscriptions(user_id, status);
 `;
 
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
@@ -359,7 +400,7 @@ function init() {
 const ID_TABLES = new Set([
   'users', 'shop_requests', 'campaigns', 'campaign_applications', 'bookings',
   'payments', 'disputes', 'reviews', 'notifications', 'profile_views',
-  'portfolio_items', 'support_messages', 'messages',
+  'portfolio_items', 'support_messages', 'messages', 'star_subscriptions',
 ]);
 
 function toPgSql(sql) {

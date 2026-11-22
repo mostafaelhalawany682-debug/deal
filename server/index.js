@@ -16,6 +16,16 @@ const COMMISSION_PHONE = process.env.COMMISSION_PHONE || ''; // server-side only
 const FEE_REVIEW_WINDOW_MS = 48 * 3600 * 1000;
 const RECEIPT_AUTO_CONFIRM_MS = 48 * 3600 * 1000;
 
+/* ---------------- باقة «نجم Deal» — إعدادات واحدة من الخادم ----------------
+   السعر والمدة والعملة ثابتة هنا فقط (قابلة للتعديل لاحقاً من مكان واحد)،
+   وقاعدة المال الصارمة: لا ميزة قبل تأكيد المالك وصول التحويلة فعلياً. */
+const STAR_PRICE = 199;
+const STAR_CURRENCY = 'EGP';
+const STAR_DURATION_MS = 30 * 24 * 3600 * 1000; // 30 يوماً من لحظة تأكيد المالك
+const STAR_REMIND_BEFORE_MS = 3 * 24 * 3600 * 1000; // تذكير قبل الانتهاء بـ3 أيام
+const STAR_TERMS_VERSION = 'star-terms-v1';
+const STAR_WEEK_MS = 7 * 24 * 3600 * 1000;
+
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
@@ -85,6 +95,68 @@ function socialSummary(u) {
   return s;
 }
 
+/* ---------------- باقة «نجم Deal»: حالة الاشتراك ودوران نجم الأسبوع ----------------
+   الاشتراك «نشط» فقط إن كان مؤكداً من المالك ولم تنتهِ مدته — والحالة تُشتق من
+   السجل لحظياً (status='active' AND expires_at>now) فتنطفئ المزايا تلقائياً عند
+   الانتهاء حتى قبل أي مسح دوري. المسح (sweepStar) مسؤوليته الإشعارات وختم
+   الحالة «expired» فقط، لا تفعيل/إطفاء المزايا نفسها. */
+async function activeStarSub(userId) {
+  if (!userId) return null;
+  return await db.prepare(`SELECT * FROM star_subscriptions WHERE user_id=? AND status='active' AND expires_at>? ORDER BY activated_at DESC LIMIT 1`)
+    .get(userId, now()) || null;
+}
+async function isStar(userId) { return !!(await activeStarSub(userId)); }
+/* نجم الأسبوع — قاعدة دوران حتمية موثقة: رقم الأسبوع (منذ بدء العصر) modulo
+   عدد المشتركين النشطين، والقائمة مرتبة بمعرّف العضو تصاعدياً (ترتيب ثابت لا
+   يتغير داخل الأسبوع إلا بتغيّر مجموعة النشطين نفسها). نجم واحد فقط في كل وقت. */
+async function weekStarUserId() {
+  const rows = await db.prepare(`SELECT user_id FROM star_subscriptions WHERE status='active' AND expires_at>? ORDER BY user_id ASC`)
+    .all(now());
+  if (!rows.length) return null;
+  const weekIndex = Math.floor(now() / STAR_WEEK_MS);
+  return rows[weekIndex % rows.length].user_id;
+}
+async function sweepStar() {
+  const t = now();
+  // تذكير «قارب على الانتهاء» مرة واحدة لكل اشتراك.
+  const soon = await db.prepare(`SELECT * FROM star_subscriptions WHERE status='active' AND expires_at>? AND expires_at-?<=? AND reminded_expiring=0`)
+    .all(t, t, STAR_REMIND_BEFORE_MS);
+  for (const s of soon) {
+    await db.prepare('UPDATE star_subscriptions SET reminded_expiring=1 WHERE id=?').run(s.id);
+    await notify(s.user_id, 'star_expiring', '⭐ اشتراكك في «نجم Deal» بينتهي خلال ٣ أيام — جدّد بنفس خطوات الاشتراك عشان مزاياك ماتتقطعش', 'star');
+  }
+  // ختم الانتهاء + إشعار مرة واحدة (تغيّر الحالة نفسه يمنع التكرار).
+  const done = await db.prepare(`SELECT * FROM star_subscriptions WHERE status='active' AND expires_at<=?`).all(t);
+  for (const s of done) {
+    await db.prepare(`UPDATE star_subscriptions SET status='expired' WHERE id=?`).run(s.id);
+    if (!s.reminded_expired) {
+      await db.prepare('UPDATE star_subscriptions SET reminded_expired=1 WHERE id=?').run(s.id);
+      await notify(s.user_id, 'star_expired', 'انتهى اشتراكك في «نجم Deal» — انطفأت مزايا النجم. جدّد في أي وقت من صفحة الباقة ⭐', 'star');
+    }
+  }
+}
+/* عرض اشتراك آمن للواجهات: بلا decided_by ولا أي بيانات تواصل. */
+function starSubView(s) {
+  if (!s) return null;
+  return {
+    id: s.id, user_id: s.user_id, amount: s.amount, currency: s.currency, ref: s.ref,
+    status: s.status, terms_version: s.terms_version, terms_accepted_at: s.terms_accepted_at,
+    created_at: s.created_at, decided_at: s.decided_at, reject_reason: s.reject_reason,
+    activated_at: s.activated_at, expires_at: s.expires_at,
+    days_left: s.status === 'active' && s.expires_at > now() ? Math.ceil((s.expires_at - now()) / (24 * 3600 * 1000)) : 0,
+  };
+}
+/* حالة العضو مع الباقة في صورة واحدة تستخدمها /api/star/me والواجهة:
+   none (لا اشتراك) | pending (قيد التحقق — بلا أي ميزة) | active | rejected | expired. */
+async function myStarState(userId) {
+  await sweepStar();
+  const active = await activeStarSub(userId);
+  if (active) return { state: 'active', subscription: starSubView(active), is_week_star: (await weekStarUserId()) === userId };
+  const latest = await db.prepare('SELECT * FROM star_subscriptions WHERE user_id=? ORDER BY created_at DESC, id DESC LIMIT 1').get(userId);
+  if (!latest) return { state: 'none', subscription: null, is_week_star: false };
+  return { state: latest.status, subscription: starSubView(latest), is_week_star: false };
+}
+
 async function publicUser(u, viewerId = null) {
   if (!u) return null;
   const stats = await talentStats(u.id);
@@ -102,6 +174,10 @@ async function publicUser(u, viewerId = null) {
     is_platform_founder: founder,
     is_founder_member: !!u.is_founder_member,
     verified: !!u.verified, pioneer: !!u.pioneer,
+    // باقة «نجم Deal»: لا تظهر إلا لاشتراك نشط فعلياً (مؤكد وغير منتهٍ) — المؤسس
+    // لا يشترك أصلاً فتبقى false له دائماً. star_of_week لنجم الأسبوع الحالي وحده.
+    is_star: founder ? false : await isStar(u.id),
+    star_of_week: founder ? false : (await weekStarUserId()) === u.id,
     featured: (u.featured_until || 0) > now(),
     boost_active: u.boost_until > now() && u.penalty_level !== 'suspended',
     member_since: u.created_at,
@@ -545,13 +621,19 @@ app.get('/api/directory', async (req, res) => {
   else if (q) rows = rows.filter((u) => !u.is_platform_founder || String(u.name).includes(q) || String(u.niche || '').includes(q));
   const dealsMap = {};
   await Promise.all(rows.map(async (u) => { dealsMap[u.id] = (await talentStats(u.id)).completed_deals; }));
+  // مجموعة النجوم النشطين مرة واحدة للفرز (اشتراك مؤكد وغير منتهٍ فقط).
+  const starSet = new Set((await db.prepare(`SELECT user_id FROM star_subscriptions WHERE status='active' AND expires_at>?`).all(now())).map((r) => r.user_id));
   const t = now();
   rows.sort((a, b) => {
     const boost = (x) => (x.boost_until > t && x.penalty_level !== 'suspended') ? 1 : 0;
     // الظهور المميز (مكافأة الإحالات الموثقة) يتقدّم ضمن نفس معايير الترتيب القائمة:
     // بعد التوثيق وقبل دفعة التوثيق المؤقتة — وبكاسر تعادل أخير بالمعرّف كالعادة.
     const feat = (x) => ((x.featured_until || 0) > t) ? 1 : 0;
-    return (b.verified - a.verified) || (feat(b) - feat(a)) || (boost(b) - boost(a)) || ((dealsMap[b.id] || 0) - (dealsMap[a.id] || 0)) || (a.id - b.id);
+    // ترتيب الدليل الموثق (باقة نجم Deal): موثّق أولاً (ثقة المنصة)، ثم نجم Deal
+    // نشط (أولوية الباقة)، ثم الظهور المميز بالإحالات، ثم دفعة التوثيق المؤقتة،
+    // ثم الصفقات المكتملة، ثم الأقدم. المؤسس لا يدخل الفرز كميزة — يظهر بعلمه فقط.
+    const star = (x) => starSet.has(x.id) ? 1 : 0;
+    return (b.verified - a.verified) || (star(b) - star(a)) || (feat(b) - feat(a)) || (boost(b) - boost(a)) || ((dealsMap[b.id] || 0) - (dealsMap[a.id] || 0)) || (a.id - b.id);
   });
   res.json({ items: await Promise.all(rows.map(u => publicUser(u, viewer ? viewer.id : null))) });
 });
@@ -643,8 +725,12 @@ async function bookingView(b, viewer) {
 }
 async function verifiedAlternatives(b) {
   const t = await getUser(b.talent_id);
-  return Promise.all((await db.prepare(`SELECT * FROM users WHERE role=? AND niche=? AND city=? AND verified=1 AND id!=? AND banned=0 LIMIT 3`)
-    .all(t.role, t.niche, t.city, t.id)).map(u => publicUser(u)));
+  const rows = await db.prepare(`SELECT * FROM users WHERE role=? AND niche=? AND city=? AND verified=1 AND id!=? AND banned=0 LIMIT 10`)
+    .all(t.role, t.niche, t.city, t.id);
+  // «ترشيح أول» للعملاء: بدائل النزاع تُرتَّب بنجم Deal النشط أولاً ثم الباقي كما هو.
+  const starSet = new Set((await db.prepare(`SELECT user_id FROM star_subscriptions WHERE status='active' AND expires_at>?`).all(now())).map((r) => r.user_id));
+  rows.sort((a, c) => ((starSet.has(c.id) ? 1 : 0) - (starSet.has(a.id) ? 1 : 0)) || (a.id - c.id));
+  return Promise.all(rows.slice(0, 3).map(u => publicUser(u)));
 }
 async function sweepAutoConfirm() {
   const due = await db.prepare(`SELECT * FROM bookings WHERE status='proof_submitted' AND proof_check='verified' AND proof_at>0 AND ? - proof_at >= ?`)
@@ -863,6 +949,11 @@ app.get('/api/opportunities', auth, async (req, res) => {
   const items = [...reqs, ...camps]
     .filter(x => req.user.role === 'provider' ? x.targeted : x.score > 0)
     .sort((a, b) => b.score - a.score);
+  // باقة نجم Deal — «ترشيح أول» داخل فرص المشترك نفسه: المطابقات القوية (80%+)
+  // تُعلَّم كترشيحات أولى ذهبية للمشترك النشط فقط، والفرز بالمطابقة كما هو.
+  if (await isStar(req.user.id)) {
+    for (const it of items) if (it.score >= 80) it.star_pick = true;
+  }
   res.json({ items });
 });
 
@@ -1058,7 +1149,11 @@ app.get('/api/campaigns/:id/applications', auth, async (req, res) => {
   const c = await db.prepare('SELECT * FROM campaigns WHERE id=?').get(+req.params.id);
   if (!c || c.brand_user_id !== req.user.id) return res.status(403).json({ error: 'ليست حملتك' });
   const rows = await db.prepare('SELECT * FROM campaign_applications WHERE campaign_id=? ORDER BY created_at DESC').all(c.id);
-  res.json({ items: await Promise.all(rows.map(async a => ({ ...a, creator: await publicUser(await getUser(a.creator_id)) }))) });
+  const items = await Promise.all(rows.map(async a => ({ ...a, creator: await publicUser(await getUser(a.creator_id)) })));
+  // «ترشيح أول» للبراند: المتقدم المشترك في «نجم Deal» (نشط) يتصدّر قائمة
+  // المتقدمين، وداخل كل مجموعة يبقى الأحدث أولاً كما كان.
+  items.sort((a, b) => ((b.creator && b.creator.is_star ? 1 : 0) - (a.creator && a.creator.is_star ? 1 : 0)));
+  res.json({ items });
 });
 app.post('/api/applications/:id/accept', auth, async (req, res) => {
   const a = await db.prepare('SELECT * FROM campaign_applications WHERE id=?').get(+req.params.id);
@@ -1171,6 +1266,10 @@ const SUPPORT_KB = [
     keys: ['احجز', 'حجز صانع', 'يصلني شغل', 'فرص ليك', 'شغل يجيلي', 'book a creator', 'how to book', 'get work', 'opportunities'],
     a_ar: 'العميل: من بطاقة الصانع في السوق اضغط «احجز» فيُفتح حجز محمي بضمان Deal بسعره المعلن. الصانع: الشغل يصلك من قسم «فرص ليك» الذي يطابق طلبات المحلات والحملات مع مدينتك ومجالك تلقائياً، ومن طلبات الضيوف التي تحوّلها لحجوزات بنفسك من السوق.',
     a_en: 'Clients: tap "Book" on a creator\'s market card to open a Deal-Guaranteed booking at the listed price. Creators: work reaches you through "Opportunities for you", which automatically matches shop requests and campaigns to your city and niche, and through guest requests you can convert into bookings yourself from the market.' },
+  { id: 'star', q_ar: 'ما هي باقة «نجم Deal» وكيف أشترك؟', q_en: 'What is the Deal Star package and how do I subscribe?',
+    keys: ['باقة نجم', 'نجم Deal', 'اشتراك النجم', 'باقة النجوم', 'star package', 'deal star', 'star subscription', '199'],
+    a_ar: 'باقة «نجم Deal» (199 جنيهاً لمدة 30 يوماً) معمولة عشان تكبّر وتميّزك: شارة وإطار ذهبي في السوق، أولوية ترتيب وترشيح أول للعملاء، فرصتك في «نجم الأسبوع» مع بطاقة مشاركة، «وقود نمو» شهري بإحصاءاتك وأفكار محتوى لمجالك، وأولوية دعم. الاشتراك من صفحة الباقة في القائمة: بتحوّل المبلغ لحساب عمولات Deal وبتسجل مرجع التحويلة وبتوافق على الشروط — والباقة لا تتفعّل إلا بعد ما المالك يؤكد وصول الفلوس فعلياً، وساعتها تبدأ الـ30 يوماً وتوصلك رسالة التفعيل.',
+    a_en: 'The "Deal Star" package (EGP 199 for 30 days) is built to grow and distinguish you: a gold badge and frame in the market, ranking priority and first recommendation to clients, your shot at "Star of the Week" with a shareable card, monthly "growth fuel" with your own stats and content ideas for your niche, and priority support. Subscribe from the package page in the menu: transfer the amount to the Deal fee account, enter the transfer reference and accept the terms — the package activates only after the owner confirms the money actually arrived, and your 30 days start at that moment with an activation message.' },
   { id: 'campaigns', q_ar: 'ما هي الحملات وكيف أقدّم عليها؟', q_en: 'What are campaigns and how do I apply?',
     keys: ['حملات', 'حملة', 'اقدم على', 'براند', 'campaign', 'campaigns', 'apply', 'brand'],
     a_ar: 'الحملات شغلانات تنشرها البراندات من قسم «الحملات» ببريف وميزانية: الصانع يقدّم عليها من بطاقتها، وإذا قبل البراند تقديمه يُفتح حجز عادي تلقائياً بنفس حماية Deal ومراحل دفعها.',
@@ -1210,9 +1309,11 @@ app.post('/api/support/ask', async (req, res) => {
     return res.json({ fallback: false, topic: best.id, answer: lang === 'en' ? best.a_en : best.a_ar });
   }
   // سؤال خارج القاعدة: يُحفظ للمالك (مع حساب السائل إن كان مسجلاً) ويُرد باحتياط مهذب.
+  // مشترك «نجم Deal» النشط تُعلَّم رسالته «أولوية» في لوحة المالك تلقائياً.
   const viewer = await optionalViewer(req);
-  await db.prepare('INSERT INTO support_messages (user_id,question,contact,lang,created_at) VALUES (?,?,?,?,?)')
-    .run(viewer ? viewer.id : null, String(q).slice(0, 1000), String(contact || '').slice(0, 120), lang, now());
+  const priority = viewer && !viewer.is_platform_founder && (await isStar(viewer.id)) ? 1 : 0;
+  await db.prepare('INSERT INTO support_messages (user_id,question,contact,lang,priority,created_at) VALUES (?,?,?,?,?,?)')
+    .run(viewer ? viewer.id : null, String(q).slice(0, 1000), String(contact || '').slice(0, 120), lang, priority, now());
   const topics = (closest.length ? closest : SUPPORT_KB.slice(0, 3)).map(x => lang === 'en' ? x.q_en : x.q_ar);
   res.json({
     fallback: true,
@@ -1311,6 +1412,175 @@ app.get('/api/me/badges-progress', auth, async (req, res) => {
   res.json({ items });
 });
 
+/* ---------------- وقود النمو الشهري (باقة نجم Deal) ----------------
+   بنك محتوى دوّار مُعدّ داخل الكود: لكل مجال صانع ولكل خدمة مقدم أفكار محتوى
+   رائجة مكتوبة بعناية بالعربية + خطوات نمو. الاختيار حتمي برقم الشهر: نافذة
+   دوّارة من ٣ أفكار وخطوة واحدة — فيتجدد الوقود شهرياً مع الاشتراك دون تكرار
+   فوري، ونفس الشهر يعيد نفس المحتوى لأي مشترك في نفس المجال. */
+const STAR_FUEL = {
+  'كوميديا': { ideas: ['سكتش «الزبون اللي بيجرّب كل حاجة ومبيشتريش» في محل من مدينتك — شخصيات ثابتة ونهاية مفاجئة في آخر ٣ ثوانٍ.', 'سلسلة «لو الإعلانات اتكلمت»: منتج محلي مشهور بيشتكي من صاحبه بصوت مضحك — قابلة للرعاية من محلات حقيقية.', 'تحدي «أرخص إعلان في مصر»: اعمل إعلاناً كاملاً لمنتج بـ١٠ جنيهات وخلي الجمهور يقيّم النتيجة.'], steps: ['ثبّت شخصيتين متكررتين في كل سكتشاتك هذا الشهر — التكرار بيبني جمهوراً بيستنى الحلقة.', 'انشر ٤ مرات أسبوعياً في نفس المواعيد وخلي أول ثانيتين سؤالاً أو موقفاً صادماً.'] },
+  'طبخ': { ideas: ['«أكلة الشارع بـ٥٠ جنيه»: نفس الطبق من مطعم مشهور ومحلي شعبي — مقارنة سعر وطعم قدّام الكاميرا.', 'وصفة «من غير فرن ومن غير تعقيد» بمكونات من أي بقالة — محتوى بيتحفظ ويتشارك كتير.', 'تحدي طبخ أكلة تراثية من محافظتك بلمسة عصرية وخلي المتابعين يختاروا التقييم.'], steps: ['صوّر الإضاءة الطبيعية جنب شباك وخلي لقطة «الجبنة بتسحب» أو «القرمشة» في أول ثانيتين.', 'حوّل أنجح وصفة عندك لسلسلة أجزاء (الجزء ٢ و٣) بدل فيديو واحد وخلاص.'] },
+  'رياضة': { ideas: ['تحليل تكتيكي في ٦٠ ثانية لأهم لقطة في ماتش الأسبوع — رأي جريء ومدعوم بلقطة مرسومة.', '«توقّع واكسب»: توقعاتك قبل الجولة ومراجعة صريحة لنتائجك بعدها — مصداقية بتتبني قدام الناس.', 'تحدي لياقة ٧ أيام للمبتدئين بتمارين في البيت من غير أدوات — حلقة كل يوم.'], steps: ['انشر تحليلك في أول ساعة بعد الماتش — التوقيت أهم من الإنتاج في محتوى الرياضة.', 'اعمل جدول توقعات أسبوعي ثابت وخلي جمهورك يشارك بتوقعاته في التعليقات.'] },
+  'جمال': { ideas: ['«روتين الصيدلية»: بدائل اقتصادية لمنتجات غالية بنفس النتيجة — مقارنة قبل/بعد صادقة.', 'تحدي مكياج بـ١٠٠ جنيه من منتجات محلية بس — النتيجة قدّام الكاميرا من غير فلاتر.', 'أخطاء شائعة في العناية بالبشرة بتصححيها واحدة واحدة في سلسلة قصيرة.'], steps: ['صوّري النتيجة النهائية في أول لقطة وبعدين ارجعي للخطوات — الفضول بيكمّل المشاهدة.', 'ثبّتي يوماً أسبوعياً لأسئلة المتابعين وردي عليها بفيديوهات قصيرة بأسمائهم.'] },
+  'مراجعات وتقنية': { ideas: ['مراجعة «بعد شهر استخدام» بدل مراجعة فتح العلبة — عيوب حقيقية محدش بيقولها.', 'مقارنة هاتفين في نفس الفئة السعرية باختبارات واقعية: كاميرا في إضاءة ضعيفة وبطارية يوم كامل.', '«يستاهل ولا لأ؟» — حكم نهائي في أول ٥ ثوانٍ وبعدين الأدلة.'], steps: ['اكتب حكمك النهائي في عنوان الفيديو نفسه — المراجعات الصريحة بتتشارك أكتر.', 'اعمل قائمة «أفضل ٥ في فئة سعرية» شهرية وخليها مرجع جمهورك قبل الشراء.'] },
+  'تعليم': { ideas: ['«قاعدة في دقيقة»: أصعب قاعدة في منهجك بشرح مثال واحد من الحياة اليومية.', 'تصحيح أشهر خطأ بيقع فيه الطلبة في الامتحان — بصيغة «لو شفت ده اعمل كده».', 'سلسلة مراجعة ليلة الامتحان: ٥ فيديوهات قصيرة بأهم الأسئلة المتوقعة.'], steps: ['ابدأ كل فيديو بالسؤال نفسه اللي بيكتبه الطالب في بحث جوجل — ده عنوانك الحقيقي.', 'حوّل تعليقات الطلبة لخطة محتوى الشهر الجاي واذكر أسماءهم في الردود.'] },
+  'ألعاب': { ideas: ['تحديات غريبة داخل لعبتك المشهورة: «أكمل المهمة من غير سلاح» مع تعليق كوميدي مصري.', 'أخبار وتسريبات الأسبوع في ٩٠ ثانية بصيغة سريعة ومركزة.', 'مقارنة «زمان ودلوقتي»: نفس اللعبة بأجزائها القديمة والجديدة — الحنين بيشد جمهوراً كبيراً.'], steps: ['قصّ اللحظات الميتة بلا رحمة — إيقاع سريع يعني احتفاظ أعلى في محتوى الجيمنج.', 'اعمل بثاً مباشراً أسبوعياً ثابتاً وخلي مقاطع البث وقود ريلز الأسبوع كله.'] },
+  'سفر': { ideas: ['«يوم كامل في مدينة مصرية بـ٣٠٠ جنيه»: خطة حقيقية بأسعار وأماكن محددة — محتوى بيتحفظ فوراً.', 'أماكن مخفية في محافظتك لا يعرفها حتى أهلها — سلسلة «كنز جنبك».', 'أخطاء بتضيّع فلوسك في السفر وازاي تتجنبها — من تجربة حقيقية موثقة بالأسعار.'], steps: ['اكتب الأسعار والعناوين على الشاشة في كل لقطة — المعلومة الدقيقة هي سبب الحفظ والمشاركة.', 'صوّر نسخة عمودية وأفقية من نفس الرحلة — محتوى واحد لمنصتين.'] },
+  'أطفال': { ideas: ['تجربة علمية آمنة بمكونات المطبخ تدهش الأطفال — وتتشرح بخطوات بسيطة للأهل.', 'قصة قبل النوم بصوتك وشخصيات ثابتة — سلسلة ليلية ينتظرها الأطفال والأمهات.', 'أغنية تعليمية قصيرة (ألوان/أرقام/حروف) بلحن بسيط وحركة يد سهلة التقليد.'], steps: ['خلي أول ٣ ثوانٍ سؤالاً للطفل مباشرة («تفتكر هيحصل إيه؟») — التفاعل بيبدأ من هنا.', 'انشر في مواعيد ما بعد المدرسة وقبل النوم — توقيت جمهور الأطفال ثابت ومعروف.'] },
+  'ديني': { ideas: ['«آية ومعنى»: آية واحدة بتفسير مبسط وتطبيق عملي في يومنا — في أقل من دقيقة.', 'قصص الأنبياء والسيرة بحلقات قصيرة متسلسلة — حلقة كل يومين في نفس الموعد.', 'تصحيح مفاهيم شائعة بأسلوب هادئ وموثّق بالمصادر على الشاشة.'], steps: ['ثبّت موعداً يومياً أو أسبوعياً لا يتغير — جمهور المحتوى الديني بيبني عادة حوالين موعدك.', 'اكتب المصدر على الشاشة دائماً — التوثيق الظاهر بيبني ثقة طويلة المدى.'] },
+  'أخبار وتريند': { ideas: ['«التريند في ٦٠ ثانية»: ملخص أسبوعي سريع لأهم ما شغل الناس — بصوتك ورأيك.', 'تحقق من خبر منتشر: «الحقيقة فين؟» — بحث موثق بالمصادر قدّام الكاميرا.', 'رأيك الصريح في قضية الأسبوع مع استطلاع للجمهور — وبعده فيديو بنتائج الاستطلاع.'], steps: ['السرعة نصف النجاح في التريند: انشر في أول ساعات الصعود لا بعد ذروته.', 'خلي عندك قالب عنوان ثابت يتعرف من أول نظرة («التريند في ٦٠ ثانية» مثلاً).'] },
+  'حرف وDIY': { ideas: ['«قبل وبعد»: تحويل قطعة قديمة مهملة لتحفة في ٦٠ ثانية — لقطة النتيجة أولاً.', 'مشروع بميزانية محددة (٥٠ جنيه) من الخردة لأداة مفيدة في البيت.', 'أخطاء المبتدئين في حرفتك وازاي تتجنبها — سلسلة بتوفر على الناس فلوس وتعب.'], steps: ['صوّر النتيجة النهائية من ٣ زوايا في أول الفيديو — «إزاي وصل لكده؟» هو محرك المشاهدة.', 'اكتب قائمة الأدوات والخامات على الشاشة — الناس بتحفظ الفيديو عشان ترجع لها.'] },
+  'سيارات': { ideas: ['«عيوب محدش بيقولها» عن سيارة منتشرة — مراجعة مالك حقيقي بعد سنة استخدام.', 'مقارنة تكلفة صيانة سيارتين منافستين بأرقام مراكز صيانة حقيقية.', 'فحص سيارة مستعملة قبل الشراء: ٧ نقاط تفحصها بنفسك في ٥ دقائق.'], steps: ['الأرقام الحقيقية (أسعار/استهلاك/صيانة) هي عملتك — وثّقها على الشاشة دائماً.', 'اعمل سلسلة «سيارة الأسبوع المستعملة» بسعر محدد ينتظرها الباحثون عن شراء.'] },
+  'عقارات': { ideas: ['جولة حقيقية في شقة بسعر معلن — المميزات والعيوب بصوتك من غير تجميل.', '«بنفس الميزانية»: مقارنة منطقتين مختلفتين بنفس السعر — خدمات ومساحات ومستقبل.', 'أخطاء بتخسرك فلوس عند شراء أول شقة — من واقع صفقات حقيقية.'], steps: ['ابدأ بالسعر والمنطقة في أول ثانيتين — جمهور العقارات بيقرر بسرعة.', 'صوّر في ضوء النهار دائماً واذكر المساحة الصافية لا الإجمالية — الصدق بيبيع.'] },
+  'صحة ولياقة': { ideas: ['تحدي ١٤ يوماً موثق بالقياسات والصور — بداية ونهاية صادقة من غير مبالغة.', '«أكلة صحية بسعر الشارع»: بدائل اقتصادية للدايت من مطاعم وسوبرماركت عادية.', 'تصحيح أشهر خرافات التخسيس والعضلات — واحدة في كل فيديو بدليل بسيط.'], steps: ['وثّق تقدمك أنت أولاً — الجمهور بيتابع رحلة حقيقية مش نصايح نظرية.', 'انشر جدولك الأسبوعي كاملاً في منشور مثبت وخلي الفيديوهات تفاصيل أيامه.'] },
+  'موسيقى': { ideas: ['كوفر لأغنية تريند بأسلوبك الخاص (توزيع مختلف أو آلة واحدة) — بصمتك هي الفرق.', '«اتعملت إزاي؟»: تفكيك أغنية مشهورة لطبقاتها وبنائها من الصفر قدّام الجمهور.', 'تحدي ارتجال على لحن يختاره الجمهور من التعليقات — حلقة أسبوعية ثابتة.'], steps: ['أول ٥ ثوانٍ أقوى مقطع في الأغنية — لا تبدأ بالمقدمة أبداً في الفيديوهات القصيرة.', 'اطلب من الجمهور اختيار أغنية الحلقة الجاية — المشاركة في القرار بترفع الوصول.'] },
+  'تصوير': { ideas: ['«نفس المكان — موبايل وكاميرا»: مقارنة صادقة بتوضح إمتى الموبايل يكفي.', 'تعديل صورة متابع خطوة بخطوة — ابعتهالك وخدها نسخة احترافية في فيديو.', '٣ زوايا بتخلي أي منتج شكله غالي — درس عملي لأصحاب المحلات.'], steps: ['انشر الصورة قبل التعديل وبعده كأول لقطتين — التباين هو إعلانك المجاني.', 'اعرض جلسة تصوير كاملة لعميل حقيقي (بإذنه) — الشغل الحقيقي بيبيع أكتر من النظري.'] },
+  'عام': { ideas: ['«يوم في حياة…» مهنة أو شخصية من مدينتك — توثيق حقيقي قريب من الناس.', 'تجربة اجتماعية بسيطة: سؤال واحد لـ١٠ أشخاص من الشارع وإجابات غير متوقعة.', 'سلسلة «جربت عشانك»: بتجرب منتج/خدمة/مكان الناس بتسأل عنه وبتقول الحكم الصريح.'], steps: ['اختار فكرة واحدة وكررها ١٠ مرات بصيغ مختلفة قبل ما تحكم عليها — الاستمرارية قبل التنويع.', 'حوّل أنجح فيديو عندك لسلسلة ثابتة باسم معروف وخلي الجمهور يطلب أجزاءها.'] },
+  'editing': { ideas: ['عرض «قبل/بعد» لمونتاجك: المادة الخام والنتيجة في شاشة واحدة — أقوى إعلان لخدمتك.', 'تفكيك إعلان مشهور: القطعات والانتقالات اللي خلته ينتشر — وبتعرض مهارتك أثناء الشرح.', 'تحدي مونتاج فيديو كامل في ساعة واحدة موثق بالوقت — سرعة وجودة معاً.'], steps: ['اعمل ٣ قوالب انتقالات جاهزة بأسلوبك وسمّها باسمك — القالب المميز بيخلي العميل يطلبك بالاسم.', 'انشر نموذجاً أسبوعياً قصيراً حتى في غياب العملاء — ملفك الحي هو مبيعاتك.'] },
+  'design': { ideas: ['إعادة تصميم شعار/منشور محل محلي معروف (كمبادرة) — قبل/بعد بيكلم أصحاب المحلات مباشرة.', '«غلطة بتقتل التصميم» — سلسلة أخطاء شائعة في منشورات المحلات وتصحيحها.', 'تحدي تصميم منشور كامل في ١٠ دقائق من الصفر — سرعة التنفيذ جزء من عرضك.'], steps: ['اعرض كل تصميم في سياقه الحقيقي (ماكيت موبايل/واجهة محل) لا كصورة عائمة.', 'جهّز باقة «قبل/بعد» لثلاثة محلات مختلفة المجالات — التنوع بيوسّع سوقك.'] },
+  'filming': { ideas: ['كواليس جلسة تصوير منتج: الإضاءة البسيطة اللي طلعت نتيجة فاخرة.', '«بمعدات بسيطة»: نفس اللقطة بإضاءة احترافية وبديلة اقتصادية — الفرق والحل.', 'جولة تصوير لمكان/محل من مدينتك كعينة مجانية من أسلوبك.'], steps: ['انشر لقطة «الإعداد» قبل «النتيجة» دائماً — الكواليس بتبني ثقة العميل في احترافك.', 'اعرض أسعار باقاتك بمقاطع نتائج حقيقية لا بقوائم نصية.'] },
+  'voiceover': { ideas: ['نفس النص بثلاثة أساليب (حماسي/هادئ/وثائقي) — عينة واحدة بتوري مدى صوتك كله.', 'تعليقك على إعلان صامت مشهور — قبل (صامت) وبعد (بصوتك).', 'تحدي «اقرأ أي حاجة كإعلان»: نص عشوائي من الجمهور بأداء إعلاني كامل.'], steps: ['سجّل عينات قصيرة لكل مجال (عقارات/مطاعم/تطبيقات) وخليها جاهزة للإرسال فور أي طلب.', 'انشر بمعدل عينة أسبوعياً — الصوت بيتنسى بسرعة لو غاب.'] },
+  'script': { ideas: ['إعادة كتابة إعلان ضعيف منتشر: النص الأصلي ونسختك — الفرق بيشرح قيمتك.', '«هوك في ٣ ثوانٍ»: ٥ بدايات مختلفة لنفس المنتج والجمهور يختار الأقوى.', 'تفكيك سكربت فيديو وصل لملايين المشاهدات: البنية خطوة بخطوة.'], steps: ['اكتب لكل عميل محتمل «هوك» مجانياً واحداً في رسالتك الأولى — العينة بتفتح الباب.', 'ابنِ مكتبة هوكات مصنفة بالمجالات وحدّثها شهرياً من التريندات.'] },
+  'accounts': { ideas: ['دراسة حالة: حساب نميته بأرقام حقيقية (قبل/بعد) — بإذن صاحبه وبالأدلة.', '«٣ أخطاء بتقتل وصول حسابك» — سلسلة تدقيق سريع لحسابات حقيقية.', 'خطة محتوى شهر كامل لنيش واحد قدّام الكاميرا — بتوري طريقة شغلك كاملة.'], steps: ['وثّق نتائجك بالأرقام والسكرين شوت دائماً — إدارة الحسابات بتتباع بالأدلة لا بالوعود.', 'اعرض باقة «تدقيق مجاني مصغر» كمدخل — ٣ ملاحظات سريعة على حساب العميل المحتمل.'] },
+  'ads': { ideas: ['تفكيك إعلان ناجح: الاستهداف والرسالة والميزانية التقديرية — تحليل بيوري خبرتك.', '«نفس الإعلان بميزانيتين»: إزاي توزع ٥٠٠ جنيه مقابل ٥٠٠٠ على حملة واحدة.', 'أخطاء بتحرق ميزانية الإعلانات عند المحلات الصغيرة — وتصحيحها خطوة بخطوة.'], steps: ['انشر نتيجة حملة حقيقية واحدة شهرياً (بإذن العميل) — رقم واحد موثق أقوى من ألف وعد.', 'جهّز حاسبة ميزانية بسيطة تشاركها مع العملاء المحتملين كأداة مجانية باسمك.'] },
+  'support': { ideas: ['شرح حل مشكلة حساب شائعة خطوة بخطوة (استرجاع/تقييد/توثيق) — محتوى بيتبحث عنه يومياً.', '«احمي حسابك»: إعدادات أمان أساسية أغلب الناس مش مفعّلاها — سلسلة وقائية.', 'أسئلة العملاء المتكررة وإجاباتها في فيديوهات قصيرة — بتوفر عليك وعليهم وقتاً.'], steps: ['وثّق كل حالة حلّيتها (من غير بيانات خاصة) في ملف نتائج — سجلّك هو إعلانك.', 'رد على أسئلة التعليقات بفيديوهات — كل سؤال متكرر هو خدمة مطلوبة.'] },
+  'translation': { ideas: ['«بتتقال إزاي؟» — تعبيرات يومية بلغة عملك بترجمة طبيعية لا حرفية.', 'أخطاء ترجمة مضحكة/خطيرة في إعلانات منتشرة وتصحيحها — محتوى بيتنشر بسرعة.', 'ترجمة مقطع تريند عالمي بتعليقك — وبتعرض دقتك وأسلوبك معاً.'], steps: ['اعرض عينات ثنائية الاتجاه (من/إلى) في ملفك — أغلب العملاء بيدوروا على اتجاه محدد.', 'تخصص في مجال ترجمة واحد ظاهر في عنوانك (طبي/قانوني/تسويقي) — التخصص بيرفع سعرك.'] },
+  'dev': { ideas: ['«موقع في أسبوع»: توثيق بناء مشروع حقيقي من الصفر للنشر — حلقات قصيرة.', 'تفكيك ميزة في تطبيق مشهور وإعادة بنائها — بتعرض عمقك التقني بأسلوب مبسط.', 'أخطاء بتخلي موقع المحل يخسر عملاء (سرعة/موبايل/طلب) وتصحيحها عملياً.'], steps: ['انشر مشروعاً تجريبياً حياً واحداً شهرياً برابط شغال — الرابط الحي أقوى من أي سيرة ذاتية.', 'اعرض نتائج سرعة/أداء قبل وبعد لأي موقع لمسته — الأرقام بتقنع أصحاب الأعمال.'] },
+  'marketing': { ideas: ['خطة تسويق كاملة لمحل وهمي في ٥ دقائق — بتوري طريقة تفكيرك من الصفر.', 'تفكيك حملة براند ناجحة: الفكرة والتنفيذ والنتائج التقديرية.', '«لو كنت مكانهم»: إزاي تسوّق لمنتج صعب/ممل — تحدي بيظهر إبداعك.'], steps: ['اعرض خططك بقوالب بصرية ثابتة تحمل هويتك — القالب المعروف بيخلي المحتوى «بتاعك».', 'اربط كل فكرة بنتيجة قابلة للقياس (مبيعات/حجوزات/رسائل) — العملاء بيشتروا النتائج.'] },
+  'other': { ideas: ['عرض «قبل/بعد» من شغلك الحقيقي — أقوى إعلان لأي خدمة هو نتيجتها.', '«بتتعمل إزاي؟» — كواليس تنفيذ خدمتك خطوة بخطوة بتبني ثقة فورية.', 'إجابة أعمق سؤال بيتسأل في مجالك — فيديو واحد يخليك مرجعاً.'], steps: ['وثّق نتائج عملائك (بإذنهم) وانشر نتيجة واحدة أسبوعياً — الانتظام بيبني سوقك.', 'اعرض خدمتك داخل قصة عميل حقيقي لا كقائمة مميزات.'] },
+};
+function starFuelFor(u) {
+  const key = u.role === 'provider' ? (u.provider_category || 'other') : (u.niche || 'عام');
+  const bank = STAR_FUEL[key] || (u.role === 'provider' ? STAR_FUEL.other : STAR_FUEL['عام']);
+  const d = new Date();
+  const monthIndex = d.getFullYear() * 12 + d.getMonth();
+  const ideas = [];
+  for (let i = 0; i < Math.min(3, bank.ideas.length); i++) ideas.push(bank.ideas[(monthIndex + i) % bank.ideas.length]);
+  return { key, ideas, step: bank.steps[monthIndex % bank.steps.length], month_index: monthIndex };
+}
+
+/* ---------------- باقة «نجم Deal»: المسارات ----------------
+   قاعدة المال الصارمة: الاشتراك يولد «قيد التحقق» بلا أي ميزة، ولا يتحول
+   «نشطاً» إلا بتأكيد المالك من لوحته أن التحويلة وصلت فعلياً — وعند التأكيد
+   تبدأ الـ30 يوماً من تلك اللحظة. رقم العمولة لا يظهر إلا داخل خطوة دفع
+   الباقة لعضو مؤهل (نفس قاعدة رقم عمولة الحجز). */
+app.get('/api/star/info', async (req, res) => {
+  await sweepStar();
+  const activeCount = (await db.prepare(`SELECT COUNT(DISTINCT user_id) c FROM star_subscriptions WHERE status='active' AND expires_at>?`).get(now())).c;
+  res.json({ price: STAR_PRICE, currency: STAR_CURRENCY, days: 30, terms_version: STAR_TERMS_VERSION, active_stars: activeCount });
+});
+app.get('/api/star/me', auth, async (req, res) => {
+  res.json(await myStarState(req.user.id));
+});
+/** رقم دفع الباقة: فقط لعضو مؤهل للاشتراك، وفقط داخل خطوة الدفع. */
+app.get('/api/star/payment-info', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس لا يشترك في الباقات' });
+  if (!['creator', 'provider'].includes(req.user.role)) return res.status(400).json({ error: 'باقة نجم Deal للصناع ومقدمي الخدمة فقط' });
+  const st = await myStarState(req.user.id);
+  if (st.state === 'active') return res.status(400).json({ error: 'اشتراكك في نجم Deal نشط بالفعل' });
+  if (st.state === 'pending') return res.status(400).json({ error: 'عندك اشتراك قيد التحقق بالفعل — استنى تأكيد الاستلام' });
+  res.json({ label: 'Deal — حساب عمولات التطبيق', phone: COMMISSION_PHONE, methods: ['Vodafone Cash', 'InstaPay'], amount: STAR_PRICE, currency: STAR_CURRENCY });
+});
+app.post('/api/star/subscribe', auth, async (req, res) => {
+  const u = req.user;
+  if (u.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس لا يشترك في الباقات' });
+  if (!['creator', 'provider'].includes(u.role)) return res.status(400).json({ error: 'باقة نجم Deal للصناع ومقدمي الخدمة فقط' });
+  if (u.frozen || u.penalty_level === 'suspended') return res.status(400).json({ error: 'حسابك مجمّد حالياً — لا يمكنك الاشتراك في الباقة' });
+  const { ref, terms_accepted, terms_version } = req.body || {};
+  if (terms_accepted !== true || terms_version !== STAR_TERMS_VERSION) {
+    return res.status(400).json({ error: 'لازم توافق على شروط الباقة أولاً' });
+  }
+  if (!ref || !String(ref).trim()) return res.status(400).json({ error: 'مرجع التحويلة مطلوب' });
+  const st = await myStarState(u.id);
+  if (st.state === 'active') return res.status(400).json({ error: 'اشتراكك في نجم Deal نشط بالفعل', state: 'active', subscription: st.subscription });
+  if (st.state === 'pending') return res.status(400).json({ error: 'عندك اشتراك قيد التحقق بالفعل — استنى تأكيد الاستلام', state: 'pending', subscription: st.subscription });
+  const info = await db.prepare(`INSERT INTO star_subscriptions (user_id,amount,currency,ref,status,terms_version,terms_accepted_at,created_at)
+    VALUES (?,?,?,?, 'pending', ?, ?, ?)`)
+    .run(u.id, STAR_PRICE, STAR_CURRENCY, String(ref).trim().slice(0, 120), STAR_TERMS_VERSION, now(), now());
+  const founder = await db.prepare('SELECT id FROM users WHERE is_platform_founder=1').get();
+  if (founder) await notify(founder.id, 'star_pending', `⭐ اشتراك «نجم Deal» قيد التحقق من ${u.name} — مرجع ${String(ref).trim().slice(0, 60)}`, `star:${info.lastInsertRowid}`);
+  const sub = await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(info.lastInsertRowid);
+  res.json({ state: 'pending', subscription: starSubView(sub) });
+});
+/* نجم الأسبوع الحالي (عام): بيانات علنية آمنة فقط عبر publicUser. */
+app.get('/api/star/week', async (req, res) => {
+  await sweepStar();
+  const wid = await weekStarUserId();
+  if (!wid) return res.json({ star: null, stats: null });
+  const u = await getUser(wid);
+  if (!u) return res.json({ star: null, stats: null });
+  res.json({ star: await publicUser(u), stats: await talentStats(wid) });
+});
+/* وقود النمو الشهري: للمشترك النشط فقط — إحصاءاته الحقيقية + بنك مجاله الدوّار. */
+app.get('/api/star/fuel', auth, async (req, res) => {
+  if (req.user.is_platform_founder || !(await isStar(req.user.id))) {
+    return res.status(403).json({ error: 'وقود النمو لمشتركي نجم Deal النشطين فقط' });
+  }
+  const uid = req.user.id;
+  const views = (await db.prepare('SELECT COUNT(*) c FROM profile_views WHERE talent_id=?').get(uid)).c;
+  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND p.kind IN ('deposit','rest')`).all(uid);
+  const d = new Date();
+  const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const monthEarnings = earnings.filter((e) => { const ed = new Date(e.created_at); return `${ed.getFullYear()}-${String(ed.getMonth() + 1).padStart(2, '0')}` === monthKey; })
+    .reduce((s, e) => s + e.amount, 0);
+  const myBookings = (await db.prepare('SELECT COUNT(*) c FROM bookings WHERE talent_id=?').get(uid)).c;
+  const done = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND status='completed'`).get(uid)).c;
+  const fuel = starFuelFor(req.user);
+  res.json({
+    stats: {
+      views,
+      earnings_total: earnings.reduce((s, e) => s + e.amount, 0),
+      earnings_month: monthEarnings,
+      bookings: myBookings,
+      conversion: myBookings ? Math.round(done / myBookings * 100) : 0,
+      record: await talentStats(uid),
+    },
+    fuel,
+  });
+});
+/* لوحة المالك — سجل الباقة الرسمي: كل اشتراك بخط حالاته الزمني + عدّادات + إيراد.
+   الإيراد = مجموع مبالغ الاشتراكات المؤكدة فقط (نشطة + منتهية) — «قيد التحقق»
+   والمر rejected لا تُحتسب إيراداً لأن الفلوس لم تُؤكَّد. */
+app.get('/api/owner/star', auth, ownerOnly, async (req, res) => {
+  await sweepStar();
+  const rows = await db.prepare('SELECT * FROM star_subscriptions ORDER BY created_at DESC, id DESC LIMIT 200').all();
+  const items = [];
+  for (const s of rows) {
+    const u = await getUser(s.user_id);
+    items.push({
+      ...starSubView(s),
+      user: u ? { id: u.id, name: u.name, role: u.role, niche: u.niche, provider_category: u.provider_category, provider_custom: u.provider_custom || '', city: u.city } : null,
+    });
+  }
+  const counts = { pending: 0, active: 0, expired: 0, rejected: 0 };
+  let revenue = 0;
+  for (const s of rows) {
+    if (s.status === 'pending') counts.pending++;
+    else if (s.status === 'active') { if (s.expires_at > now()) counts.active++; else counts.expired++; revenue += s.amount; }
+    else if (s.status === 'expired') { counts.expired++; revenue += s.amount; }
+    else if (s.status === 'rejected') counts.rejected++;
+  }
+  res.json({ items, counts, revenue, price: STAR_PRICE, currency: STAR_CURRENCY });
+});
+app.post('/api/owner/star/:id/confirm', auth, ownerOnly, async (req, res) => {
+  const s = await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(+req.params.id);
+  if (!s || s.status !== 'pending') return res.status(400).json({ error: 'اشتراك غير موجود أو تم البت فيه' });
+  const t = now();
+  await db.prepare(`UPDATE star_subscriptions SET status='active', decided_at=?, decided_by=?, activated_at=?, expires_at=? WHERE id=?`)
+    .run(t, req.user.id, t, t + STAR_DURATION_MS, s.id);
+  await notify(s.user_id, 'star_active', `⭐ مبروك! اتفعّل اشتراكك في «نجم Deal» — مزاياك شغالة من دلوقتي ولمدة 30 يوم`, 'star');
+  res.json({ ok: true, subscription: starSubView(await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(s.id)) });
+});
+app.post('/api/owner/star/:id/reject', auth, ownerOnly, async (req, res) => {
+  const s = await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(+req.params.id);
+  if (!s || s.status !== 'pending') return res.status(400).json({ error: 'اشتراك غير موجود أو تم البت فيه' });
+  const reason = String((req.body || {}).reason || 'مرجع التحويلة غير صحيح').slice(0, 300);
+  await db.prepare(`UPDATE star_subscriptions SET status='rejected', decided_at=?, decided_by=?, reject_reason=? WHERE id=?`)
+    .run(now(), req.user.id, reason, s.id);
+  await notify(s.user_id, 'star_rejected', `اشتراك «نجم Deal» لم يُفعَّل: ${reason} — راجع مرجع التحويلة واشترك من جديد`, 'star');
+  res.json({ ok: true });
+});
+
 /* ---------------- creator stats ---------------- */
 app.get('/api/my/stats', auth, async (req, res) => {
   const uid = req.user.id;
@@ -1357,7 +1627,8 @@ app.get('/api/owner/dashboard', auth, ownerOnly, async (req, res) => {
 });
 /* رسائل الدعم المحفوظة (أسئلة خارج قاعدة الرد التلقائي) — قراءة للمالك فقط. */
 app.get('/api/owner/support-messages', auth, ownerOnly, async (req, res) => {
-  const items = await db.prepare(`SELECT s.*, u.name AS user_name FROM support_messages s LEFT JOIN users u ON u.id=s.user_id ORDER BY s.created_at DESC LIMIT 100`).all();
+  // رسائل مشتركي «نجم Deal» (أولوية) تتصدّر القائمة، وداخل كل مجموعة الأحدث أولاً.
+  const items = await db.prepare(`SELECT s.*, u.name AS user_name FROM support_messages s LEFT JOIN users u ON u.id=s.user_id ORDER BY s.priority DESC, s.created_at DESC LIMIT 100`).all();
   const unread = (await db.prepare('SELECT COUNT(*) c FROM support_messages WHERE is_read=0').get()).c;
   res.json({ items, unread });
 });

@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS users (
   price DOUBLE PRECISION DEFAULT 0,
   bio TEXT DEFAULT '',
   links TEXT DEFAULT '',
+  cover TEXT DEFAULT '',
+  accent TEXT DEFAULT '',
+  founder_seat INTEGER DEFAULT NULL,
   is_platform_founder INTEGER DEFAULT 0,
   is_founder_member INTEGER DEFAULT 0,
   verified INTEGER DEFAULT 0,
@@ -285,6 +288,38 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, recipient_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_inbox ON messages(recipient_id, sender_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read);
+
+CREATE TABLE IF NOT EXISTS friendships (
+  id SERIAL PRIMARY KEY,
+  requester_id INTEGER NOT NULL,
+  addressee_id INTEGER NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','accepted','declined')),
+  created_at BIGINT NOT NULL,
+  decided_at BIGINT DEFAULT 0,
+  UNIQUE(requester_id, addressee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id, status);
+CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id, status);
+
+CREATE TABLE IF NOT EXISTS profile_posts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  body TEXT NOT NULL,
+  link TEXT DEFAULT '',
+  pinned INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_profile_posts_user ON profile_posts(user_id, pinned, created_at);
+
+CREATE TABLE IF NOT EXISTS post_reactions (
+  post_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('love','clap')),
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY(post_id, user_id, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_post_reactions_post ON post_reactions(post_id);
 
 CREATE TABLE IF NOT EXISTS guest_messages (
   id SERIAL PRIMARY KEY,
@@ -513,6 +548,50 @@ CREATE TABLE IF NOT EXISTS money_receipts (
 CREATE INDEX IF NOT EXISTS idx_money_receipts_ob ON money_receipts(obligation_id, id);
 `;
 
+/* ترحيلات جولة «الملف الاجتماعي»: غلاف/لون تمييز/مقعد مؤسس + جداول الصداقة
+   ومنشورات البروفايل وتفاعلاتها. كل عبارة idempotent، وإسناد المقاعد بأثر
+   رجعي حتمي: الرقم = ترتيب التسجيل (id) بين المؤهلين (صانع/مقدم، بلا المؤسس
+   صاحب المنصة) — فلا يتغير رقم أي عضو أبداً مهما تكرر التشغيل، والفئة تُغلق
+   عند ١٠٠ لأن من ترتيبه بعد المئة لا يأخذ رقماً إطلاقاً. */
+const SOCIAL_MIGRATIONS_SQL = `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cover TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS accent TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS founder_seat INTEGER DEFAULT NULL;
+CREATE TABLE IF NOT EXISTS friendships (
+  id SERIAL PRIMARY KEY,
+  requester_id INTEGER NOT NULL,
+  addressee_id INTEGER NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','accepted','declined')),
+  created_at BIGINT NOT NULL,
+  decided_at BIGINT DEFAULT 0,
+  UNIQUE(requester_id, addressee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id, status);
+CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id, status);
+CREATE TABLE IF NOT EXISTS profile_posts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  body TEXT NOT NULL,
+  link TEXT DEFAULT '',
+  pinned INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_profile_posts_user ON profile_posts(user_id, pinned, created_at);
+CREATE TABLE IF NOT EXISTS post_reactions (
+  post_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('love','clap')),
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY(post_id, user_id, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_post_reactions_post ON post_reactions(post_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_founder_seat ON users(founder_seat) WHERE founder_seat IS NOT NULL;
+UPDATE users u SET founder_seat = sub.rn
+FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY id ASC) AS rn FROM users WHERE role IN ('creator','provider') AND is_platform_founder=0) sub
+WHERE u.id = sub.id AND sub.rn <= 100 AND u.founder_seat IS NULL;
+`;
+
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
    موحّدة (0xxxxxxxxxx) مهما كانت الصيغة المدخلة (+20 / 0020 / مسافات).
    يُستخدم في التسجيل والدخول معاً حتى لا يتكرر حساب لنفس الشخص أبداً. */
@@ -534,6 +613,7 @@ function init() {
     readyPromise = (async () => {
       await pool.query(SCHEMA_SQL);
       await pool.query(MIGRATIONS_SQL);
+      await pool.query(SOCIAL_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -557,6 +637,7 @@ const ID_TABLES = new Set([
   'users', 'shop_requests', 'campaigns', 'campaign_applications', 'bookings',
   'payments', 'disputes', 'reviews', 'notifications', 'profile_views',
   'portfolio_items', 'support_messages', 'messages', 'star_subscriptions',
+  'friendships', 'profile_posts',
   'money_obligations', 'money_ledger', 'money_receipts',
 ]);
 

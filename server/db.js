@@ -150,6 +150,14 @@ CREATE TABLE IF NOT EXISTS bookings (
   proof_url TEXT DEFAULT '',
   proof_at BIGINT DEFAULT 0,
   proof_check TEXT DEFAULT '',
+  receipt_confirmed_at BIGINT DEFAULT 0,
+  receipt_auto INTEGER DEFAULT 0,
+  proof_warned INTEGER DEFAULT 0,
+  escrow_status TEXT DEFAULT '',
+  escrow_prev_status TEXT DEFAULT '',
+  escrow_released_ref TEXT DEFAULT '',
+  escrow_released_at BIGINT DEFAULT 0,
+  escrow_release_seen TEXT DEFAULT '',
   created_at BIGINT NOT NULL,
   completed_at BIGINT DEFAULT 0
 );
@@ -171,6 +179,7 @@ CREATE TABLE IF NOT EXISTS disputes (
   reason TEXT DEFAULT '',
   status TEXT DEFAULT 'open',
   resolution TEXT DEFAULT '',
+  evidence TEXT DEFAULT '',
   created_at BIGINT NOT NULL,
   resolved_at BIGINT DEFAULT 0
 );
@@ -342,6 +351,15 @@ ALTER TABLE shop_requests ALTER COLUMN shop_user_id DROP NOT NULL;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_name TEXT DEFAULT '';
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_phone TEXT DEFAULT '';
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_token TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS receipt_confirmed_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS receipt_auto INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS proof_warned INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS escrow_status TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS escrow_prev_status TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS escrow_released_ref TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS escrow_released_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS escrow_release_seen TEXT DEFAULT '';
+ALTER TABLE disputes ADD COLUMN IF NOT EXISTS evidence TEXT DEFAULT '';
 ALTER TABLE bookings ALTER COLUMN client_id DROP NOT NULL;
 ALTER TABLE reviews ALTER COLUMN reviewer_id DROP NOT NULL;
 ALTER TABLE reviews ALTER COLUMN reviewee_id DROP NOT NULL;

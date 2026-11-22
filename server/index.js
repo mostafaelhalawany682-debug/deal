@@ -13,8 +13,9 @@ const { db, pool, init, normalizeContact } = require('./db');
 const PORT = process.env.PORT || 3000;
 const COMMISSION_RATE = 0.10;
 const COMMISSION_PHONE = process.env.COMMISSION_PHONE || ''; // server-side only — من متغير البيئة فقط، بلا أي قيمة افتراضية في الكود
-const FEE_REVIEW_WINDOW_MS = 48 * 3600 * 1000;
-const RECEIPT_AUTO_CONFIRM_MS = 48 * 3600 * 1000;
+const FEE_REVIEW_WINDOW_MS = 24 * 3600 * 1000;   // نافذة رفض المالك لمرجع عمولة خاطئ: ٢٤ ساعة (قرار المالك)
+const RECEIPT_AUTO_CONFIRM_MS = 24 * 3600 * 1000; // صمت العميل بعد إثبات سليم = تأكيد استلام تلقائي بعد ٢٤ ساعة
+const RECEIPT_WARN_MS = 12 * 3600 * 1000;         // تنبيه العميل عند انقضاء ١٢ ساعة من الإثبات (قبل التأكيد التلقائي)
 
 /* ---------------- باقة «نجم Deal» — إعدادات واحدة من الخادم ----------------
    السعر والمدة والعملة ثابتة هنا فقط (قابلة للتعديل لاحقاً من مكان واحد)،
@@ -293,20 +294,28 @@ async function claimObligationForPayment(b, kind, ref, actor) {
   if (!legKind) return null;
   const amounts = bookingLegAmounts(b);
   const base = kind === 'fee' ? amounts.fee : amounts[kind];
+  /* المستلم: العمولة والدفعة الأخيرة → المالك (الأخيرة تُحتجَز عند Deal بنموذج
+     الاحتجاز)، والعربون وحده → المقدم مباشرة كما هو. */
+  const toOwner = kind === 'fee' || kind === 'rest';
   const ob = await getOrCreateObligation({
     kind: legKind, booking_id: b.id, user_id: b.talent_id, base_amount: base, currency: b.currency,
     payer_user_id: b.client_id || null, guest_token: b.guest_token || '',
-    payee: kind === 'fee' ? 'owner' : `user:${b.talent_id}`,
-    payee_user_id: kind === 'fee' ? null : b.talent_id,
+    payee: toOwner ? 'owner' : `user:${b.talent_id}`,
+    payee_user_id: toOwner ? null : b.talent_id,
   });
   if (ob.status === 'open') {
     const claimed = await setObligationStatus(ob, 'claimed', actor, 'سجّل الدافع مرجع التحويلة في الحجز', { transfer_ref: String(ref || '').slice(0, 120) });
-    // اكتمال الحجز لاحقاً/سابقاً هو عامل التأكيد الثاني لهذه الرجل.
+    // اكتمال الحجز لاحقاً/سابقاً هو عامل التأكيد الثاني لهذه الرجل (عدا الأخيرة:
+    // تأكيد التزامها هو ما يقود الاحتجاز والاكتمال — عبر syncFinalEscrow).
     const fresh = await getBooking(b.id);
-    if (fresh && fresh.status === 'completed') await settleLegObligation(b.id, legKind, 'اكتمل الحجز واكتمل القبض');
-    else if (legKind === 'booking_deposit' && fresh && fresh.proof_at) await settleLegObligation(b.id, legKind, 'قدّم المنفذ إثبات التنفيذ');
+    if (legKind !== 'booking_final') {
+      if (fresh && fresh.status === 'completed') await settleLegObligation(b.id, legKind, 'اكتمل الحجز واكتمل القبض');
+      else if (legKind === 'booking_deposit' && fresh && fresh.proof_at) await settleLegObligation(b.id, legKind, 'قدّم المنفذ إثبات التنفيذ');
+    }
+    if (legKind === 'booking_final') await syncFinalEscrow(b.id);
     return await getObligation(claimed.id);
   }
+  if (legKind === 'booking_final') await syncFinalEscrow(b.id);
   return ob;
 }
 /* تسوية التزام رجل (عربون/أخيرة) إلى «confirmed» عندما يثبت اكتمال الحجز —
@@ -314,6 +323,126 @@ async function claimObligationForPayment(b, kind, ref, actor) {
 async function settleLegObligation(bookingId, legKind, note) {
   const ob = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status='claimed' ORDER BY id DESC LIMIT 1`).get(legKind, bookingId);
   if (ob) await setObligationStatus(ob, 'confirmed', 'system', note);
+}
+
+/* ---------------- احتجاز الباقي عند Deal (Escrow — نموذج Binance P2P) ----------------
+   قرار المالك الملزم: الـ٤٥٪ الأخيرة لا تذهب للمقدم مباشرة — العميل يحوّلها
+   إلى رقم Deal فتُحتجَز هناك (التزام booking_final بمستلم owner بنفس المرجع
+   المالي الموحد: كود DL + مبلغ ببصمة + تأكيد تلقائي بالإيصال)، ولا تُفرَج
+   للمقدم إلا بعد تأكيد الاستلام (يدوياً، أو تلقائياً بصمت العميل ٢٤ ساعة من
+   إثبات سليم مع تنبيه عند ١٢ ساعة). فعل المالك اليدوي الوحيد في الدورة كلها:
+   تنفيذ تحويلة الإفراج من محفظته وتسجيل مرجعها بضغطة. حالات الاحتجاز على
+   الحجز نفسه (bookings.escrow_status): '' لم تبدأ | awaiting_transfer بانتظار
+   تحويل العميل | awaiting_confirmation التحويلة عند المالك للتحقق | held
+   محتجَز فعلياً | ready_release جاهز للإفراج (الحجز اكتمل) | released أُفرج
+   عنه للمقدم | refunded رُدّ للعميل | frozen_dispute مجمّد بنزاع. كل انتقال
+   احتجاز يُوثَّق في money_ledger عبر التزام الدفعة الأخيرة. */
+async function finalObligation(bookingId) {
+  return await db.prepare(`SELECT * FROM money_obligations WHERE kind='booking_final' AND booking_id=? ORDER BY id DESC LIMIT 1`).get(bookingId);
+}
+async function restPaymentRow(bookingId) {
+  return await db.prepare(`SELECT * FROM payments WHERE booking_id=? AND kind='rest' ORDER BY id DESC LIMIT 1`).get(bookingId);
+}
+async function setEscrow(b, status, extra = {}) {
+  const sets = ['escrow_status=?'], args = [status];
+  for (const k of ['escrow_prev_status', 'escrow_released_ref', 'escrow_released_at', 'escrow_release_seen']) {
+    if (extra[k] !== undefined) { sets.push(`${k}=?`); args.push(extra[k]); }
+  }
+  await db.prepare(`UPDATE bookings SET ${sets.join(',')} WHERE id=?`).run(...args, b.id);
+  return await getBooking(b.id);
+}
+/* اكتمال الحجز في نموذج الاحتجاز: الاستلام مؤكد + الباقي محتجَز فعلياً عند
+   Deal → الحجز «completed» والمبلغ «جاهز للإفراج» تلقائياً + إشعارات للطرفين
+   وللمالك، وشارات المقدم تُزامَن من سجله الجديد. */
+async function completeBookingEscrow(b) {
+  if (b.escrow_status !== 'frozen_dispute') await setEscrow(b, 'ready_release');
+  await db.prepare(`UPDATE bookings SET status='completed', completed_at=? WHERE id=?`).run(now(), b.id);
+  const nb = await getBooking(b.id);
+  const rest = bookingLegAmounts(nb).rest;
+  await notify(nb.talent_id, 'escrow', `حجز #${nb.id}: اكتمل الحجز — باقيك ${rest} ${nb.currency} محتجَز عند Deal وجاهز للإفراج، والمالك بيحوّله لك دلوقتي`, `booking:${nb.id}`);
+  if (nb.client_id) await notify(nb.client_id, 'escrow', `حجز #${nb.id}: اكتمل الحجز — الباقي محتجَز عند Deal وهيُفرَج عنه للمنفذ`, `booking:${nb.id}`);
+  await notifyOwner('escrow_ready', `💰 حجز #${nb.id}: مبلغ ${rest} ${nb.currency} جاهز للإفراج للمنفذ — نفّذ التحويلة من محفظتك وسجّل مرجعها من لوحة المالك`, `booking:${nb.id}`);
+  await syncBadges(nb.talent_id);
+  return nb;
+}
+/* مزامنة حالة الاحتجاز مع حالة التزام الدفعة الأخيرة — مصدر الحقيقة الوحيد
+   لانتقالَي «محتجَز» و«مرفوض»، وتُستدعى من كل حدث يمسّ الالتزام (ادعاء الدافع
+   داخل الحجز، تأكيد تلقائي بالإيصال، قرار مالك بالتأكيد/الرفض). آمنة للتكرار:
+   الإشعارات والانتقالات محروسة بالحالة الحالية فلا تتكرر. */
+async function syncFinalEscrow(bookingId) {
+  if (!bookingId) return null;
+  let b = await getBooking(bookingId);
+  if (!b) return null;
+  const ob = await finalObligation(bookingId);
+  if (!ob) return b;
+  let pay = await restPaymentRow(bookingId);
+  if (['confirmed', 'auto_confirmed'].includes(ob.status)) {
+    // المال عند Deal فعلياً: صف الدفعة يُنشأ/يُحدَّث «held» — حتى لو سبق تأكيدُ
+    // الالتزام ادعاءَ العميل داخل الحجز (إيصال رُفع قبل تسجيل المرجع).
+    if (!pay) {
+      const info = await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)')
+        .run(b.id, 'rest', bookingLegAmounts(b).rest, ob.transfer_ref || '', 'held', now());
+      pay = await db.prepare('SELECT * FROM payments WHERE id=?').get(info.lastInsertRowid);
+    } else if (pay.status === 'claimed') {
+      await db.prepare(`UPDATE payments SET status='held' WHERE id=?`).run(pay.id);
+    }
+    if (!['held', 'ready_release', 'released', 'refunded', 'frozen_dispute'].includes(b.escrow_status)) {
+      b = await setEscrow(b, 'held');
+      const rest = bookingLegAmounts(b).rest;
+      await notify(b.talent_id, 'escrow', `حجز #${b.id}: الباقي ${rest} ${b.currency} بقى محتجَزاً عند Deal بأمان — هيُفرَج عنه ليك بعد تأكيد الاستلام`, `booking:${b.id}`);
+      if (b.client_id) await notify(b.client_id, 'escrow', `حجز #${b.id}: وصل باقي القبض لـDeal واتحجز بأمان — مش هيُفرَج عنه إلا بعد تأكيد الاستلام`, `booking:${b.id}`);
+    }
+    if (b.receipt_confirmed_at > 0 && !['completed', 'disputed', 'cancelled'].includes(b.status)) {
+      b = await completeBookingEscrow(b);
+    }
+  } else if (ob.status === 'rejected') {
+    if (pay && pay.status === 'claimed') {
+      await db.prepare(`UPDATE payments SET status='rejected' WHERE id=?`).run(pay.id);
+      if (b.escrow_status === 'awaiting_confirmation') b = await setEscrow(b, 'awaiting_transfer');
+      if (b.client_id) await notify(b.client_id, 'escrow', `حجز #${b.id}: تحويلة الباقي لم تُقبَل عند Deal — راجع المرجع وحوّل من جديد`, `booking:${b.id}`);
+    }
+  }
+  return await getBooking(bookingId);
+}
+
+/* ---------------- حزمة الأدلة (تُولَّد تلقائياً عند أي نزاع) ----------------
+   تجمع كل ما يثبت الصفقة من سجلات الخادم نفسها: بيانات الحجز وأطرافه ومراحله
+   بتواريخ الخادم وروابط إثبات التنفيذ ومراجع كل التحويلات وسجل التزام الدفعة
+   الأخيرة — جاهزة لاستخدام المقدم في بلاغات حقوق النشر على المنصات (Deal لا
+   يحذف عملاً من منصة أخرى؛ الحزمة هي أداته الرسمية للإثبات) ولأي مراجعة. */
+async function buildEvidenceBundle(b) {
+  const talent = await getUser(b.talent_id);
+  const client = b.client_id ? await getUser(b.client_id) : null;
+  const pays = await db.prepare('SELECT kind,amount,ref,status,created_at FROM payments WHERE booking_id=? ORDER BY id ASC').all(b.id);
+  const obs = await db.prepare('SELECT code,kind,base_amount,exact_amount,currency,status,transfer_ref,created_at FROM money_obligations WHERE booking_id=? ORDER BY id ASC').all(b.id);
+  const finalOb = await finalObligation(b.id);
+  const ledger = finalOb ? await db.prepare('SELECT from_status,to_status,actor,note,created_at FROM money_ledger WHERE obligation_id=? ORDER BY id ASC').all(finalOb.id) : [];
+  const dispute = await db.prepare('SELECT id,opened_by,reason,status,created_at FROM disputes WHERE booking_id=? ORDER BY id DESC LIMIT 1').get(b.id);
+  const fmt = (ts) => (ts ? new Date(ts).toISOString() : null);
+  const amounts = bookingLegAmounts(b);
+  return {
+    bundle: 'Deal — حزمة أدلة حجز (Evidence Bundle)',
+    generated_at: fmt(now()),
+    booking: { id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status, source: b.source, created_at: fmt(b.created_at), completed_at: fmt(b.completed_at) },
+    parties: {
+      client: client ? { id: client.id, name: client.name } : { guest_name: b.guest_name || '', guest_phone: b.guest_phone || '' },
+      talent: talent ? { id: talent.id, name: talent.name, role: talent.role, niche: talent.niche, city: talent.city } : null,
+    },
+    amounts: { fee: amounts.fee, deposit: amounts.deposit, final: amounts.rest, net_to_talent: b.price - amounts.fee },
+    timeline: [
+      { step: 'booking_created', at: fmt(b.created_at) },
+      ...(b.fee_confirmed_at ? [{ step: 'fee_confirmed', at: fmt(b.fee_confirmed_at), ref: b.fee_ref }] : []),
+      ...(b.proof_at ? [{ step: 'proof_submitted_verified', at: fmt(b.proof_at), url: b.proof_url, check: b.proof_check }] : []),
+      ...(b.receipt_confirmed_at ? [{ step: b.receipt_auto ? 'receipt_auto_confirmed_24h' : 'receipt_confirmed_by_client', at: fmt(b.receipt_confirmed_at) }] : []),
+      ...(b.escrow_released_at ? [{ step: 'escrow_released_to_talent', at: fmt(b.escrow_released_at), ref: b.escrow_released_ref }] : []),
+    ],
+    payments: pays.map((p) => ({ kind: p.kind, amount: p.amount, ref: p.ref, status: p.status, at: fmt(p.created_at) })),
+    obligations: obs.map((o) => ({ code: o.code, kind: o.kind, base_amount: o.base_amount, exact_amount: o.exact_amount, currency: o.currency, status: o.status, transfer_ref: o.transfer_ref, at: fmt(o.created_at) })),
+    escrow: { status: b.escrow_status || '', final_obligation_code: finalOb ? finalOb.code : null, ledger: ledger.map((e) => ({ from: e.from_status, to: e.to_status, actor: e.actor, note: e.note, at: fmt(e.created_at) })) },
+    proof: b.proof_url ? { url: b.proof_url, server_timestamp: fmt(b.proof_at), check: b.proof_check } : null,
+    dispute: dispute ? { id: dispute.id, reason: dispute.reason, status: dispute.status, opened_at: fmt(dispute.created_at) } : null,
+    statement: 'هذه الحزمة مُولَّدة آلياً من سجلات منصة Deal المختومة بوقت الخادم، وتثبت أن العمل المنشور على رابط الإثبات نُفّذ ضمن حجز مدفوع المراحل على المنصة — صالحة للاستخدام في بلاغات حقوق النشر لدى المنصات.',
+  };
 }
 
 /* تفعيل اشتراك نجم معلّق بسبب التزام (تأكيد تلقائي أو قرار مالك) — نفس شروط
@@ -342,6 +471,10 @@ async function applyObligationEffect(ob, actor) {
     if (b && b.fee_status !== 'confirmed' && b.status === 'awaiting_fee') {
       await applyClientPayment(b, 'fee', ob.transfer_ref || `AUTO-${ob.code}`);
     }
+  } else if (ob.kind === 'booking_final') {
+    // تأكيد التزام الدفعة الأخيرة (تلقائي بالإيصال أو بقرار المالك) = المال وصل
+    // Deal فعلاً → يُحتجَز، وربما يُكمل الحجز إن كان الاستلام مؤكداً.
+    await syncFinalEscrow(ob.booking_id);
   }
 }
 
@@ -1001,6 +1134,8 @@ async function bookingView(b, viewer) {
   const myReview = viewer ? await db.prepare('SELECT * FROM reviews WHERE booking_id=? AND reviewer_id=?').get(b.id, viewer.id) : null;
   const view = { ...b };
   delete view.guest_token; // رمز وصول الضيف لا يخرج في أي رد أبداً
+  delete view.escrow_prev_status; // حالة احتجاز سابقة — تفصيلة داخلية لاستعادة النزاع فقط
+  view.has_dispute = !!(await db.prepare('SELECT id FROM disputes WHERE booking_id=? LIMIT 1').get(b.id));
   // رقم واتساب الضيف يظهر للمنفّذ المسجّل فقط (للتواصل)، ولا يظهر لأي شخص آخر
   if (!(viewer && viewer.id === b.talent_id)) delete view.guest_phone;
   return {
@@ -1023,12 +1158,31 @@ async function verifiedAlternatives(b) {
   return Promise.all(rows.slice(0, 3).map(u => publicUser(u)));
 }
 async function sweepAutoConfirm() {
+  const t = now();
+  /* تنبيه الـ١٢ ساعة: مرة واحدة لكل حجز (proof_warned) وللعميل المسجل فقط —
+     الضيف بلا حساب ويرى العدّاد الحي في صفحة متابعته. */
+  const warn = await db.prepare(`SELECT * FROM bookings WHERE status='proof_submitted' AND proof_check='verified' AND proof_at>0 AND proof_warned=0 AND ? - proof_at >= ? AND ? - proof_at < ?`)
+    .all(t, RECEIPT_WARN_MS, t, RECEIPT_AUTO_CONFIRM_MS);
+  for (const b of warn) {
+    await db.prepare(`UPDATE bookings SET proof_warned=1 WHERE id=?`).run(b.id);
+    await notify(b.client_id, 'booking', `حجز #${b.id}: ⏰ فاتت ١٢ ساعة على إثبات التنفيذ — لو الشغل وصلك أكّد الاستلام دلوقتي؛ لو ما أكدتش هيتأكد الاستلام تلقائياً بعد ١٢ ساعة كمان حمايةً للمنفذ`, `booking:${b.id}`);
+  }
+  /* التأكيد التلقائي بعد ٢٤ ساعة: صمت العميل = تأكيد استلام. إن كان الباقي
+     محتجَزاً أصلاً يكتمل الحجز فوراً ويصير جاهزاً للإفراج. */
   const due = await db.prepare(`SELECT * FROM bookings WHERE status='proof_submitted' AND proof_check='verified' AND proof_at>0 AND ? - proof_at >= ?`)
-    .all(now(), RECEIPT_AUTO_CONFIRM_MS);
+    .all(t, RECEIPT_AUTO_CONFIRM_MS);
   for (const b of due) {
-    await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
-    await notify(b.client_id, 'booking', `حجز #${b.id}: تأكد الاستلام تلقائياً بعد 48 ساعة — ادفع الباقي`, `booking:${b.id}`);
-    await notify(b.talent_id, 'booking', `حجز #${b.id}: تأكد الاستلام تلقائياً — الباقي في الطريق`, `booking:${b.id}`);
+    await db.prepare(`UPDATE bookings SET receipt_confirmed_at=?, receipt_auto=1 WHERE id=?`).run(t, b.id);
+    const fresh = await getBooking(b.id);
+    const ob = await finalObligation(b.id);
+    if (ob && ['confirmed', 'auto_confirmed'].includes(ob.status)) {
+      await syncFinalEscrow(b.id);
+    } else {
+      await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
+      if (!fresh.escrow_status) await setEscrow(fresh, 'awaiting_transfer');
+    }
+    await notify(b.client_id, 'booking', `حجز #${b.id}: تأكد الاستلام تلقائياً بعد ٢٤ ساعة من الإثبات — حوّل الباقي لـDeal عشان يتحجز ويُفرَج عنه للمنفذ`, `booking:${b.id}`);
+    await notify(b.talent_id, 'booking', `حجز #${b.id}: تأكد الاستلام تلقائياً بعد ٢٤ ساعة — الباقي في طريقه للاحتجاز عند Deal`, `booking:${b.id}`);
   }
 }
 
@@ -1090,20 +1244,34 @@ async function applyClientPayment(b, kind, ref) {
     await db.prepare(`UPDATE bookings SET status='in_progress' WHERE id=?`).run(b.id);
     await notify(b.talent_id, 'booking', `حجز #${b.id}: وصلك العربون ${half} — ابدأ التنفيذ`, `booking:${b.id}`);
   } else if (kind === 'rest') {
-    if (b.status !== 'awaiting_rest') return { error: 'الباقي غير مفتوح الآن' };
-    await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)').run(b.id, 'rest', half, ref, 'confirmed', now());
-    await db.prepare(`UPDATE bookings SET status='completed', completed_at=? WHERE id=?`).run(now(), b.id);
-    await notify(b.talent_id, 'booking', `حجز #${b.id}: اكتمل القبض — قيّم تجربتك`, `booking:${b.id}`);
-    await notify(b.client_id, 'booking', `حجز #${b.id}: اكتمل — قيّم المنفذ`, `booking:${b.id}`);
-    await syncBadges(b.talent_id);
+    /* الاحتجاز عند Deal: تسجيل مرجع الباقي «ادعاء» فقط — لا يكمل الحجز ولا
+       يصل للمقدم. الدفعة تُحتجَز فعلياً عند تأكيد التزامها (إيصال مطابق بكل
+       الشروط أو قرار مالك)، والحجز يكتمل باجتماع الاحتجاز + تأكيد الاستلام،
+       ثم يُفرَج عنها بتحويلة المالك المسجلة. مسموحة من مرحلة الإثبات أو من
+       مرحلة الباقي (الترتيب بين التحويل وتأكيد الاستلام حر). */
+    if (!['proof_submitted', 'awaiting_rest'].includes(b.status)) return { error: 'الباقي غير مفتوح الآن' };
+    const prev = await restPaymentRow(b.id);
+    if (prev && ['claimed', 'held', 'released'].includes(prev.status)) return { error: 'سجّلت تحويل الباقي من قبل — التحويلة عند Deal للتحقق والاحتجاز' };
+    await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at) VALUES (?,?,?,?,?,?)').run(b.id, 'rest', half, ref, 'claimed', now());
+    await db.prepare(`UPDATE bookings SET escrow_status='awaiting_confirmation' WHERE id=? AND escrow_status IN ('','awaiting_transfer')`).run(b.id);
+    await notify(b.talent_id, 'booking', `حجز #${b.id}: العميل سجّل تحويل الباقي لـDeal — قيد التحقق والاحتجاز`, `booking:${b.id}`);
   } else return { error: 'نوع دفعة غير صحيح' };
   return { booking: await getBooking(b.id) };
 }
 
 async function applyConfirmReceipt(b) {
   if (b.status !== 'proof_submitted') return { error: 'لا يوجد إثبات بانتظار التأكيد' };
-  await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
-  await notify(b.talent_id, 'booking', `حجز #${b.id}: العميل أكد الاستلام — الباقي اتفتح`, `booking:${b.id}`);
+  await db.prepare(`UPDATE bookings SET receipt_confirmed_at=?, receipt_auto=0 WHERE id=?`).run(now(), b.id);
+  const ob = await finalObligation(b.id);
+  if (ob && ['confirmed', 'auto_confirmed'].includes(ob.status)) {
+    // الباقي محتجَز أصلاً + الاستلام تأكد الآن = اكتمال فوري وجاهزية إفراج.
+    await syncFinalEscrow(b.id);
+  } else {
+    await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
+    const nb = await getBooking(b.id);
+    if (!nb.escrow_status) await setEscrow(nb, 'awaiting_transfer');
+    await notify(b.talent_id, 'booking', `حجز #${b.id}: العميل أكد الاستلام — الباقي بيتحوّل لـDeal للاحتجاز وبعدها يُفرَج عنه ليك`, `booking:${b.id}`);
+  }
   return { booking: await getBooking(b.id) };
 }
 
@@ -1174,11 +1342,29 @@ app.post('/api/bookings/:id/dispute', auth, async (req, res) => {
   const { reason = '' } = req.body || {};
   const b = await getBooking(+req.params.id);
   if (!b || (b.client_id !== req.user.id && b.talent_id !== req.user.id)) return res.status(403).json({ error: 'لست طرفاً' });
-  if (['completed', 'cancelled', 'disputed'].includes(b.status)) return res.status(400).json({ error: 'لا يمكن فتح نزاع الآن' });
+  /* النزاع مفتوح في كل المراحل النشطة — وعلى الحجز المكتمل أيضاً ما دام باقيه
+     محتجَزاً عند Deal ولم يُفرَج عنه بعد (هذه لحظة حماية الاحتجاز الحقيقية)؛
+     بعد الإفراج/الرد تنتهي سلطة المنصة على المال فيُقفل باب النزاع. */
+  const escrowDisputable = b.status === 'completed' && b.escrow_status === 'ready_release';
+  if (['cancelled', 'disputed'].includes(b.status) || (b.status === 'completed' && !escrowDisputable)) return res.status(400).json({ error: 'لا يمكن فتح نزاع الآن' });
   const info = await db.prepare('INSERT INTO disputes (booking_id,opened_by,reason,created_at) VALUES (?,?,?,?)').run(b.id, req.user.id, reason, now());
   await db.prepare(`UPDATE bookings SET prev_status=status, status='disputed' WHERE id=?`).run(b.id);
+  /* المبلغ المحتجَز عند Deal يتجمد فوراً مع النزاع (لا إفراج ولا رد حتى قرار
+     المالك)، و«حزمة الأدلة» تُولَّد تلقائياً من سجل الحجز وتُحفظ مع النزاع. */
+  let nb = await getBooking(b.id);
+  let froze = false;
+  if (['awaiting_confirmation', 'held', 'ready_release'].includes(nb.escrow_status)) {
+    await db.prepare(`UPDATE bookings SET escrow_prev_status=?, escrow_status='frozen_dispute' WHERE id=?`).run(nb.escrow_status, b.id);
+    froze = true;
+    nb = await getBooking(b.id);
+  }
+  try {
+    const bundle = await buildEvidenceBundle(nb);
+    await db.prepare('UPDATE disputes SET evidence=? WHERE id=?').run(JSON.stringify(bundle), info.lastInsertRowid);
+  } catch (e) { /* توليد الحزمة لا يعطّل فتح النزاع أبداً */ }
   const founder = await db.prepare('SELECT id FROM users WHERE is_platform_founder=1').get();
   if (founder) await notify(founder.id, 'dispute', `نزاع جديد على حجز #${b.id}`, `booking:${b.id}`);
+  if (froze) await notifyOwner('escrow_frozen', `🧊 نزاع على حجز #${b.id}: المبلغ المحتجَز عند Deal اتجمّد فوراً لحد قرارك (إفراج للمنفذ أو رد للعميل من قسم «مبالغ محتجزة»)`, `booking:${b.id}`);
   res.json({ dispute_id: info.lastInsertRowid, alternatives: await verifiedAlternatives(b) });
 });
 
@@ -1358,7 +1544,11 @@ async function guestBookingView(b) {
     id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status,
     fee_status: b.fee_status, agreed_client: !!b.agreed_client, agreed_talent: !!b.agreed_talent,
     fee, net, deposit: half, rest: half,
-    proof_url: b.proof_url, proof_check: b.proof_check, created_at: b.created_at,
+    proof_url: b.proof_url, proof_check: b.proof_check, proof_at: b.proof_at || 0, created_at: b.created_at,
+    receipt_confirmed_at: b.receipt_confirmed_at || 0, receipt_auto: !!b.receipt_auto,
+    escrow_status: b.escrow_status || '', escrow_released_ref: b.escrow_released_ref || '',
+    escrow_released_at: b.escrow_released_at || 0, escrow_release_seen: b.escrow_release_seen || '',
+    has_dispute: !!(await db.prepare('SELECT id FROM disputes WHERE booking_id=? LIMIT 1').get(b.id)),
     talent: await publicUser(await getUser(b.talent_id)),
     reviewed: !!myReview,
   };
@@ -1391,15 +1581,18 @@ app.get('/api/guest/:token/obligation', async (req, res) => {
   const b = await guestBookingByToken(req.params.token);
   if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
   const kind = String(req.query.kind || '');
-  const stageFor = { booking_deposit: 'awaiting_deposit', booking_final: 'awaiting_rest' };
+  const stageFor = { booking_deposit: ['awaiting_deposit'], booking_final: ['awaiting_rest', 'proof_submitted'] };
   if (!stageFor[kind]) return res.status(400).json({ error: 'نوع التزام غير صحيح' });
   const existing = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status IN ('open','claimed','confirmed','auto_confirmed') ORDER BY id DESC LIMIT 1`).get(kind, b.id);
-  if (!existing && b.status !== stageFor[kind]) return res.status(400).json({ error: 'خطوة الدفع ليست مفتوحة الآن' });
+  if (!existing && !stageFor[kind].includes(b.status)) return res.status(400).json({ error: 'خطوة الدفع ليست مفتوحة الآن' });
   const amounts = bookingLegAmounts(b);
   const ob = existing || await getOrCreateObligation({
     kind, booking_id: b.id, user_id: b.talent_id,
     base_amount: kind === 'booking_deposit' ? amounts.deposit : amounts.rest, currency: b.currency,
-    guest_token: b.guest_token, payee: `user:${b.talent_id}`, payee_user_id: b.talent_id,
+    guest_token: b.guest_token,
+    // العربون للمقدم مباشرة؛ الدفعة الأخيرة تُحتجَز عند المالك (احتجاز Deal).
+    payee: kind === 'booking_deposit' ? `user:${b.talent_id}` : 'owner',
+    payee_user_id: kind === 'booking_deposit' ? b.talent_id : null,
   });
   res.json({ obligation: await payerObligationView(ob, await guestCountryByToken(req.params.token)) });
 });
@@ -1512,8 +1705,8 @@ app.post('/api/notifications/read', auth, async (req, res) => {
 const SUPPORT_KB = [
   { id: 'what', q_ar: 'ما هو Deal وكيف يعمل؟', q_en: 'What is Deal and how does it work?',
     keys: ['ما هو', 'ازاي بيشتغل', 'كيف يعمل', 'يعني ايه', 'what is deal', 'how does it work', 'how it works', 'about deal'],
-    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل ينشر شغلانة أو يحجز صانعاً مباشرة، والدفع يتم بين الطرفين على مراحل بحماية «ضمان Deal» — المنصة تنظّم الخطوات وتوثّقها ولا تمسك فلوس حد.',
-    a_en: 'Deal — the platform for all content creators: creators register a profile (niche, city, price), clients post a job or book a creator directly, and payment happens between the two sides in protected stages under the Deal Guarantee — the platform organizes and documents the steps and never holds anyone\'s money.' },
+    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل ينشر شغلانة أو يحجز صانعاً مباشرة، والدفع يتم على مراحل بحماية «ضمان Deal»: عمولة أولاً، ثم عربون للصانع، والدفعة الأخيرة تُحتجَز عند Deal ولا تُفرَج للصانع إلا بعد تأكيد الاستلام — وكل خطوة موثّقة بسجل رسمي.',
+    a_en: 'Deal — the platform for all content creators: creators register a profile (niche, city, price), clients post a job or book a creator directly, and payment happens in protected stages under the Deal Guarantee: fee first, then a deposit to the creator, and the final instalment is held by Deal and released to the creator only after receipt is confirmed — every step documented in an official ledger.' },
   { id: 'register', q_ar: 'كيف أسجّل كصانع محتوى؟', q_en: 'How do I register as a creator?',
     keys: ['تسجيل', 'اسجل', 'حساب جديد', 'انشاء حساب', 'register', 'sign up', 'create account', 'join as creator'],
     a_ar: 'من زر «دخول / تسجيل» اختر «صانع محتوى» واملأ الاسم والمجال والمدينة وعدد المتابعين وسعرك ووسيلة تواصل واحدة (رقم هاتف أو إيميل) — التسجيل مجاني ووسيلة التواصل هي وسيلة دخولك بعد ذلك.',
@@ -1536,20 +1729,24 @@ const SUPPORT_KB = [
     a_en: 'Inside the "Deal fee first" step of your booking, tap "Show Deal fee account" — the fee account number appears only to the paying client and only at this step. Transfer the fee amount from your wallet (Vodafone Cash or InstaPay), then enter the transfer reference in the booking and confirm — confirmation is automatic.' },
   { id: 'stages', q_ar: 'كيف يتم الدفع على مراحل (45/45)؟', q_en: 'How does the staged payment (45/45) work?',
     keys: ['مراحل', '45', '٤٥', 'عربون', 'الباقي', 'دفعتين', 'staged', 'deposit', 'stages', 'two payments', 'installments'],
-    a_ar: 'بعد العمولة (10%)، يدفع العميل 45% من السعر عربوناً للصانع مباشرة فيبدأ التنفيذ، وبعد تقديم إثبات التنفيذ وتأكيد الاستلام يدفع الـ45% الباقية — فيصل للصانع صافيه كاملاً (90%) ولا يخسر أي طرف: العميل لا يدفع الباقي قبل ما يستلم، والصانع لا يسلّم قبل العربون.',
-    a_en: 'After the 10% fee, the client pays 45% of the price directly to the creator as a deposit so work starts, and after proof of delivery and receipt confirmation pays the remaining 45% — the creator receives the full net (90%) and neither side is exposed: the client never pays the rest before delivery, and the creator never delivers before the deposit.' },
+    a_ar: 'بعد العمولة (10%)، يدفع العميل 45% من السعر عربوناً للصانع مباشرة فيبدأ التنفيذ، وبعد إثبات التنفيذ يحوّل العميل الـ45% الأخيرة إلى Deal حيث تُحتجَز بأمان، ولا تُفرَج للصانع إلا بعد تأكيد الاستلام (أو التأكيد التلقائي بعد 24 ساعة) — فيصل للصانع صافيه كاملاً (90%): العميل لا يخسر باقيه قبل ما يستلم، والصانع ضامن باقيه بعد ما يسلّم.',
+    a_en: 'After the 10% fee, the client pays 45% of the price directly to the creator as a deposit so work starts, and after proof of delivery the client transfers the final 45% to Deal where it is held safely — released to the creator only after receipt is confirmed (or auto-confirmed after 24 hours) — so the creator receives the full net (90%): the client never loses the rest before delivery, and the creator\'s rest is guaranteed after delivery.' },
   { id: 'guarantee', q_ar: 'ما هو ضمان Deal؟', q_en: 'What is the Deal Guarantee?',
     keys: ['ضمان', 'حماية', 'امان', 'أمان', 'guarantee', 'protection', 'safe', 'trust'],
-    a_ar: '«حجز محمي بضمان Deal» يعني: دفع مرحلي موثّق داخل الحجز، عمولة مؤكدة أولاً، إثبات تنفيذ تتحقق منه المنصة ويُختم بوقته، إمكانية فتح نزاع يجمّد الحجز حتى تراجعه الإدارة، وعند إخلال المنفذ تقترح المنصة بدائل موثّقة من نفس مدينتك ومجالك.',
-    a_en: 'A "Deal-Guaranteed booking" means: staged payments documented inside the booking, the fee confirmed first, a proof of delivery that the platform verifies and timestamps, the ability to open a dispute that freezes the booking until admin review, and — if the creator defaults — verified alternatives from your own city and niche suggested by the platform.' },
+    a_ar: '«حجز محمي بضمان Deal» يعني: دفع مرحلي موثّق داخل الحجز، عمولة مؤكدة أولاً، إثبات تنفيذ تتحقق منه المنصة ويُختم بوقته، احتجاز الدفعة الأخيرة عند Deal فلا تُفرَج إلا بعد تأكيد الاستلام، إمكانية فتح نزاع يجمّد الحجز والمبلغ المحتجَز فوراً حتى تراجعه الإدارة (إفراج للمنفذ أو رد للعميل)، وعند إخلال المنفذ تقترح المنصة بدائل موثّقة من نفس مدينتك ومجالك.',
+    a_en: 'A "Deal-Guaranteed booking" means: staged payments documented inside the booking, the fee confirmed first, a proof of delivery that the platform verifies and timestamps, the final instalment held by Deal and released only after receipt confirmation, the ability to open a dispute that freezes the booking and the held amount instantly until admin review (release to the creator or refund to the client), and — if the creator defaults — verified alternatives from your own city and niche suggested by the platform.' },
+  { id: 'p2p', q_ar: 'هل المعاملات P2P؟ كيف تتحرك الفلوس فعلياً؟', q_en: 'Are transactions P2P? How does money actually move?',
+    keys: ['p2p', 'بي تو بي', 'محافظ شخصية', 'محفظة شخصية', 'بين المحافظ', 'مش بنك', 'لست بنك', 'peer to peer', 'personal wallets', 'not a bank'],
+    a_ar: 'المعاملات P2P — فلوسك بتتحرك بين المحافظ الشخصية مباشرة (فودافون كاش/إنستاباي)، وDeal بينظّم ويوثّق ويحمي ومش بنك. كل تحويلة بمرجع مالي موحّد (كود معاملة + مبلغ بكسور بصمة) ومتسجلة في سجل رسمي، والدفعة الأخيرة وحدها تُحتجَز عند Deal لحد تأكيد الاستلام وبعدها تُفرَج للمنفذ.',
+    a_en: 'Transactions are P2P — your money moves directly between personal wallets (Vodafone Cash/InstaPay), and Deal organizes, documents and protects — it is not a bank. Every transfer carries a unified money reference (a transaction code + a fingerprinted amount) recorded in an official ledger, and only the final instalment is held by Deal until receipt is confirmed, then released to the creator.' },
   { id: 'proof', q_ar: 'ما هو إثبات التنفيذ وكيف يعمل؟', q_en: 'What is proof of delivery and how does it work?',
     keys: ['اثبات', 'إثبات', 'رابط العمل', 'proof', 'delivery proof', 'published work link'],
     a_ar: 'بعد التنفيذ يرسل الصانع رابط العمل المنشور علناً (الفيديو/المنشور) داخل الحجز؛ المنصة تتحقق آلياً أن الرابط يعمل وعلني ويختمه بوقت الإرسال. الدفعة الأخيرة لا تُفتح إلا بإثبات سليم، والإثبات يُحفظ تلقائياً في معرض أعمال الصانع.',
     a_en: 'After delivery, the creator submits the publicly published work link inside the booking; the platform automatically verifies the link is live and public and timestamps it. The final payment only unlocks with a valid proof, and the proof is automatically saved to the creator\'s portfolio.' },
-  { id: 'auto_confirm', q_ar: 'ما هو التأكيد التلقائي بعد 48 ساعة؟', q_en: 'What is the 48-hour auto-confirmation?',
-    keys: ['48', '٤٨', 'تأكيد تلقائي', 'سكوت', 'ما رديتش', 'auto confirm', '48 hours', 'automatic confirmation', 'no response'],
-    a_ar: 'لو قدّم الصانع إثبات تنفيذ سليماً ولم يؤكد العميل الاستلام يدوياً خلال 48 ساعة من الإثبات، يؤكَّد الاستلام تلقائياً وتُفتح الدفعة الأخيرة — حمايةً للصانع من التأخير، وحق العميل في النزاع يبقى قائماً عند وجود مشكلة حقيقية.',
-    a_en: 'If the creator submits a valid proof of delivery and the client does not manually confirm receipt within 48 hours of the proof, receipt is auto-confirmed and the final payment unlocks — protecting the creator from delays, while the client\'s right to dispute a real problem remains.' },
+  { id: 'auto_confirm', q_ar: 'ما هو التأكيد التلقائي بعد 24 ساعة؟', q_en: 'What is the 24-hour auto-confirmation?',
+    keys: ['24', '٢٤', 'تأكيد تلقائي', 'التأكيد التلقائي', 'سكوت', 'ما رديتش', 'auto confirm', '24 hours', 'automatic confirmation', 'no response'],
+    a_ar: 'لو قدّم الصانع إثبات تنفيذ سليماً ولم يؤكد العميل الاستلام يدوياً خلال 24 ساعة من الإثبات، يؤكَّد الاستلام تلقائياً (وبيوصلك تنبيه عند 12 ساعة) — حمايةً للصانع من التأخير، وحق العميل في النزاع يبقى قائماً عند وجود مشكلة حقيقية ما دام الباقي محتجَزاً عند Deal.',
+    a_en: 'If the creator submits a valid proof of delivery and the client does not manually confirm receipt within 24 hours of the proof, receipt is auto-confirmed (you get a warning at 12 hours) — protecting the creator from delays, while the client\'s right to dispute a real problem remains as long as the rest is still held by Deal.' },
   { id: 'reviews', q_ar: 'متى أستطيع تقييم الطرف الآخر؟', q_en: 'When can I rate the other side?',
     keys: ['تقييم', 'نجوم', 'رأيي', 'review', 'rating', 'rate', 'stars'],
     a_ar: 'التقييم يفتح فقط بعد «اكتمال القبض» (انتهاء كل مراحل الدفع)، مرة واحدة لكل طرف ولكل حجز، ولا يمكن تعديله بعد إرساله — هكذا تبقى التقييمات مرتبطة بصفقات حقيقية مكتملة فعلاً.',
@@ -1564,8 +1761,8 @@ const SUPPORT_KB = [
     a_en: 'The first 100 creators to register on Deal receive a permanent "Founding Member" badge on their profile — an early distinction that is not granted once the first hundred is complete.' },
   { id: 'disputes', q_ar: 'كيف أفتح نزاعاً على حجز؟', q_en: 'How do I open a dispute on a booking?',
     keys: ['نزاع', 'مشكلة في حجز', 'اشتكي', 'شكوى', 'dispute', 'complaint', 'problem with booking'],
-    a_ar: 'من داخل الحجز اضغط «فتح نزاع» واكتب السبب: يتجمّد الحجز فوراً في مرحلته الحالية (لا دفعات جديدة) وتراجع الإدارة الحالة، ثم يُحل النزاع إما بإرجاع الحجز لمساره أو إلغائه — وكل ذلك موثّق داخل الحجز نفسه.',
-    a_en: 'From inside the booking, tap "Open dispute" and state the reason: the booking freezes immediately at its current stage (no new payments) while the admin reviews it, then the dispute is resolved either by restoring the booking to its track or cancelling it — all documented inside the booking itself.' },
+    a_ar: 'من داخل الحجز اضغط «فتح نزاع» واكتب السبب: يتجمّد الحجز فوراً في مرحلته الحالية (لا دفعات جديدة)، ولو فيه مبلغ محتجَز عند Deal بيتجمّد معاه فوراً لحد قرار الإدارة (إفراج للمنفذ أو رد للعميل)، وبتتولّد «حزمة أدلة» تلقائياً من سجل الحجز تقدر تستخدمها في بلاغات حقوق النشر على المنصات. ثم يُحل النزاع إما بإرجاع الحجز لمساره أو إلغائه — وكل ذلك موثّق داخل الحجز نفسه.',
+    a_en: 'From inside the booking, tap "Open dispute" and state the reason: the booking freezes immediately at its current stage (no new payments), and any amount held by Deal freezes with it instantly until the admin decides (release to the creator or refund to the client), and an "evidence bundle" is auto-generated from the booking record for use in platform copyright reports. The dispute is then resolved either by restoring the booking to its track or cancelling it — all documented inside the booking itself.' },
   { id: 'penalties', q_ar: 'ما هي العقوبات والتجميد؟', q_en: 'What are the penalties and freezing rules?',
     keys: ['عقوبات', 'تجميد', 'تعليق', 'حظر', 'تقييمات سلبية', 'penalties', 'penalty', 'frozen', 'suspended', 'banned', 'negative reviews'],
     a_ar: 'العقوبات متدرجة وتلقائية من التقييمات السلبية: عند 3 تقييمات سلبية تنبيه رسمي، وعند 5 يُعلَّق الحساب ويُجمَّد رصيده داخل المنصة ولا يستقبل حجوزات جديدة، والاحتيال يؤدي للحظر بعد مراجعة الإدارة. أموالك في محفظتك الخارجية لا تستطيع المنصة تجميدها — التجميد داخل نظام Deal فقط.',
@@ -1873,7 +2070,9 @@ app.get('/api/star/fuel', auth, async (req, res) => {
   }
   const uid = req.user.id;
   const views = (await db.prepare('SELECT COUNT(*) c FROM profile_views WHERE talent_id=?').get(uid)).c;
-  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND p.kind IN ('deposit','rest')`).all(uid);
+  // الأرباح: العربون المؤكد + الباقي المحتجَز فعلياً عند Deal أو المُفرَج عنه
+  // فقط — ادعاء التحويل وحده (claimed) أو المرفوض/المردود لا يُحتسب قبضاً.
+  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND ((p.kind='deposit' AND p.status='confirmed') OR (p.kind='rest' AND p.status IN ('held','released')))`).all(uid);
   const d = new Date();
   const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   const monthEarnings = earnings.filter((e) => { const ed = new Date(e.created_at); return `${ed.getFullYear()}-${String(ed.getMonth() + 1).padStart(2, '0')}` === monthKey; })
@@ -1973,16 +2172,17 @@ app.get('/api/money/obligation', async (req, res) => {
     const guestTok = String(req.query.guest_token || '');
     const isPayer = (viewer && b.client_id && viewer.id === b.client_id) || (guestTok && b.guest_token && guestTok === b.guest_token);
     if (!isPayer) return res.status(403).json({ error: 'الالتزام يظهر للدافع وحده' });
-    const stageFor = { booking_commission: 'awaiting_fee', booking_deposit: 'awaiting_deposit', booking_final: 'awaiting_rest' };
+    const stageFor = { booking_commission: ['awaiting_fee'], booking_deposit: ['awaiting_deposit'], booking_final: ['awaiting_rest', 'proof_submitted'] };
     const existing = await db.prepare(`SELECT * FROM money_obligations WHERE kind=? AND booking_id=? AND status IN ('open','claimed','confirmed','auto_confirmed') ORDER BY id DESC LIMIT 1`).get(kind, b.id);
-    if (!existing && b.status !== stageFor[kind]) return res.status(400).json({ error: 'خطوة الدفع ليست مفتوحة الآن' });
+    if (!existing && !stageFor[kind].includes(b.status)) return res.status(400).json({ error: 'خطوة الدفع ليست مفتوحة الآن' });
     const amounts = bookingLegAmounts(b);
     const base = kind === 'booking_commission' ? amounts.fee : kind === 'booking_deposit' ? amounts.deposit : amounts.rest;
     const ob = existing || await getOrCreateObligation({
       kind, booking_id: b.id, user_id: b.talent_id, base_amount: base, currency: b.currency,
       payer_user_id: b.client_id || null, guest_token: b.guest_token || '',
-      payee: kind === 'booking_commission' ? 'owner' : `user:${b.talent_id}`,
-      payee_user_id: kind === 'booking_commission' ? null : b.talent_id,
+      // العمولة والدفعة الأخيرة (احتجاز) للمالك؛ العربون وحده للمقدم مباشرة.
+      payee: kind === 'booking_deposit' ? `user:${b.talent_id}` : 'owner',
+      payee_user_id: kind === 'booking_deposit' ? b.talent_id : null,
     });
     return res.json({ obligation: await payerObligationView(ob, viewer ? viewer.country : await guestCountryByToken(guestTok)) });
   }
@@ -2153,6 +2353,7 @@ app.post('/api/owner/money/:id/reject', auth, ownerOnly, async (req, res) => {
       await notify(sub.user_id, 'star_rejected', `اشتراك «نجم Deal» لم يُفعَّل: ${reason} — راجع مرجع التحويلة واشترك من جديد`, 'star');
     }
   }
+  if (ob.kind === 'booking_final') await syncFinalEscrow(ob.booking_id); // رفض تحويلة الباقي: الدفعة «مرفوضة» والاحتجاز يرجع لانتظار تحويل جديد
   res.json({ ok: true, obligation: await moneyItemView(ob) });
 });
 /* إلغاء تأكيد (تلقائي أو يدوي): تُسحب المزايا/تتراجع الخطوة + تجميد اختياري للدافع. */
@@ -2176,6 +2377,18 @@ app.post('/api/owner/money/:id/revoke', auth, ownerOnly, async (req, res) => {
       await notify(b.talent_id, 'booking', `حجز #${b.id}: أُلغي تأكيد العمولة — رجعت خطوة العمولة`, `booking:${b.id}`);
       if (b.client_id) await notify(b.client_id, 'booking', `حجز #${b.id}: أُلغي تأكيد العمولة — أعد خطوة العمولة`, `booking:${b.id}`);
     }
+  } else if (ob.kind === 'booking_final') {
+    // إلغاء تأكيد تحويلة الباقي: الاحتجاز يتراجع لانتظار تحويل جديد، واكتمال
+    // الحجز (إن كان قد اكتمل بهذا التأكيد) يتراجع معه — قبل أي إفراج فقط.
+    const b = await getBooking(ob.booking_id);
+    if (b && !['released', 'refunded'].includes(b.escrow_status)) {
+      const pay = await restPaymentRow(b.id);
+      if (pay && ['held', 'claimed'].includes(pay.status)) await db.prepare(`UPDATE payments SET status='revoked' WHERE id=?`).run(pay.id);
+      if (['held', 'ready_release'].includes(b.escrow_status)) await db.prepare(`UPDATE bookings SET escrow_status='awaiting_transfer' WHERE id=?`).run(b.id);
+      if (b.status === 'completed') await db.prepare(`UPDATE bookings SET status='awaiting_rest', completed_at=0 WHERE id=?`).run(b.id);
+      await notify(b.talent_id, 'escrow', `حجز #${b.id}: أُلغي تأكيد تحويلة الباقي — رجعت خطوة الاحتجاز عند Deal`, `booking:${b.id}`);
+      if (b.client_id) await notify(b.client_id, 'escrow', `حجز #${b.id}: أُلغي تأكيد تحويلة الباقي — أعد تحويل الباقي لـDeal`, `booking:${b.id}`);
+    }
   }
   ob = await setObligationStatus(ob, 'revoked', 'owner', 'ألغى المالك التأكيد — التحويلة لم تصل فعلياً', { decided_by: req.user.id, decided_at: now() });
   if (freezePayer && ob.payer_user_id) {
@@ -2183,6 +2396,88 @@ app.post('/api/owner/money/:id/revoke', auth, ownerOnly, async (req, res) => {
     await notify(ob.payer_user_id, 'penalty', 'تم تجميد حسابك بعد إلغاء تأكيد تحويلة — تواصل مع الدعم لو فيه خطأ', '');
   }
   res.json({ ok: true, obligation: await moneyItemView(ob) });
+});
+
+/* ---------------- لوحة المالك: المبالغ المحتجَزة عند Deal ----------------
+   كل مبلغ محتجَز بحجزه وأطرافه وحالته. فعل المالك اليدوي الوحيد في دورة
+   المال كلها: ينفّذ تحويلة المحفظة للمقدم بنفسه ثم يسجّل مرجعها هنا بضغطة
+   (إفراج)، أو يردّ المحتجَز للعميل (رد). المقدم بعدها يؤكد الوصول أو يعلّم
+   «ماوصلش» من صفحة حجزه. */
+async function escrowItemView(b) {
+  const ob = await finalObligation(b.id);
+  const talent = await getUser(b.talent_id);
+  const client = b.client_id ? await getUser(b.client_id) : null;
+  const dispute = await db.prepare(`SELECT id FROM disputes WHERE booking_id=? AND status='open' LIMIT 1`).get(b.id);
+  return {
+    booking_id: b.id, title: b.title, price: b.price, currency: b.currency,
+    booking_status: b.status, escrow_status: b.escrow_status || '',
+    amount: bookingLegAmounts(b).rest,
+    client_name: client ? client.name : (b.guest_name || 'عميل ضيف'),
+    talent_name: talent ? talent.name : '—', talent_id: b.talent_id,
+    obligation_code: ob ? ob.code : null, obligation_status: ob ? ob.status : null,
+    released_ref: b.escrow_released_ref || '', released_at: b.escrow_released_at || 0,
+    release_seen: b.escrow_release_seen || '', dispute_open: !!dispute,
+    created_at: b.created_at,
+  };
+}
+app.get('/api/owner/escrow', auth, ownerOnly, async (req, res) => {
+  const rows = await db.prepare(`SELECT * FROM bookings WHERE escrow_status<>'' ORDER BY created_at DESC, id DESC LIMIT 100`).all();
+  res.json({ items: await Promise.all(rows.map(escrowItemView)) });
+});
+app.post('/api/owner/escrow/:bookingId/release', auth, ownerOnly, async (req, res) => {
+  const b = await getBooking(+req.params.bookingId);
+  if (!b) return res.status(404).json({ error: 'غير موجود' });
+  const ref = String((req.body || {}).ref || '').trim();
+  if (!ref) return res.status(400).json({ error: 'مرجع تحويلة الإفراج مطلوب — نفّذ التحويلة للمقدم من محفظتك ثم سجّل مرجعها' });
+  if (!['ready_release', 'frozen_dispute'].includes(b.escrow_status)) return res.status(400).json({ error: 'لا يوجد مبلغ محتجَز جاهز للإفراج الآن' });
+  await db.prepare(`UPDATE bookings SET escrow_status='released', escrow_released_ref=?, escrow_released_at=?, escrow_release_seen='' WHERE id=?`).run(ref.slice(0, 120), now(), b.id);
+  const pay = await restPaymentRow(b.id);
+  if (pay && pay.status !== 'released') await db.prepare(`UPDATE payments SET status='released' WHERE id=?`).run(pay.id);
+  const ob = await finalObligation(b.id);
+  if (ob) await moneyLedger(ob.id, ob.status, ob.status, 'owner', `إفراج: حوّل المالك الباقي للمقدم من محفظته — مرجع التحويلة: ${ref.slice(0, 120)}`);
+  const rest = bookingLegAmounts(b).rest;
+  await notify(b.talent_id, 'escrow', `حجز #${b.id}: 💰 أُفرج عن باقيك ${rest} ${b.currency} — المالك حوّله لك (مرجع: ${ref}) — أكّد الوصول من صفحة الحجز`, `booking:${b.id}`);
+  if (b.client_id) await notify(b.client_id, 'escrow', `حجز #${b.id}: أُفرج عن الباقي المحتجَز للمنفذ — اكتملت الصفقة`, `booking:${b.id}`);
+  res.json({ ok: true, item: await escrowItemView(await getBooking(b.id)) });
+});
+app.post('/api/owner/escrow/:bookingId/refund', auth, ownerOnly, async (req, res) => {
+  const b = await getBooking(+req.params.bookingId);
+  if (!b) return res.status(404).json({ error: 'غير موجود' });
+  if (!['held', 'ready_release', 'frozen_dispute'].includes(b.escrow_status)) return res.status(400).json({ error: 'لا يوجد مبلغ محتجَز قابل للرد الآن' });
+  const ref = String((req.body || {}).ref || '').trim();
+  await db.prepare(`UPDATE bookings SET escrow_status='refunded', status='cancelled' WHERE id=?`).run(b.id);
+  const pay = await restPaymentRow(b.id);
+  if (pay) await db.prepare(`UPDATE payments SET status='refunded' WHERE id=?`).run(pay.id);
+  const ob = await finalObligation(b.id);
+  if (ob) await moneyLedger(ob.id, ob.status, ob.status, 'owner', `رد للعميل: ردّ المالك الباقي المحتجَز للعميل من محفظته${ref ? ` — مرجع الرد: ${ref.slice(0, 120)}` : ''}`);
+  const rest = bookingLegAmounts(b).rest;
+  await notify(b.talent_id, 'escrow', `حجز #${b.id}: الباقي المحتجَز (${rest} ${b.currency}) اترد للعميل بقرار الإدارة — الحجز اتلغى`, `booking:${b.id}`);
+  if (b.client_id) await notify(b.client_id, 'escrow', `حجز #${b.id}: اترد لك الباقي المحتجَز ${rest} ${b.currency} — راجع محفظتك`, `booking:${b.id}`);
+  res.json({ ok: true, item: await escrowItemView(await getBooking(b.id)) });
+});
+/* رد المقدم على الإفراج: وصلني ✓ أو ماوصلش ⚠ (تنبيه فوري للمالك عند الثاني). */
+app.post('/api/bookings/:id/release-response', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b || b.talent_id !== req.user.id) return res.status(403).json({ error: 'الرد على الإفراج من المنفذ فقط' });
+  if (b.escrow_status !== 'released') return res.status(400).json({ error: 'الإفراج لم يُسجَّل بعد' });
+  if (b.escrow_release_seen) return res.status(400).json({ error: 'سجّلت ردّك على الإفراج من قبل' });
+  const received = !!(req.body || {}).received;
+  await db.prepare(`UPDATE bookings SET escrow_release_seen=? WHERE id=?`).run(received ? 'received' : 'missing', b.id);
+  if (received) await notifyOwner('escrow_seen', `✅ حجز #${b.id}: المنفذ أكّد وصول إفراج الباقي`, `booking:${b.id}`);
+  else await notifyOwner('escrow_missing', `⚠️ حجز #${b.id}: المنفذ بلّغ إن إفراج الباقي ماوصلش — راجع تحويلتك ومرجعها`, `booking:${b.id}`);
+  res.json({ ok: true, booking: await bookingView(await getBooking(b.id), req.user) });
+});
+/* حزمة الأدلة: لأطراف الحجز والمالك فقط — تُبنى حياً من السجلات (ونسختها
+   محفوظة مع النزاع منذ لحظة فتحه). */
+app.get('/api/bookings/:id/evidence', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b || (b.client_id !== req.user.id && b.talent_id !== req.user.id && !req.user.is_platform_founder)) return res.status(404).json({ error: 'غير موجود' });
+  res.json({ evidence: await buildEvidenceBundle(b) });
+});
+app.get('/api/guest/:token/evidence', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  res.json({ evidence: await buildEvidenceBundle(b) });
 });
 
 /* ---------------- creator stats ---------------- */
@@ -2193,7 +2488,8 @@ app.get('/api/my/stats', auth, async (req, res) => {
                (await db.prepare(`SELECT COUNT(*) c FROM campaigns WHERE status='open'`).get()).c;
   const myBookings = (await db.prepare('SELECT COUNT(*) c FROM bookings WHERE talent_id=?').get(uid)).c;
   const done = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND status='completed'`).get(uid)).c;
-  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND p.kind IN ('deposit','rest')`).all(uid);
+  // نفس قاعدة وقود النجم: الباقي يُحتسب محتجَزاً/مُفرَجاً فقط، لا بمجرد الادعاء.
+  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND ((p.kind='deposit' AND p.status='confirmed') OR (p.kind='rest' AND p.status IN ('held','released')))`).all(uid);
   const byMonth = {};
   for (const e of earnings) {
     const d = new Date(e.created_at); const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -2247,6 +2543,11 @@ app.post('/api/owner/disputes/:id/resolve', auth, ownerOnly, async (req, res) =>
   const b = await getBooking(d.booking_id);
   const target = action === 'cancel' ? 'cancelled' : (b.prev_status || 'pending_agreement');
   await db.prepare('UPDATE bookings SET status=? WHERE id=?').run(target, b.id);
+  /* فك تجميد الاحتجاز عند إعادة الحجز لمساره؛ عند الإلغاء يبقى المحتجَز مجمّداً
+     حتى يقرر المالك من قسم «مبالغ محتجزة»: إفراج للمنفذ أو رد للعميل. */
+  if (b.escrow_status === 'frozen_dispute' && action !== 'cancel') {
+    await db.prepare(`UPDATE bookings SET escrow_status=?, escrow_prev_status='' WHERE id=?`).run(b.escrow_prev_status || 'held', b.id);
+  }
   await db.prepare(`UPDATE disputes SET status='resolved', resolution=?, resolved_at=? WHERE id=?`).run(note || action, now(), d.id);
   await notify(b.client_id, 'dispute', `اتحل نزاع حجز #${b.id}`, `booking:${b.id}`);
   await notify(b.talent_id, 'dispute', `اتحل نزاع حجز #${b.id}`, `booking:${b.id}`);
@@ -2275,11 +2576,11 @@ app.post('/api/owner/users/:id/penalty', auth, ownerOnly, async (req, res) => {
     .run(level ?? null, frozen != null ? (frozen ? 1 : 0) : null, banned != null ? (banned ? 1 : 0) : null, u.id);
   res.json({ ok: true });
 });
-/** Reject a false fee reference inside the 48h review window: reopens fee step + opens a dispute. */
+/** Reject a false fee reference inside the 24h review window: reopens fee step + opens a dispute. */
 app.post('/api/owner/bookings/:id/reject-fee', auth, ownerOnly, async (req, res) => {
   const b = await getBooking(+req.params.id);
   if (!b || b.fee_status !== 'confirmed') return res.status(400).json({ error: 'لا توجد عمولة مؤكدة' });
-  if (now() - b.fee_confirmed_at > FEE_REVIEW_WINDOW_MS) return res.status(400).json({ error: 'انتهت نافذة مراجعة الـ48 ساعة' });
+  if (now() - b.fee_confirmed_at > FEE_REVIEW_WINDOW_MS) return res.status(400).json({ error: 'انتهت نافذة مراجعة الـ٢٤ ساعة' });
   await db.prepare(`UPDATE payments SET status='rejected' WHERE booking_id=? AND kind='fee'`).run(b.id);
   await db.prepare(`UPDATE bookings SET fee_status='rejected', prev_status=status, status='disputed' WHERE id=?`).run(b.id);
   await db.prepare('INSERT INTO disputes (booking_id,opened_by,reason,created_at) VALUES (?,?,?,?)').run(b.id, req.user.id, 'مرجع عمولة خاطئ', now());

@@ -35,6 +35,26 @@ async function notify(userId, type, text, ref = '') {
 }
 async function getUser(id) { return await db.prepare('SELECT * FROM users WHERE id=?').get(id); }
 
+/* ---------------- المتابعة (Follow) ---------------- */
+async function followersCount(userId) {
+  return (await db.prepare('SELECT COUNT(*) c FROM follows WHERE followee_id=?').get(userId)).c;
+}
+async function isFollowing(viewerId, userId) {
+  if (!viewerId || viewerId === userId) return false;
+  return !!(await db.prepare('SELECT 1 x FROM follows WHERE follower_id=? AND followee_id=?').get(viewerId, userId));
+}
+/* ملخص اجتماعي آمن للقوائم (متابِعون/محادثات): هوية علنية فقط — بلا أي وسيلة تواصل. */
+function socialSummary(u) {
+  if (!u) return null;
+  const founder = !!u.is_platform_founder;
+  return {
+    id: u.id, name: u.name, role: u.role, niche: u.niche, city: u.city,
+    avatar: founder ? '' : (u.avatar || ''),
+    verified: !!u.verified, pioneer: !!u.pioneer,
+    is_platform_founder: founder, is_founder_member: !!u.is_founder_member,
+  };
+}
+
 async function publicUser(u, viewerId = null) {
   if (!u) return null;
   const stats = await talentStats(u.id);
@@ -61,6 +81,10 @@ async function publicUser(u, viewerId = null) {
     badges: (await computeBadges(u.id)).filter(b => b.earned).slice(0, 3).map(b => b.key),
     portfolio: founder ? [] : await portfolioOf(u.id),
     frozen: !!u.frozen, penalty_level: u.penalty_level,
+    // متابِعو Deal (من جدول follows) — مختلف عن followers (متابعو حساباته الخارجية).
+    // يظهر للمؤسس أيضاً (عدّاد متابِعيه جزء من ملفه)، وis_following خاص بالمشاهد المسجل.
+    followers_count: await followersCount(u.id),
+    is_following: await isFollowing(viewerId, u.id),
   };
 }
 
@@ -312,6 +336,98 @@ app.post('/api/me/prefs', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
+/* ---------------- المتابعة: متابعة/إلغاء + ملخصي الاجتماعي ----------------
+   المتابعة هي الاستثناء الوحيد المسموح على حساب المؤسس (عرض + متابعة فقط):
+   زرها يظهر على بطاقته وملفه، وعدّاد متابِعيه يظهر عنده — بينما الحجز والمراسلة
+   والتواصل والسعر والشورتس تبقى محظورة عليه كما هي. */
+app.post('/api/users/:id/follow', auth, async (req, res) => {
+  const target = await getUser(+req.params.id);
+  if (!target) return res.status(404).json({ error: 'غير موجود' });
+  if (target.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك متابعة نفسك' });
+  if (target.banned || target.frozen) return res.status(400).json({ error: 'هذا الحساب غير متاح للمتابعة حالياً' });
+  // idempotent: التكرار لا يخطئ ولا يضاعف الصف ولا يكرر الإشعار.
+  const info = await db.prepare('INSERT INTO follows (follower_id,followee_id,created_at) VALUES (?,?,?) ON CONFLICT(follower_id,followee_id) DO NOTHING')
+    .run(req.user.id, target.id, now());
+  if (info.changes > 0) await notify(target.id, 'follow', `بدأ ${req.user.name} متابعتك على Deal`, `user:${req.user.id}`);
+  res.json({ ok: true, is_following: true, followers_count: await followersCount(target.id) });
+});
+async function unfollow(req, res) {
+  const target = await getUser(+req.params.id);
+  if (!target) return res.status(404).json({ error: 'غير موجود' });
+  await db.prepare('DELETE FROM follows WHERE follower_id=? AND followee_id=?').run(req.user.id, target.id);
+  res.json({ ok: true, is_following: false, followers_count: await followersCount(target.id) });
+}
+app.post('/api/users/:id/unfollow', auth, unfollow);
+app.delete('/api/users/:id/unfollow', auth, unfollow);
+
+app.get('/api/me/social', auth, async (req, res) => {
+  const me = req.user.id;
+  const followerRows = await db.prepare('SELECT u.* FROM follows f JOIN users u ON u.id=f.follower_id WHERE f.followee_id=? ORDER BY f.created_at DESC').all(me);
+  const followingRows = await db.prepare('SELECT u.* FROM follows f JOIN users u ON u.id=f.followee_id WHERE f.follower_id=? ORDER BY f.created_at DESC').all(me);
+  res.json({
+    followers_count: followerRows.length,
+    following_count: followingRows.length,
+    followers: followerRows.map(socialSummary),
+    following: followingRows.map(socialSummary),
+  });
+});
+
+/* ---------------- المراسلة الداخلية 1:1 (حسابات مسجلة فقط) ----------------
+   المؤسس خارج المراسلة تماماً من الطرفين: لا رسائل إليه ولا منه عبر هذا المسار. */
+const MSG_MAX = 1000;
+app.get('/api/messages', auth, async (req, res) => {
+  const me = req.user.id;
+  const rows = await db.prepare(`SELECT *, CASE WHEN sender_id=? THEN recipient_id ELSE sender_id END AS other_id
+    FROM messages WHERE sender_id=? OR recipient_id=? ORDER BY created_at DESC, id DESC`).all(me, me, me);
+  const convs = new Map();
+  for (const m of rows) {
+    let c = convs.get(m.other_id);
+    if (!c) { c = { other_id: m.other_id, last: m, unread: 0 }; convs.set(m.other_id, c); }
+    if (m.recipient_id === me && !m.is_read) c.unread++;
+  }
+  const items = [];
+  let unread_total = 0;
+  for (const c of convs.values()) {
+    unread_total += c.unread;
+    items.push({
+      user: socialSummary(await getUser(c.other_id)),
+      last: { body: c.last.body, created_at: c.last.created_at, mine: c.last.sender_id === me },
+      unread: c.unread,
+    });
+  }
+  res.json({ items, unread_total });
+});
+app.get('/api/messages/:userId', auth, async (req, res) => {
+  const other = await getUser(+req.params.userId);
+  if (!other) return res.status(404).json({ error: 'غير موجود' });
+  // فتح المحادثة يعلّم رسائل الطرف الآخر كمقروءة.
+  await db.prepare('UPDATE messages SET is_read=1 WHERE sender_id=? AND recipient_id=? AND is_read=0').run(other.id, req.user.id);
+  const rows = await db.prepare(`SELECT * FROM (SELECT * FROM messages WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?)
+    ORDER BY created_at DESC, id DESC LIMIT 200) recent ORDER BY created_at ASC, id ASC`)
+    .all(req.user.id, other.id, other.id, req.user.id);
+  res.json({
+    user: socialSummary(other),
+    items: rows.map(m => ({ id: m.id, body: m.body, created_at: m.created_at, mine: m.sender_id === req.user.id, is_read: !!m.is_read })),
+  });
+});
+app.post('/api/messages/:userId', auth, async (req, res) => {
+  const other = await getUser(+req.params.userId);
+  if (!other) return res.status(404).json({ error: 'غير موجود' });
+  if (other.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك مراسلة نفسك' });
+  if (other.is_platform_founder || req.user.is_platform_founder) {
+    return res.status(400).json({ error: 'حساب المؤسس خارج المراسلة — عرضه ومتابعته فقط' });
+  }
+  if (other.banned || other.frozen) return res.status(400).json({ error: 'هذا الحساب غير متاح للمراسلة حالياً' });
+  const body = String((req.body || {}).body || '').trim();
+  if (!body) return res.status(400).json({ error: 'اكتب رسالة أولاً' });
+  if (body.length > MSG_MAX) return res.status(400).json({ error: `الرسالة أطول من الحد الأقصى (${MSG_MAX} حرف)` });
+  const ts = now();
+  const info = await db.prepare('INSERT INTO messages (sender_id,recipient_id,body,created_at) VALUES (?,?,?,?)')
+    .run(req.user.id, other.id, body, ts);
+  await notify(other.id, 'message', `رسالة جديدة من ${req.user.name}`, `messages:${req.user.id}`);
+  res.json({ ok: true, message: { id: info.lastInsertRowid, body, created_at: ts, mine: true } });
+});
+
 /* ---------------- directory / market ---------------- */
 /* جلسة اختيارية من الترويسة (للمسارات العامة التي يتغير ردها حسب المشاهد). */
 async function optionalViewer(req) {
@@ -344,7 +460,7 @@ app.get('/api/directory', async (req, res) => {
     // ترتيب ثابت تماماً: كاسر تعادل أخير بالمعرّف حتى لا «تظهر وتختفي» البطاقات بين تحميلين.
     return (b.verified - a.verified) || (boost(b) - boost(a)) || ((dealsMap[b.id] || 0) - (dealsMap[a.id] || 0)) || (a.id - b.id);
   });
-  res.json({ items: await Promise.all(rows.map(u => publicUser(u))) });
+  res.json({ items: await Promise.all(rows.map(u => publicUser(u, viewer ? viewer.id : null))) });
 });
 
 app.get('/api/talent/:id', async (req, res) => {
@@ -359,7 +475,7 @@ app.get('/api/talent/:id', async (req, res) => {
   if (viewerId !== u.id) await db.prepare('INSERT INTO profile_views (talent_id,viewer_id,created_at) VALUES (?,?,?)').run(u.id, viewerId, now());
   const reviews = await db.prepare(`SELECT r.*, COALESCE(u2.name, 'عميل') reviewer_name FROM reviews r LEFT JOIN users u2 ON u2.id=r.reviewer_id WHERE r.reviewee_id=? ORDER BY r.created_at DESC LIMIT 10`).all(u.id);
   res.json({
-    user: await publicUser(u),
+    user: await publicUser(u, viewerId),
     stats: await talentStats(u.id),
     badges: await computeBadges(u.id),
     reviews,

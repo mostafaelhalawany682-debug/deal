@@ -229,6 +229,26 @@ CREATE TABLE IF NOT EXISTS support_messages (
   is_read INTEGER DEFAULT 0,
   created_at BIGINT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS follows (
+  follower_id INTEGER NOT NULL,
+  followee_id INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY(follower_id, followee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_follows_followee ON follows(followee_id);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id SERIAL PRIMARY KEY,
+  sender_id INTEGER NOT NULL,
+  recipient_id INTEGER NOT NULL,
+  body TEXT NOT NULL,
+  is_read INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, recipient_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_inbox ON messages(recipient_id, sender_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read);
 `;
 
 /* ترحيلات «طلب العميل كضيف»: آمنة للتكرار على قواعد قائمة (إنتاج Supabase)
@@ -268,6 +288,24 @@ CREATE TABLE IF NOT EXISTS support_messages (
   created_at BIGINT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_contact_norm ON users(contact);
+CREATE TABLE IF NOT EXISTS follows (
+  follower_id INTEGER NOT NULL,
+  followee_id INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY(follower_id, followee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_follows_followee ON follows(followee_id);
+CREATE TABLE IF NOT EXISTS messages (
+  id SERIAL PRIMARY KEY,
+  sender_id INTEGER NOT NULL,
+  recipient_id INTEGER NOT NULL,
+  body TEXT NOT NULL,
+  is_read INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, recipient_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_inbox ON messages(recipient_id, sender_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read);
 `;
 
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
@@ -313,7 +351,7 @@ function init() {
 const ID_TABLES = new Set([
   'users', 'shop_requests', 'campaigns', 'campaign_applications', 'bookings',
   'payments', 'disputes', 'reviews', 'notifications', 'profile_views',
-  'portfolio_items', 'support_messages',
+  'portfolio_items', 'support_messages', 'messages',
 ]);
 
 function toPgSql(sql) {

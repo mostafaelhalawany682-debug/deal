@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS users (
   verified INTEGER DEFAULT 0,
   pioneer INTEGER DEFAULT 0,
   boost_until BIGINT DEFAULT 0,
+  referred_by INTEGER DEFAULT NULL,
+  featured_until BIGINT DEFAULT 0,
   penalty_level TEXT DEFAULT 'none',
   frozen INTEGER DEFAULT 0,
   banned INTEGER DEFAULT 0,
@@ -306,6 +308,9 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, recipient_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_inbox ON messages(recipient_id, sender_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by INTEGER DEFAULT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS featured_until BIGINT DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by);
 `;
 
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية

@@ -43,6 +43,32 @@ async function isFollowing(viewerId, userId) {
   if (!viewerId || viewerId === userId) return false;
   return !!(await db.prepare('SELECT 1 x FROM follows WHERE follower_id=? AND followee_id=?').get(viewerId, userId));
 }
+
+/* ---------------- الإحالات الموثقة (Referrals) ----------------
+   كل صانع له رابط ملف قابل للمشاركة (#/u/<id>)؛ من يهبط عبره ويُسجّل يُنسب
+   إليه (referred_by). الإحالة لا «تُحتسب» موثقة إلا عندما يصبح المسجَّل
+   موثّقاً وغير مجمّد/محظور — والعدّ يُحسب من السجلات لحظياً فأي تجميد/حظر
+   لاحق يُسقط الاحتساب تلقائياً. المكافآت: ٣+ إحالات موثقة = «ظهور مميز»
+   (featured_until يُجدَّد +٧ أيام مع كل إحالة موثقة جديدة)، و٥ = شارة
+   «سفير Deal» عبر محرك الشارات القواعدي القائم (computeBadges). */
+const REFERRAL_FEATURED_MIN = 3;
+const REFERRAL_AMBASSADOR_TARGET = 5;
+async function verifiedReferralCount(userId) {
+  return (await db.prepare('SELECT COUNT(*) c FROM users WHERE referred_by=? AND verified=1 AND banned=0 AND frozen=0').get(userId)).c;
+}
+/* تُستدعى عند انتقال مستخدم إلى حالة «موثّق» (فحص آلي أو مراجعة استثنائية):
+   إشعار للمُحيل + تجديد الظهور المميز عند بلوغ العتبة + مزامنة شاراته. */
+async function onReferralVerified(u) {
+  if (!u || !u.referred_by) return;
+  const referrer = await getUser(u.referred_by);
+  if (!referrer) return;
+  await notify(referrer.id, 'referral_verified', `توثّق صانع سجّل من رابطك: ${u.name} — إحالة موثقة جديدة`, `user:${u.id}`);
+  const cnt = await verifiedReferralCount(referrer.id);
+  if (cnt >= REFERRAL_FEATURED_MIN) {
+    await db.prepare('UPDATE users SET featured_until=? WHERE id=?').run(now() + 7 * 24 * 3600 * 1000, referrer.id);
+  }
+  await syncBadges(referrer.id);
+}
 /* ملخص اجتماعي آمن للقوائم (متابِعون/محادثات): هوية علنية فقط — بلا أي وسيلة تواصل. */
 function socialSummary(u) {
   if (!u) return null;
@@ -72,6 +98,7 @@ async function publicUser(u, viewerId = null) {
     is_platform_founder: founder,
     is_founder_member: !!u.is_founder_member,
     verified: !!u.verified, pioneer: !!u.pioneer,
+    featured: (u.featured_until || 0) > now(),
     boost_active: u.boost_until > now() && u.penalty_level !== 'suspended',
     member_since: u.created_at,
     completion_rate: stats.completion_rate,
@@ -129,14 +156,14 @@ async function computeBadges(userId) {
   const s = await talentStats(userId);
   const lastProofs = await db.prepare(`SELECT proof_at, deadline FROM bookings WHERE talent_id=? AND status='completed' AND proof_at>0 ORDER BY completed_at DESC LIMIT 5`).all(userId);
   const onTime = lastProofs.length === 5 && lastProofs.every(p => !p.deadline || p.proof_at <= p.deadline);
-  const invitedDone = 0; // referrals tracked in Muse version via invite codes; standalone keeps hook (see README)
+  const invitedDone = await verifiedReferralCount(userId); // إحالات موثقة عبر رابط الملف — تُحتسب بعد توثيق المسجَّل
   const ageMs = now() - u.created_at;
   const defs = {
     perfect:    { earned: s.completed_deals >= 10 && s.completion_rate === 100, progress: `${Math.min(s.completed_deals,10)}/10 صفقات بإتمام 100%` },
     top_rated:  { earned: s.reviews_count >= 10 && s.positive_pct >= 95, progress: `${Math.min(s.reviews_count,10)}/10 تقييمات بإيجابية 95%+` },
     fast:       { earned: onTime, progress: `${lastProofs.filter(p => !p.deadline || p.proof_at <= p.deadline).length}/5 إثباتات قبل المهلة` },
     rising:     { earned: s.completed_deals >= 5, progress: `${Math.min(s.completed_deals,5)}/5 صفقات` },
-    ambassador: { earned: invitedDone >= 5, progress: `${invitedDone}/5 مدعوين أكملوا صفقة` },
+    ambassador: { earned: invitedDone >= REFERRAL_AMBASSADOR_TARGET, progress: `${Math.min(invitedDone, REFERRAL_AMBASSADOR_TARGET)}/${REFERRAL_AMBASSADOR_TARGET} صناع موثّقين سجلوا من رابطك` },
     veteran:    { earned: ageMs >= 180 * 24 * 3600 * 1000 && s.completed_deals >= 20, progress: `${Math.min(s.completed_deals,20)}/20 صفقة + 6 أشهر عضوية` },
   };
   return BADGE_DEFS.map(d => ({ ...d, ...defs[d.key] }));
@@ -196,14 +223,26 @@ app.post('/api/auth/register', async (req, res) => {
   if (role === 'provider' && !['ads', 'support'].includes(provider_category)) return res.status(400).json({ error: 'اختر فئة الخدمة: إعلانات ممولة أو حلول حسابات' });
   if (await db.prepare('SELECT id FROM users WHERE contact=?').get(contact)) return res.status(409).json({ error: 'وسيلة التواصل مسجلة من قبل — سجل الدخول' });
 
+  /* إحالة رابط الملف (#/u/<id>): تُقبل فقط إن كان المُحيل موجوداً وليس الشخص
+     نفسه — المقارنة بالتواصل المطبّع حتى لا يلتف أحد بصيغة أخرى لنفس الرقم.
+     المؤسس مُحيل مشروع (رابطه يوزّع المنصة). أي رمز غير صالح يُتجاهل بصمت
+     ولا يعطّل التسجيل أبداً. */
+  let referredBy = null;
+  const refId = +((req.body || {}).ref) || 0;
+  if (refId) {
+    const referrer = await getUser(refId);
+    if (referrer && normalizeContact(referrer.contact) !== contact) referredBy = referrer.id;
+  }
+
   const totalUsers = (await db.prepare('SELECT COUNT(*) c FROM users').get()).c;
   const creatorsCount = (await db.prepare(`SELECT COUNT(*) c FROM users WHERE role='creator'`).get()).c;
   const isFounder = totalUsers === 0 ? 1 : 0;
   const isFounderMember = role === 'creator' && creatorsCount < 100 ? 1 : 0;
-  const info = await db.prepare(`INSERT INTO users (name,role,niche,provider_category,city,country,currency,contact,phone,followers,price,bio,links,is_platform_founder,is_founder_member,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(name, role, niche, provider_category, city, country, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, now());
+  const info = await db.prepare(`INSERT INTO users (name,role,niche,provider_category,city,country,currency,contact,phone,followers,price,bio,links,is_platform_founder,is_founder_member,referred_by,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(name, role, niche, provider_category, city, country, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, referredBy, now());
   const user = await getUser(info.lastInsertRowid);
+  if (referredBy) await notify(referredBy, 'referral', `سجّل ${user.name} من رابط ملفك على Deal`, `user:${user.id}`);
   res.json({ token: await makeSession(user.id), user: await publicUser(user) });
 });
 
@@ -457,8 +496,10 @@ app.get('/api/directory', async (req, res) => {
   const t = now();
   rows.sort((a, b) => {
     const boost = (x) => (x.boost_until > t && x.penalty_level !== 'suspended') ? 1 : 0;
-    // ترتيب ثابت تماماً: كاسر تعادل أخير بالمعرّف حتى لا «تظهر وتختفي» البطاقات بين تحميلين.
-    return (b.verified - a.verified) || (boost(b) - boost(a)) || ((dealsMap[b.id] || 0) - (dealsMap[a.id] || 0)) || (a.id - b.id);
+    // الظهور المميز (مكافأة الإحالات الموثقة) يتقدّم ضمن نفس معايير الترتيب القائمة:
+    // بعد التوثيق وقبل دفعة التوثيق المؤقتة — وبكاسر تعادل أخير بالمعرّف كالعادة.
+    const feat = (x) => ((x.featured_until || 0) > t) ? 1 : 0;
+    return (b.verified - a.verified) || (feat(b) - feat(a)) || (boost(b) - boost(a)) || ((dealsMap[b.id] || 0) - (dealsMap[a.id] || 0)) || (a.id - b.id);
   });
   res.json({ items: await Promise.all(rows.map(u => publicUser(u, viewer ? viewer.id : null))) });
 });
@@ -515,10 +556,12 @@ app.post('/api/verify/check', auth, async (req, res) => {
   const hasCode = html.includes(u.verify_code);
   const nameMatch = html.toLowerCase().includes(u.name.toLowerCase()) || html.toLowerCase().includes(u.name.split(' ')[0].toLowerCase());
   if (hasCode && nameMatch) {
+    const wasVerified = !!u.verified;
     const pioneer = await db.prepare(`SELECT id FROM users WHERE verified=1 AND pioneer=1 AND city=? AND niche=?`).get(u.city, u.niche) ? 0 : 1;
     await db.prepare(`UPDATE users SET verified=1, verify_status='verified', verify_reason='', pioneer=?, boost_until=? WHERE id=?`)
       .run(pioneer, now() + 7 * 24 * 3600 * 1000, u.id);
     await notify(u.id, 'verification', 'مبروك! حسابك بقى «موثّق Deal»' + (pioneer ? ' وأنت «رائد المدينة» في مجالك' : ''), '');
+    if (!wasVerified) await onReferralVerified(await getUser(u.id));
     return res.json({ status: 'verified', pioneer: !!pioneer });
   }
   const reason = !hasCode ? 'كود الملكية غير موجود في الصفحة' : 'اسم الحساب لا يطابق اسم التسجيل';
@@ -1096,6 +1139,47 @@ app.post('/api/support/ask', async (req, res) => {
   });
 });
 
+/* ---------------- دعواتي: إحالات رابط ملفي + مكافآتها ---------------- */
+app.get('/api/me/referrals', auth, async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM users WHERE referred_by=? ORDER BY created_at DESC').all(req.user.id);
+  // بيانات آمنة فقط: اسم/صورة/مدينة/مجال/تاريخ/حالة توثيق — بلا أي وسيلة تواصل.
+  const items = rows.map((u) => ({
+    id: u.id, name: u.name, city: u.city, niche: u.niche, created_at: u.created_at,
+    avatar: u.is_platform_founder ? '' : (u.avatar || ''),
+    verified: !!u.verified && !u.banned && !u.frozen, // «موثقة» بنفس قاعدة الاحتساب
+    is_platform_founder: !!u.is_platform_founder,
+  }));
+  res.json({
+    items,
+    total: items.length,
+    verified_count: items.filter((i) => i.verified).length,
+    ambassador_target: REFERRAL_AMBASSADOR_TARGET,
+    featured_min: REFERRAL_FEATURED_MIN,
+    featured: (req.user.featured_until || 0) > now(),
+    featured_until: req.user.featured_until || 0,
+  });
+});
+
+/* ---------------- شريط «كله في مكان واحد»: ملخص لوحتي في استدعاء واحد ---------------- */
+app.get('/api/me/overview', auth, async (req, res) => {
+  const u = req.user;
+  let opportunities = 0;
+  if (u.role === 'creator') {
+    const reqs = await db.prepare(`SELECT * FROM shop_requests WHERE status='open'`).all();
+    const camps = await db.prepare(`SELECT * FROM campaigns WHERE status='open'`).all();
+    opportunities = [...reqs, ...camps].filter((x) => matchScore(u, x).score > 0).length;
+  }
+  const active_bookings = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE (client_id=? OR talent_id=?) AND status NOT IN ('completed','cancelled')`).get(u.id, u.id)).c;
+  const unread_messages = (await db.prepare('SELECT COUNT(*) c FROM messages WHERE recipient_id=? AND is_read=0').get(u.id)).c;
+  res.json({
+    opportunities,
+    active_bookings,
+    unread_messages,
+    followers: await followersCount(u.id),
+    verified_referrals: await verifiedReferralCount(u.id),
+  });
+});
+
 /* ---------------- creator stats ---------------- */
 app.get('/api/my/stats', auth, async (req, res) => {
   const uid = req.user.id;
@@ -1170,6 +1254,7 @@ app.post('/api/owner/verify-exceptional/:userId', auth, ownerOnly, async (req, r
     const pioneer = await db.prepare(`SELECT id FROM users WHERE verified=1 AND pioneer=1 AND city=? AND niche=?`).get(u.city, u.niche) ? 0 : 1;
     await db.prepare(`UPDATE users SET verified=1, verify_status='verified', pioneer=?, boost_until=? WHERE id=?`).run(pioneer, now() + 7 * 24 * 3600 * 1000, u.id);
     await notify(u.id, 'verification', 'مبروك! اتوافق على توثيقك في المراجعة الاستثنائية', '');
+    await onReferralVerified(await getUser(u.id));
   } else {
     await db.prepare(`UPDATE users SET verify_status='rejected', verify_reason='رفضته المراجعة الاستثنائية' WHERE id=?`).run(u.id);
     await notify(u.id, 'verification', 'توثيقك الاستثنائي اترفض — راجع الكود وحاول تاني', '');

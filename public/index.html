@@ -294,6 +294,21 @@ background:linear-gradient(150deg,#2b2103,#171204 60%,#0d3527);box-shadow:0 0 0 
 .star-pay-amount{font-size:42px;font-weight:900;line-height:1.15;background:linear-gradient(90deg,#f3cd6b,var(--gold),#ffe08a);
 -webkit-background-clip:text;background-clip:text;color:transparent}
 .star-pay-num{font-size:34px;font-weight:900;letter-spacing:2px;color:#ffe08a;margin:6px 0 2px;direction:ltr;unicode-bidi:embed}
+/* المرجع المالي الموحد: كود المعاملة + المبلغ بالبصمة + صندوق الإيصال */
+.money-ob{margin-top:10px;border:1px dashed rgba(212,160,23,.65);border-radius:14px;padding:10px 12px;background:rgba(212,160,23,.06);text-align:start}
+.money-exact{font-size:22px;font-weight:900;color:#ffe08a;direction:ltr;unicode-bidi:embed}
+.receipt-box{margin-top:10px;border:1px solid rgba(212,160,23,.45);border-radius:14px;padding:12px;background:rgba(0,0,0,.18);text-align:start}
+.receipt-box input{margin:4px 0 8px}
+/* خطوات التحويل المرقّمة داخل كل خطوة دفع — ظاهرة افتراضياً وقابلة للطي */
+.xfer-steps{margin-top:10px;border:1px solid rgba(212,160,23,.4);border-radius:14px;padding:10px 12px;background:rgba(212,160,23,.05);text-align:start}
+.xfer-ol{margin:6px 0 2px;padding-inline-start:22px}
+.xfer-ol li{margin:4px 0}
+.xfer-num{font-weight:900;color:#ffe08a;direction:ltr;unicode-bidi:embed}
+/* بانر الباقة الدائم لغير الموثّقين: ذهبي ثابت بلا زر إغلاق — يختفي بالتوثيق أو الاشتراك فقط */
+.uv-banner{position:relative;overflow:hidden;border:2px solid var(--gold);border-radius:18px;padding:16px 18px;margin:0 0 14px;
+background:linear-gradient(150deg,#3a2a04,#1d1503 55%,#0d3527);box-shadow:0 0 0 4px rgba(212,160,23,.18),0 12px 30px rgba(0,0,0,.4)}
+.uv-banner::before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(420px 160px at 85% -30px,rgba(212,160,23,.35),transparent 65%)}
+.uv-banner>*{position:relative}
 .star-card-view{position:relative;overflow:hidden;text-align:center;border-radius:26px;padding:34px 22px;
 background:linear-gradient(165deg,#2b2103,#171204 55%,#0b0d10);border:2px solid var(--gold);
 box-shadow:0 30px 60px rgba(0,0,0,.5),0 0 0 6px rgba(212,160,23,.14);color:#fdf6e0}
@@ -625,6 +640,7 @@ background-image:radial-gradient(rgba(212,160,23,.10) 1.5px,transparent 1.7px);b
 </dialog>
 
 <dialog id="bookDlg"><div id="bookBody"></div></dialog>
+<dialog id="moneyDlg"><div id="moneyBody"></div></dialog>
 <dialog id="talentDlg"><div id="talentBody"></div></dialog>
 <dialog id="campDlg"><form method="dialog"><h3 data-i18n="camp_title">حملة براند جديدة</h3>
   <div class="err" id="campErr"></div>
@@ -720,7 +736,7 @@ founder_ribbon:'المؤسس',bp_title:'شاراتي وتقدّمي',bp_closest:
 bdg_perfect:'إتمام مثالي',bdg_top_rated:'الأعلى تقييماً',bdg_fast:'تنفيذ سريع',bdg_rising:'صانع صاعد',bdg_ambassador:'سفير Deal',bdg_veteran:'مخضرم',
 bp_cond_perfect:'أكمل 10 صفقات بنسبة إتمام 100%',bp_cond_top_rated:'اجمع 10 تقييمات بإيجابية 95% فأكثر',bp_cond_fast:'سلّم إثبات التنفيذ قبل المهلة في آخر 5 صفقات مكتملة',bp_cond_rising:'أكمل 5 صفقات',bp_cond_ambassador:'5 صناع موثّقين سجّلوا من رابط ملفك',bp_cond_veteran:'أكمل 20 صفقة وعضوية 6 أشهر (180 يوم)',
 tb_home:'الرئيسية',trust_1:'🛡️ حجز محمي بضمان Deal',trust_2:'✔️ توثيق آلي فوري',trust_3:'💬 تواصل واتساب مباشر',stat_seats:'مقعد مؤسس لأوائل الصناع',stat_fee:'عمولة فقط — والباقي كله ليك',stat_hours:'ساعة تأكيد تلقائي يحمي قبضك',mock_live:'صفقة بتتم الآن',mock_guaranteed:'بضمان Deal 🛡️',mock_stage:'العربون اتدفع — التنفيذ شغال دلوقتي',mock_paid:'تم استلام العربون',mock_paid_s:'قبض موثّق خطوة بخطوة',mock_notif1:'طلب جديد وصلك',mock_notif1_s:'من عميل في مدينتك — من غير ما تدوّر',mock_earn:'أرباحك',mock_notif2:'تقييم جديد',mock_notif2_s:'سمعتك بتكبر مع كل صفقة',mock_book:'حجز محمي بضمان Deal',mock_book_s:'دفع على مراحل موثقة',mock_pay:'وصلِك العربون',mock_pay_s:'قبل ما تبدأ التنفيذ',mock_ver:'حساب موثّق',mock_ver_s:'شارة Deal الذهبية',marquee_items:'ضمان Deal على كل حجز ✦ دفع على مراحل موثقة ✦ عمولة ١٠٪ فقط ✦ توثيق حساب فوري ✦ إثبات تنفيذ قبل باقي القبض ✦ تقييمات موثقة بعد اكتمال القبض ✦ تأكيد تلقائي خلال ٤٨ ساعة ✦ دعم فوري داخل المنصة ✦ فرص بتيجي لحد عندك ✦ انشر طلبك كضيف من غير تسجيل ✦ ',how_t:'إزاي بتشتغل؟',how_sub:'ثلاث خطوات بسيطة — والشغل بيوصلك لحد عندك',seats_t:'مقاعد المؤسسين — أول ١٠٠ صانع',seats_d:'أول ١٠٠ صانع موثّق على Deal بياخدوا شارة «عضو مؤسس» الدائمة وأولوية الظهور في مدينتهم. المقاعد محدودة — احجز مكانك من دلوقتي.',seats_total:'برنامج المؤسسين: 100 مقعد فقط',seats_cta:'احجز مقعدك — سجّل كصانع',guest_banner:'بتتصفح كزائر — شوف صناع المحتوى ومقدمي الخدمات وملفاتهم، واطلب من أي حد فيهم من غير تسجيل.',guest_banner_join:'صانع أو مقدم خدمة؟ سجّل هنا',filter_all:'الكل',filter_creators:'صناع محتوى',filter_providers:'مقدمو خدمات',guest_order_btn:'اطلب من غير تسجيل',guest_target_chip:'طلب موجّه إلى',guest_target_clear:'جعله طلباً عاماً بدلاً من ذلك',guest_target_title:'اطلب مباشرة — بدون تسجيل',g_done_d_targeted:'طلبك وصل للصانع المستهدف مباشرة — هيشوفه في «فرص ليك» وهيحوّله لحجز بضمان Deal. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:',auth_note:'التسجيل لصناع المحتوى ومقدمي الخدمة — عندك محل أو براند؟ اطلب كضيف من غير تسجيل، من زرار «انشر شغلانة» أو من ملف أي صانع.',targeted_chip:'🎯 موجّه ليك',provider_tag:'مقدم خدمة',svc_other:'خدمة أخرى',other_w:'أخرى',prov_custom_ph:'اكتب خدمتك كما تريد أن تظهر في ملفك',niche_custom_ph:'اكتب مجالك',
-star_chip:'⭐ نجم Deal',star_week_chip:'👑 نجم الأسبوع',star_pick:'⭐ ترشيح أول',star_nav:'نجم Deal',star_t:'باقة نجم Deal',star_sub:'الباقة اللي معمولة عشان تكبّر وتميّزك — لا مميزات عامة ولا حشو',star_per_m:'/ 30 يوم',star_b1_t:'شارة وإطار ذهبي',star_b1_d:'شارة «نجم Deal ⭐» على بطاقتك وملفك، وإطار ذهبي يميزك في السوق من أول نظرة.',star_b2_t:'أولوية ترتيب وترشيح أول',star_b2_d:'تتصدّر ترتيب السوق في فئتك، وتتقدّم في قوائم ترشيح العملاء والمتقدمين على الحملات وبدائل النزاعات.',star_b3_t:'نجم الأسبوع',star_b3_d:'دوران أسبوعي تلقائي وعادل بين المشتركين النشطين — أسبوعك بييجي واسمك يتصدّر قسم «نجم الأسبوع» مع بطاقة مشاركة باسمك.',star_b4_t:'وقود نمو شهري',star_b4_d:'ملخص إحصاءاتك الحقيقية (مشاهدات، طلبات، تحويل، أرباح) + أفكار محتوى رائجة لمجالك وخطوة نمو عملية — يتجدد كل شهر.',star_b5_t:'حضور ذهبي قدام العملاء',star_b5_d:'المشتركون بيتصدّروا ترشيحات المنصة للعملاء والبراندات في كل قائمة ترشيح.',star_b6_t:'أولوية دعم',star_b6_d:'رسائل دعمك بتتعلّم «أولوية» وبتتصدّر قائمة الفريق في الرد.',star_terms_t:'شروط الباقة الرسمية',star_terms:'• المحتوى: شارة وإطار «نجم Deal»، أولوية الترتيب والترشيح الأول، أهلية «نجم الأسبوع» وبطاقة المشاركة، وقود النمو الشهري، وأولوية الدعم.\n• المدة: 30 يوماً تبدأ من لحظة تأكيد المالك وصول التحويلة فعلياً — لا من لحظة إرسالك المرجع.\n• التفعيل: لا ميزة قبل تأكيد الاستلام؛ لو المرجع خاطئ بيترفض الاشتراك وبتقدر تشترك من جديد.\n• الاسترداد: لا استرداد بعد التفعيل، إلا إذا أخفقت Deal في تقديم ميزة معلنة من محتوى الباقة.\n• التجديد: يدوي بنفس الخطوات قبل الانتهاء أو بعده — مفيش خصم تلقائي أبداً.',star_accept:'قرأت الشروط الرسمية وأوافق عليها',star_pay_show:'إظهار رقم تحويل الباقة',star_pay_note:'حوّل المبلغ من محفظتك (فودافون كاش / إنستاباي) إلى الرقم ده، وبعدين اكتب مرجع التحويلة:',star_ref_ph:'مرجع تحويلة الاشتراك',star_subscribe_btn:'اشترك — أرسل المرجع للتحقق',star_pending_t:'اشتراكك قيد التحقق ⏳',star_pending_d:'استلمنا مرجع التحويلة. الباقة لا تتفعّل إلا بعد ما المالك يؤكد وصول الفلوس فعلياً — هتوصلك رسالة التفعيل فور التأكيد وبتبدأ الـ30 يوماً من ساعتها.',star_active_t:'أنت نجم Deal ⭐',star_days_left:'باقي على انتهاء اشتراكك',star_day_w:'يوم',star_expired_t:'انتهى اشتراكك في نجم Deal',star_expired_d:'انطفأت مزايا النجم — جدّد بنفس الخطوات وارجع للصدارة.',star_rejected_t:'آخر اشتراك اترفض',star_subscribed_t:'اتسجّل اشتراكك — قيد التحقق لحد تأكيد وصول الفلوس',star_login_cta:'التسجيل للصناع ومقدمي الخدمة — سجل دخولك بحسابك للاشتراك',star_fuel_t:'⛽ وقود نموّك الشهري',star_fuel_views:'مشاهدات ملفك',star_fuel_earn_m:'أرباح هذا الشهر',star_ideas_t:'أفكار محتوى رائجة لمجالك',star_step_t:'خطوة نموّك هذا الشهر',star_week_t:'نجم الأسبوع',star_week_d:'مشترك في «نجم Deal» بيتصدّر المنصة هذا الأسبوع — بالدوران العادل التلقائي بين المشتركين النشطين',star_card_btn:'🔗 بطاقة النجم للمشاركة',star_card_t:'نجم Deal هذا الأسبوع',star_card_share:'انسخ رابط البطاقة',star_card_not:'هذا العضو ليس نجم الأسبوع الحالي — النجم بيتبدّل كل أسبوع بالدوران العادل',star_goto_pkg:'صفحة باقة نجم Deal',star_dash_t:'باقة نجم Deal',star_dash_cta:'اشترك وميّز نفسك — شارة ذهبية وصدارة ترتيب ووقود نمو شهري',star_dash_active:'اشتراكك نشط ⭐',ow_star_t:'اشتراكات «نجم Deal»',ow_star_pending:'قيد التحقق',ow_star_active:'نشطة',ow_star_expired:'منتهية',ow_star_rejected:'مرفوضة',ow_star_revenue:'إيراد الباقة المؤكد',ow_star_confirm:'تأكيد الاستلام والتفعيل',ow_star_reject:'رفض',ow_star_empty:'لا اشتراكات بعد.',ow_star_ref:'المرجع',ow_star_terms_ok:'قبل الشروط',ow_star_state_pending:'قيد التحقق',ow_star_state_active:'نشط',ow_star_state_expired:'منتهٍ',ow_star_state_rejected:'مرفوض',ow_priority:'⭐ أولوية',star_only_note:'الباقة متاحة لصناع المحتوى ومقدمي الخدمة المسجلين',star_get:'⭐ الحصول على الباقة المميزة',star_cta_pending:'⏳ اشتراكك قيد التحقق — بانتظار تأكيد وصول التحويل',star_cta_active:'⭐ أنت مشترك في الباقة المميزة',star_pay_line:'حوّل من فودافون كاش أو إنستاباي ثم اكتب مرجع التحويلة',star_copy_num:'📋 نسخ الرقم',star_terms_show:'عرض الشروط',star_terms_hide:'إخفاء الشروط',star_confirm_btn:'تأكيد الاشتراك',star_err_terms:'لازم توافق على شروط الباقة أولاً',star_pay_amount_w:'المبلغ المطلوب تحويله'},
+star_chip:'⭐ نجم Deal',star_week_chip:'👑 نجم الأسبوع',star_pick:'⭐ ترشيح أول',star_nav:'نجم Deal',star_t:'باقة نجم Deal',star_sub:'الباقة اللي معمولة عشان تكبّر وتميّزك — لا مميزات عامة ولا حشو',star_per_m:'/ 30 يوم',star_b1_t:'شارة وإطار ذهبي',star_b1_d:'شارة «نجم Deal ⭐» على بطاقتك وملفك، وإطار ذهبي يميزك في السوق من أول نظرة.',star_b2_t:'أولوية ترتيب وترشيح أول',star_b2_d:'تتصدّر ترتيب السوق في فئتك، وتتقدّم في قوائم ترشيح العملاء والمتقدمين على الحملات وبدائل النزاعات.',star_b3_t:'نجم الأسبوع',star_b3_d:'دوران أسبوعي تلقائي وعادل بين المشتركين النشطين — أسبوعك بييجي واسمك يتصدّر قسم «نجم الأسبوع» مع بطاقة مشاركة باسمك.',star_b4_t:'وقود نمو شهري',star_b4_d:'ملخص إحصاءاتك الحقيقية (مشاهدات، طلبات، تحويل، أرباح) + أفكار محتوى رائجة لمجالك وخطوة نمو عملية — يتجدد كل شهر.',star_b5_t:'حضور ذهبي قدام العملاء',star_b5_d:'المشتركون بيتصدّروا ترشيحات المنصة للعملاء والبراندات في كل قائمة ترشيح.',star_b6_t:'أولوية دعم',star_b6_d:'رسائل دعمك بتتعلّم «أولوية» وبتتصدّر قائمة الفريق في الرد.',star_terms_t:'شروط الباقة الرسمية',star_terms:'• المحتوى: شارة وإطار «نجم Deal»، أولوية الترتيب والترشيح الأول، أهلية «نجم الأسبوع» وبطاقة المشاركة، وقود النمو الشهري، وأولوية الدعم.\n• المدة: 30 يوماً تبدأ من لحظة تأكيد المالك وصول التحويلة فعلياً — لا من لحظة إرسالك المرجع.\n• التفعيل: لا ميزة قبل تأكيد الاستلام؛ لو المرجع خاطئ بيترفض الاشتراك وبتقدر تشترك من جديد.\n• الاسترداد: لا استرداد بعد التفعيل، إلا إذا أخفقت Deal في تقديم ميزة معلنة من محتوى الباقة.\n• التجديد: يدوي بنفس الخطوات قبل الانتهاء أو بعده — مفيش خصم تلقائي أبداً.',star_accept:'قرأت الشروط الرسمية وأوافق عليها',star_pay_show:'إظهار رقم تحويل الباقة',star_pay_note:'حوّل المبلغ من محفظتك (فودافون كاش / إنستاباي) إلى الرقم ده، وبعدين اكتب مرجع التحويلة:',star_ref_ph:'مرجع تحويلة الاشتراك',star_subscribe_btn:'اشترك — أرسل المرجع للتحقق',star_pending_t:'اشتراكك قيد التحقق ⏳',star_pending_d:'استلمنا مرجع التحويلة. الباقة لا تتفعّل إلا بعد ما المالك يؤكد وصول الفلوس فعلياً — هتوصلك رسالة التفعيل فور التأكيد وبتبدأ الـ30 يوماً من ساعتها.',star_active_t:'أنت نجم Deal ⭐',star_days_left:'باقي على انتهاء اشتراكك',star_day_w:'يوم',star_expired_t:'انتهى اشتراكك في نجم Deal',star_expired_d:'انطفأت مزايا النجم — جدّد بنفس الخطوات وارجع للصدارة.',star_rejected_t:'آخر اشتراك اترفض',star_subscribed_t:'اتسجّل اشتراكك — قيد التحقق لحد تأكيد وصول الفلوس',star_login_cta:'التسجيل للصناع ومقدمي الخدمة — سجل دخولك بحسابك للاشتراك',star_fuel_t:'⛽ وقود نموّك الشهري',star_fuel_views:'مشاهدات ملفك',star_fuel_earn_m:'أرباح هذا الشهر',star_ideas_t:'أفكار محتوى رائجة لمجالك',star_step_t:'خطوة نموّك هذا الشهر',star_week_t:'نجم الأسبوع',star_week_d:'مشترك في «نجم Deal» بيتصدّر المنصة هذا الأسبوع — بالدوران العادل التلقائي بين المشتركين النشطين',star_card_btn:'🔗 بطاقة النجم للمشاركة',star_card_t:'نجم Deal هذا الأسبوع',star_card_share:'انسخ رابط البطاقة',star_card_not:'هذا العضو ليس نجم الأسبوع الحالي — النجم بيتبدّل كل أسبوع بالدوران العادل',star_goto_pkg:'صفحة باقة نجم Deal',star_dash_t:'باقة نجم Deal',star_dash_cta:'اشترك وميّز نفسك — شارة ذهبية وصدارة ترتيب ووقود نمو شهري',star_dash_active:'اشتراكك نشط ⭐',ow_star_t:'اشتراكات «نجم Deal»',ow_star_pending:'قيد التحقق',ow_star_active:'نشطة',ow_star_expired:'منتهية',ow_star_rejected:'مرفوضة',ow_star_revenue:'إيراد الباقة المؤكد',ow_star_confirm:'تأكيد الاستلام والتفعيل',ow_star_reject:'رفض',ow_star_empty:'لا اشتراكات بعد.',ow_star_ref:'المرجع',ow_star_terms_ok:'قبل الشروط',ow_star_state_pending:'قيد التحقق',ow_star_state_active:'نشط',ow_star_state_expired:'منتهٍ',ow_star_state_rejected:'مرفوض',ow_priority:'⭐ أولوية',star_only_note:'الباقة متاحة لصناع المحتوى ومقدمي الخدمة المسجلين',star_get:'⭐ الحصول على الباقة المميزة',star_cta_pending:'⏳ اشتراكك قيد التحقق — بانتظار تأكيد وصول التحويل',star_cta_active:'⭐ أنت مشترك في الباقة المميزة',star_pay_line:'حوّل من فودافون كاش أو إنستاباي ثم اكتب مرجع التحويلة',star_copy_num:'📋 نسخ الرقم',star_terms_show:'عرض الشروط',star_terms_hide:'إخفاء الشروط',star_confirm_btn:'تأكيد الاشتراك',star_err_terms:'لازم توافق على شروط الباقة أولاً',star_pay_amount_w:'المبلغ المطلوب تحويله',money_code:'كود المعاملة',money_exact:'حوّل المبلغ ده بالظبط',money_cents_note:'الكسور دي مرجعك المالي — ما تقرّبش الرقم، حوّل بنفس الكسور بالظبط عشان التحويلة تتعرف فوراً',rc_t:'📷 تأكيد فوري بصورة الإيصال',rc_d:'ارفع سكرين شوت التحويلة — هنقرأها ونأكد فوراً لو مطابقة تماماً (المبلغ بالكسور + الرقم + المرجع + التاريخ). لو القراءة مش واضحة املأ البيانات يدوياً وهتروح للمالك للمراجعة — مفيش تأكيد جزئي.',rc_choose:'اختر صورة الإيصال',rc_amount:'المبلغ كما في الإيصال',rc_recipient:'رقم المستلم كما في الإيصال',rc_ref:'مرجع التحويلة من الإيصال',rc_date:'تاريخ التحويلة',rc_btn:'⚡ تأكيد بالإيصال',rc_reading:'بنقرأ الإيصال…',rc_auto_ok:'⚡ اتأكدت تحويلتك تلقائياً من الإيصال — شكراً!',rc_review:'وصل الإيصال — هيتراجع يدوياً وهيتأكد قريب',rc_locked:'🔒 اتقفل رفع الإيصالات على المعاملة دي بعد محاولات كتير — هي عند المالك للمراجعة اليدوية',uv_t:'⭐ كبّر حسابك وعوّض غياب التوثيق',uv_d:'حسابك لسه مش موثّق — باقة «نجم Deal» بتديك شارة وإطاراً ذهبياً وأولوية ظهور وترشيحاً أول قدام العملاء ووقود نمو شهري، من أول يوم.',uv_note:'التوثيق مجاني وشارته لوحدها — الباقة مش بديل التوثيق، دي دفعة نمو إضافية جنبه.',ow_money_t:'💰 المعاملات المالية — المرجع الموحد',ow_money_search_ph:'وصلني مبلغ… اكتبه بالكسور كما وصلك (مثال 199.43)',ow_money_search:'بحث بالمبلغ',ow_money_confirm:'تأكيد الوصول',ow_money_reject:'رفض',ow_money_revoke:'إلغاء التأكيد',ow_money_revoke_freeze:'إلغاء + تجميد الدافع',ow_money_receipt:'🧾 الإيصال',ow_money_empty:'لا معاملات مالية بعد.',ow_money_fraud:'🚨 اشتباه احتيال',ow_money_state_open:'مفتوحة',ow_money_state_claimed:'بانتظار التأكيد',ow_money_state_auto_confirmed:'مؤكدة تلقائياً ⚡',ow_money_state_confirmed:'مؤكدة',ow_money_state_rejected:'مرفوضة',ow_money_state_expired:'منتهية',ow_money_state_revoked:'ملغاة',mk_star_subscription:'اشتراك نجم Deal',mk_booking_commission:'عمولة حجز',mk_booking_deposit:'عربون حجز',mk_booking_final:'دفعة أخيرة',ow_money_from:'من',ow_money_to:'إلى',ow_money_none_found:'لا معاملة بالمبلغ ده',cp_all:'📋 انسخ بيانات التحويل',cp_number:'نسخ الرقم',cp_amount:'نسخ المبلغ',ts_t:'🧭 إزاي تحوّل؟',ts_hide:'إخفاء الخطوات',ts_show:'عرض الخطوات',ts_open_eg:'افتح تطبيق محفظتك (فودافون كاش أو إنستاباي)',ts_open_local:'افتح وسيلة الدفع المحلية عندك: {m}',ts_choose:'اختر «تحويل الأموال»',ts_number:'اكتب الرقم ده',ts_number_alt:'اكتب رقم المستلم المتفق عليه بينكم',ts_amount:'اكتب المبلغ ده بالظبط',ts_cents_warn:'الكسور جزء من المرجع — ما تقرّبش الرقم',ts_confirm:'أكّد التحويلة واحتفظ بالإيصال أو المرجع',ts_back:'ارجع هنا: اكتب المرجع، أو ارفع صورة الإيصال للتأكيد الفوري'},
 en:{loading:'Loading…',copied:'Copied ✓',nav_market:'Market',nav_services:'Services',nav_campaigns:'Campaigns',nav_opps:'Opportunities',nav_bookings:'My bookings',nav_dash:'My dashboard',nav_owner:'Owner panel',post_job_btn:'📣 Post a job',menu:'Menu',main_menu:'Main menu',login_register:'Login / Register',hero_l1:'No more chasing work…',hero_l2:'Work comes looking for you',hero_sub:'Opportunities from shops and brands in your city, delivered to you — with a protected booking and the Deal Guarantee.',register_creator:'Register as a creator',browse_market:'Browse the market',install_app:'Install Deal on your phone',hero_guest_note:'Own a shop or a brand? Post your job in a minute — no registration, and creators will reach you on WhatsApp.',why1_t:'Opportunities come to you',why1_d:'Requests and campaigns matched to your city and niche — without searching.',why2_t:'A verified reputation that grows',why2_d:'Ratings, completion rate and achievement badges accumulate on your profile.',why3_t:'Protected payment with Deal Guarantee',why3_d:'Staged payments, the platform fee first, and delivery proof that protects both sides.',search_ph:'Search by name, niche, city…',search:'Search',all_niches:'All niches',all_cities:'All cities',all_countries:'All countries',guarantee_t:'Deal Guarantee:',guarantee_d:'Every booking here is a "Deal-Guaranteed booking" — documented staged payments, and a verified alternative from your city and niche if the creator defaults.',open_requests:'Open shop requests',post_job_short:'📣 Post a job — no registration',services_t:'Integrated services — with the same Deal protection',svc_ads:'Sponsored ads management',svc_support:'Account problem solutions',campaigns_t:'Brand campaigns',new_campaign:'+ New campaign',opps_t:'Opportunities for you — auto-matched to your profile',bookings_t:'My bookings',footer:'Deal — the platform for all content creators · The official Deal seal 🛡️ Deal-Guaranteed booking',register:'Register',login:'Login',f_name:'Name',f_iam:'I am a…',role_creator:'Content creator',role_provider:'Service provider',role_shop:'Shop',role_brand:'Brand',f_provcat:'Service category',f_niche:'Niche / specialty',niche_ph:'Comedy, cooking, reviews…',f_city:'City',f_country:'Country',f_currency:'Currency',f_followers:'Follower count (for creators)',f_price:'Your listed price per video/service',f_links:'Your public account links (for verification)',f_contact:'Phone number or email (your login)',contact_ph:'01xxxxxxxxx or you@mail.com',continue_btn:'Continue',close:'Close',guest_title:'Post a job — no registration',g_biz:'Business / shop name',g_phone:'WhatsApp number (Egyptian mobile)',g_niche:'Ad type / niche',g_niche_ph:'Restaurants, clothes, real estate…',g_budget:'Approximate budget (EGP)',g_details:'Describe the job',g_details_ph:'I need an ad video about…',g_publish:'Publish request',g_done_t:'Your request is published ✓',g_done_d:'Creators can see it now and will contact you on WhatsApp. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',copy_link:'Copy link',camp_title:'New brand campaign',c_title:'Title',c_brief:'Brief',c_budget:'Budget',c_publish:'Publish campaign',req_title:'New shop request',req_niche:'Needed niche',req_details:'Details',edit_profile:'Edit profile',pf_photo:'Profile photo',pf_photo_hint:'Automatically cropped to a small square (≤256px).',pf_phone:'Phone number (WhatsApp)',pf_bio:'Bio',save_changes:'Save changes',shorts_title:'Shorts samples',shorts_hint:'Maximum 3 videos — shown as embedded playable videos on your public profile.',short_url:'Short video link (YouTube Shorts / Facebook / Instagram / TikTok)',short_title:'Sample title (optional)',short_add:'+ Add sample',notifications:'Notifications',support_title:'Deal Support — instant auto-replies',support_hint:'Pick a ready question or type yours — replies are instant from the FAQ base.',support_contact:'Contact (optional) — if you want the team to get back to you',support_ph:'Type your question here…',send:'Send',
 followers_w:'followers',completion_w:'Completion',positive_w:'positive',profile_btn:'Profile',book_btn:'Book',founder_seal:'👑 Deal Founder',founder_only:'Founder account — display only',pioneer_w:'City Pioneer',founder_member_w:'Founding Member',empty_market:'The market is still empty — be the first creator to register.',guest_chip:'Guest client request — no account',whatsapp:'💬 WhatsApp',wa_msg:'Hi, I saw your request on Deal and I can do it',start_booking:'Start booking',view_opps:'See your opportunities',shop_job_card:'+ Have a job?',publish_request:'Publish request',no_providers:'No providers in this category yet.',no_campaigns:'No open campaigns yet.',apply_btn:'Apply',applicants_btn:'Applicants',match_w:'Match',kind_campaign:'Brand campaign',kind_request:'Shop request',no_opps:'No opportunities match your profile right now — update your city, niche and minimum price from your dashboard.',no_bookings:'No bookings yet.',open_booking:'Open booking',notify_talent:'📱 Notify creator on WhatsApp',wa_booking_msg:'You have new work on Deal — booking #',guaranteed_chip:'🛡️ Deal-Guaranteed booking',client_w:'Client',talent_w:'Creator',total_w:'Total',fee_w:'fee',first_w:'first',net_two_w:'and the net in two payments',
 stage_pending_agreement:'Agreement',stage_awaiting_fee:'Deal fee first',stage_awaiting_deposit:'Creator deposit',stage_in_progress:'In progress',stage_proof_submitted:'Proof of delivery',stage_awaiting_rest:'Remaining payment',stage_completed:'Fully paid',stage_disputed:'Dispute open',stage_cancelled:'Cancelled',
@@ -737,7 +753,7 @@ founder_ribbon:'FOUNDER',bp_title:'My badges & progress',bp_closest:'Closest bad
 bdg_perfect:'Perfect Completion',bdg_top_rated:'Top Rated',bdg_fast:'Fast Delivery',bdg_rising:'Rising Creator',bdg_ambassador:'Deal Ambassador',bdg_veteran:'Veteran',
 bp_cond_perfect:'Complete 10 deals with a 100% completion rate',bp_cond_top_rated:'Collect 10 ratings with 95%+ positivity',bp_cond_fast:'Submit delivery proof before the deadline in your last 5 completed deals',bp_cond_rising:'Complete 5 deals',bp_cond_ambassador:'5 verified creators registered via your profile link',bp_cond_veteran:'Complete 20 deals and 6 months of membership (180 days)',
 tb_home:'Home',trust_1:'🛡️ Deal-Guaranteed booking',trust_2:'✔️ Instant auto-verification',trust_3:'💬 Direct WhatsApp contact',stat_seats:'founding seats for early creators',stat_fee:'fee only — the rest is all yours',stat_hours:'hours of auto-confirm protection',mock_live:'A deal in motion',mock_guaranteed:'Deal-Guaranteed 🛡️',mock_stage:'Deposit paid — work in progress',mock_paid:'Deposit received',mock_paid_s:'Documented step-by-step payment',mock_notif1:'New request for you',mock_notif1_s:'From a client in your city — no chasing',mock_earn:'Your earnings',mock_notif2:'New rating',mock_notif2_s:'Your reputation grows with every deal',mock_book:'Deal-Guaranteed booking',mock_book_s:'Documented staged payments',mock_pay:'Deposit received',mock_pay_s:'Before you start working',mock_ver:'Verified account',mock_ver_s:'The Deal gold badge',marquee_items:'Deal Guarantee on every booking ✦ Documented staged payments ✦ Only 10% fee ✦ Instant account verification ✦ Delivery proof before the final payment ✦ Verified ratings after full payment ✦ Auto-confirm within 48 hours ✦ Instant in-platform support ✦ Opportunities come to you ✦ Post your request as a guest — no registration ✦ ',how_t:'How it works',how_sub:'Three simple steps — and work comes to you',seats_t:'Founding seats — the first 100 creators',seats_d:'The first 100 verified creators on Deal get the permanent "Founding Member" badge and priority placement in their city. Seats are limited — claim yours now.',seats_total:'Founders program: only 100 seats',seats_cta:'Claim your seat — register as a creator',guest_banner:'You are browsing as a guest — explore content creators and service providers, view their profiles, and order from any of them with no registration.',guest_banner_join:'A creator or provider? Register here',filter_all:'All',filter_creators:'Content creators',filter_providers:'Service providers',guest_order_btn:'Order — no registration',guest_target_chip:'Targeted request to',guest_target_clear:'Make it a public request instead',guest_target_title:'Order directly — no registration',g_done_d_targeted:'Your request went directly to the targeted creator — they will see it in their opportunities and turn it into a Deal-Guaranteed booking. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',auth_note:'Registration is for content creators and service providers — own a shop or a brand? Order as a guest with no registration, from the “Post a job” button or from any creator profile.',targeted_chip:'🎯 Targeted to you',provider_tag:'Service provider',svc_other:'Another service',other_w:'Other',prov_custom_ph:'Write your service as you want it shown on your profile',niche_custom_ph:'Write your niche',
-star_chip:'⭐ Deal Star',star_week_chip:'👑 Star of the Week',star_pick:'⭐ First pick',star_nav:'Deal Star',star_t:'Deal Star Package',star_sub:'The package built to grow you and set you apart — no generic perks, no filler',star_per_m:'/ 30 days',star_b1_t:'Gold badge & frame',star_b1_d:'The "Deal Star ⭐" badge on your card and profile, with a gold frame that sets you apart in the market at first glance.',star_b2_t:'Ranking priority & first recommendation',star_b2_d:'You top the market ranking in your category and move first in client recommendation lists, campaign applicants and dispute alternatives.',star_b3_t:'Star of the Week',star_b3_d:'A fair automatic weekly rotation among active subscribers — your week comes, and your name tops the "Star of the Week" section with a shareable card in your name.',star_b4_t:'Monthly growth fuel',star_b4_d:'A summary of your real stats (views, requests, conversion, earnings) plus trending content ideas for your niche and one practical growth step — refreshed every month.',star_b5_t:'Golden presence in front of clients',star_b5_d:'Subscribers top the platform\'s recommendations to clients and brands in every recommendation list.',star_b6_t:'Priority support',star_b6_d:'Your support messages are flagged "priority" and top the team\'s reply queue.',star_terms_t:'Official package terms',star_terms:'• Contents: the "Deal Star" badge and frame, ranking priority and first recommendation, "Star of the Week" eligibility and the share card, monthly growth fuel, and priority support.\n• Duration: 30 days starting from the moment the owner confirms the transfer actually arrived — not from when you send the reference.\n• Activation: no benefit before receipt is confirmed; if the reference is wrong the subscription is rejected and you can subscribe again.\n• Refunds: no refunds after activation, unless Deal fails to deliver an announced package benefit.\n• Renewal: manual, using the same steps, before or after expiry — there is never an automatic charge.',star_accept:'I have read the official terms and I accept them',star_pay_show:'Show the package transfer number',star_pay_note:'Transfer the amount from your wallet (Vodafone Cash / InstaPay) to this number, then enter the transfer reference:',star_ref_ph:'Subscription transfer reference',star_subscribe_btn:'Subscribe — send the reference for verification',star_pending_t:'Your subscription is pending verification ⏳',star_pending_d:'We received your transfer reference. The package activates only after the owner confirms the money actually arrived — you will get the activation message the moment it is confirmed, and your 30 days start then.',star_active_t:'You are a Deal Star ⭐',star_days_left:'left on your subscription',star_day_w:'days',star_expired_t:'Your Deal Star subscription has ended',star_expired_d:'The star benefits are off — renew with the same steps and return to the top.',star_rejected_t:'Your last subscription was rejected',star_subscribed_t:'Your subscription was recorded — pending verification until the money is confirmed',star_login_cta:'Registration is for creators and service providers — log in with your account to subscribe',star_fuel_t:'⛽ Your monthly growth fuel',star_fuel_views:'Profile views',star_fuel_earn_m:'Earnings this month',star_ideas_t:'Trending content ideas for your niche',star_step_t:'Your growth step this month',star_week_t:'Star of the Week',star_week_d:'A Deal Star subscriber tops the platform this week — by the fair automatic rotation among active subscribers',star_card_btn:'🔗 Share the star card',star_card_t:'This week\'s Deal Star',star_card_share:'Copy the card link',star_card_not:'This member is not the current Star of the Week — the star rotates fairly every week',star_goto_pkg:'Deal Star package page',star_dash_t:'Deal Star Package',star_dash_cta:'Subscribe and stand out — gold badge, top ranking and monthly growth fuel',star_dash_active:'Your subscription is active ⭐',ow_star_t:'"Deal Star" subscriptions',ow_star_pending:'Pending',ow_star_active:'Active',ow_star_expired:'Expired',ow_star_rejected:'Rejected',ow_star_revenue:'Confirmed package revenue',ow_star_confirm:'Confirm receipt & activate',ow_star_reject:'Reject',ow_star_empty:'No subscriptions yet.',ow_star_ref:'Reference',ow_star_terms_ok:'Accepted terms',ow_star_state_pending:'Pending verification',ow_star_state_active:'Active',ow_star_state_expired:'Expired',ow_star_state_rejected:'Rejected',ow_priority:'⭐ Priority',star_only_note:'The package is available to registered creators and service providers',star_get:'⭐ Get the Premium Package',star_cta_pending:'⏳ Your subscription is pending verification — waiting for transfer confirmation',star_cta_active:'⭐ You are subscribed to the Premium Package',star_pay_line:'Transfer via Vodafone Cash or InstaPay, then enter the transfer reference',star_copy_num:'📋 Copy number',star_terms_show:'Show terms',star_terms_hide:'Hide terms',star_confirm_btn:'Confirm subscription',star_err_terms:'You must accept the package terms first',star_pay_amount_w:'Amount to transfer'}
+star_chip:'⭐ Deal Star',star_week_chip:'👑 Star of the Week',star_pick:'⭐ First pick',star_nav:'Deal Star',star_t:'Deal Star Package',star_sub:'The package built to grow you and set you apart — no generic perks, no filler',star_per_m:'/ 30 days',star_b1_t:'Gold badge & frame',star_b1_d:'The "Deal Star ⭐" badge on your card and profile, with a gold frame that sets you apart in the market at first glance.',star_b2_t:'Ranking priority & first recommendation',star_b2_d:'You top the market ranking in your category and move first in client recommendation lists, campaign applicants and dispute alternatives.',star_b3_t:'Star of the Week',star_b3_d:'A fair automatic weekly rotation among active subscribers — your week comes, and your name tops the "Star of the Week" section with a shareable card in your name.',star_b4_t:'Monthly growth fuel',star_b4_d:'A summary of your real stats (views, requests, conversion, earnings) plus trending content ideas for your niche and one practical growth step — refreshed every month.',star_b5_t:'Golden presence in front of clients',star_b5_d:'Subscribers top the platform\'s recommendations to clients and brands in every recommendation list.',star_b6_t:'Priority support',star_b6_d:'Your support messages are flagged "priority" and top the team\'s reply queue.',star_terms_t:'Official package terms',star_terms:'• Contents: the "Deal Star" badge and frame, ranking priority and first recommendation, "Star of the Week" eligibility and the share card, monthly growth fuel, and priority support.\n• Duration: 30 days starting from the moment the owner confirms the transfer actually arrived — not from when you send the reference.\n• Activation: no benefit before receipt is confirmed; if the reference is wrong the subscription is rejected and you can subscribe again.\n• Refunds: no refunds after activation, unless Deal fails to deliver an announced package benefit.\n• Renewal: manual, using the same steps, before or after expiry — there is never an automatic charge.',star_accept:'I have read the official terms and I accept them',star_pay_show:'Show the package transfer number',star_pay_note:'Transfer the amount from your wallet (Vodafone Cash / InstaPay) to this number, then enter the transfer reference:',star_ref_ph:'Subscription transfer reference',star_subscribe_btn:'Subscribe — send the reference for verification',star_pending_t:'Your subscription is pending verification ⏳',star_pending_d:'We received your transfer reference. The package activates only after the owner confirms the money actually arrived — you will get the activation message the moment it is confirmed, and your 30 days start then.',star_active_t:'You are a Deal Star ⭐',star_days_left:'left on your subscription',star_day_w:'days',star_expired_t:'Your Deal Star subscription has ended',star_expired_d:'The star benefits are off — renew with the same steps and return to the top.',star_rejected_t:'Your last subscription was rejected',star_subscribed_t:'Your subscription was recorded — pending verification until the money is confirmed',star_login_cta:'Registration is for creators and service providers — log in with your account to subscribe',star_fuel_t:'⛽ Your monthly growth fuel',star_fuel_views:'Profile views',star_fuel_earn_m:'Earnings this month',star_ideas_t:'Trending content ideas for your niche',star_step_t:'Your growth step this month',star_week_t:'Star of the Week',star_week_d:'A Deal Star subscriber tops the platform this week — by the fair automatic rotation among active subscribers',star_card_btn:'🔗 Share the star card',star_card_t:'This week\'s Deal Star',star_card_share:'Copy the card link',star_card_not:'This member is not the current Star of the Week — the star rotates fairly every week',star_goto_pkg:'Deal Star package page',star_dash_t:'Deal Star Package',star_dash_cta:'Subscribe and stand out — gold badge, top ranking and monthly growth fuel',star_dash_active:'Your subscription is active ⭐',ow_star_t:'"Deal Star" subscriptions',ow_star_pending:'Pending',ow_star_active:'Active',ow_star_expired:'Expired',ow_star_rejected:'Rejected',ow_star_revenue:'Confirmed package revenue',ow_star_confirm:'Confirm receipt & activate',ow_star_reject:'Reject',ow_star_empty:'No subscriptions yet.',ow_star_ref:'Reference',ow_star_terms_ok:'Accepted terms',ow_star_state_pending:'Pending verification',ow_star_state_active:'Active',ow_star_state_expired:'Expired',ow_star_state_rejected:'Rejected',ow_priority:'⭐ Priority',star_only_note:'The package is available to registered creators and service providers',star_get:'⭐ Get the Premium Package',star_cta_pending:'⏳ Your subscription is pending verification — waiting for transfer confirmation',star_cta_active:'⭐ You are subscribed to the Premium Package',star_pay_line:'Transfer via Vodafone Cash or InstaPay, then enter the transfer reference',star_copy_num:'📋 Copy number',star_terms_show:'Show terms',star_terms_hide:'Hide terms',star_confirm_btn:'Confirm subscription',star_err_terms:'You must accept the package terms first',star_pay_amount_w:'Amount to transfer',money_code:'Transaction code',money_exact:'Transfer this exact amount',money_cents_note:'These cents are your money reference — do not round the number; transfer with the exact same cents so the payment is identified instantly',rc_t:'📷 Instant confirmation with a receipt photo',rc_d:'Upload the transfer screenshot — we read it and confirm instantly on a full match (exact amount with cents + number + reference + date). If the read is unclear, fill the fields manually and it goes to the owner for review — there is no partial confirmation.',rc_choose:'Choose the receipt photo',rc_amount:'Amount as shown on the receipt',rc_recipient:'Recipient number as shown on the receipt',rc_ref:'Transfer reference from the receipt',rc_date:'Transfer date',rc_btn:'⚡ Confirm with receipt',rc_reading:'Reading the receipt…',rc_auto_ok:'⚡ Your transfer was auto-confirmed from the receipt — thanks!',rc_review:'Receipt received — it will be reviewed manually and confirmed soon',rc_locked:'🔒 Receipt uploads are locked for this transaction after many attempts — it is with the owner for manual review',uv_t:'⭐ Grow your account and offset being unverified',uv_d:'Your account is not verified yet — the "Deal Star" package gives you a gold badge and frame, ranking priority, first recommendation to clients and monthly growth fuel, from day one.',uv_note:'Verification is free and its badge is separate — the package is not a substitute for verification, it is an extra growth push alongside it.',ow_money_t:'💰 Money transactions — unified reference',ow_money_search_ph:'I received an amount… type it with its cents exactly as received (e.g. 199.43)',ow_money_search:'Search by amount',ow_money_confirm:'Confirm arrival',ow_money_reject:'Reject',ow_money_revoke:'Revoke confirmation',ow_money_revoke_freeze:'Revoke + freeze payer',ow_money_receipt:'🧾 Receipt',ow_money_empty:'No money transactions yet.',ow_money_fraud:'🚨 Fraud suspected',ow_money_state_open:'Open',ow_money_state_claimed:'Awaiting confirmation',ow_money_state_auto_confirmed:'Auto-confirmed ⚡',ow_money_state_confirmed:'Confirmed',ow_money_state_rejected:'Rejected',ow_money_state_expired:'Expired',ow_money_state_revoked:'Revoked',mk_star_subscription:'Deal Star subscription',mk_booking_commission:'Booking fee',mk_booking_deposit:'Booking deposit',mk_booking_final:'Final payment',ow_money_from:'From',ow_money_to:'To',ow_money_none_found:'No transaction with that amount',cp_all:'📋 Copy transfer details',cp_number:'Copy number',cp_amount:'Copy amount',ts_t:'🧭 How to transfer?',ts_hide:'Hide steps',ts_show:'Show steps',ts_open_eg:'Open your wallet app (Vodafone Cash or InstaPay)',ts_open_local:'Open your local payment method: {m}',ts_choose:'Choose "Send money"',ts_number:'Enter this number',ts_number_alt:'Enter the recipient number you agreed on together',ts_amount:'Enter this exact amount',ts_cents_warn:'the cents are part of the reference — do not round the number',ts_confirm:'Confirm the transfer and keep the receipt or reference',ts_back:'Come back here: enter the reference, or upload the receipt photo for instant confirmation'}
 };
 const t=k=>(DICT[LANG]&&DICT[LANG][k])||DICT.ar[k]||k;
 const ERR_EN={'سجل الدخول أولاً':'Log in first','حساب غير موجود':'Account not found','هذا الحساب محظور':'This account is banned','الاسم والدور ووسيلة التواصل مطلوبة':'Name, role and contact are required','دور غير صحيح':'Invalid role','وسيلة التواصل مسجلة من قبل — سجل الدخول':'This contact is already registered — please log in','لا يوجد حساب بهذه البيانات — سجل أولاً':'No account with these details — register first','غير موجود':'Not found','حدد سعراً صحيحاً':'Enter a valid price','لا يمكنك حجز نفسك':'You cannot book yourself','حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً':'Founder account — display only, no bookings or contact','الصانع المستهدف غير موجود':'The targeted creator was not found','حساب المؤسس — عرض فقط ولا يقبل طلبات':'Founder account — display only, it accepts no requests','هذا الطلب موجّه لصانع آخر':'This request is targeted to another creator','اختر خدمتك من القائمة':'Choose your service from the list','اكتب خدمتك كما تريد أن تظهر في ملفك':'Write your service as you want it shown on your profile','هذا الطلب اتحجز خلاص — لا يمكن تحويله مرتين':'This request is already booked — it cannot be converted twice','طلب ضيف غير موجود':'Guest request not found','اكتب مرجع العملية':'Enter the transfer reference','مرجع العملية مطلوب':'Transfer reference is required','رابط فيديو غير مدعوم — الصق رابط شورتس من يوتيوب أو فيسبوك أو إنستجرام أو تيك توك':'Unsupported video link — paste a shorts link from YouTube, Facebook, Instagram or TikTok','وصلت إلى الحد الأقصى: 3 فيديوهات شورتس — احذف واحداً أولاً':'You reached the maximum: 3 shorts videos — delete one first','الصورة أكبر من 200KB — صغّرها وحاول مجدداً':'Image is larger than 200KB — shrink it and try again','رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian mobile number is required (01xxxxxxxxx)','رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)':'A valid Egyptian phone number is required (01xxxxxxxxx)','المدينة مطلوبة':'City is required','اسم النشاط مطلوب':'Business name is required','اوصف الشغلانة المطلوبة':'Describe the job','خطأ في الخادم':'Server error','خطأ':'Error','لا يمكنك متابعة نفسك':'You cannot follow yourself','هذا الحساب غير متاح للمتابعة حالياً':'This account is not available for following right now','لا يمكنك مراسلة نفسك':'You cannot message yourself','حساب المؤسس خارج المراسلة — عرضه ومتابعته فقط':'The founder account is outside messaging — display and follow only','هذا الحساب غير متاح للمراسلة حالياً':'This account is not available for messaging right now','اكتب رسالة أولاً':'Write a message first','الرسالة أطول من الحد الأقصى (1000 حرف)':'Message exceeds the maximum length (1000 characters)','باقة نجم Deal للصناع ومقدمي الخدمة فقط':'The Deal Star package is for creators and service providers only','حساب المؤسس لا يشترك في الباقات':'The founder account does not subscribe to packages','حسابك مجمّد حالياً — لا يمكنك الاشتراك في الباقة':'Your account is currently frozen — you cannot subscribe to the package','لازم توافق على شروط الباقة أولاً':'You must accept the package terms first','مرجع التحويلة مطلوب':'The transfer reference is required','عندك اشتراك قيد التحقق بالفعل — استنى تأكيد الاستلام':'You already have a subscription pending verification — wait for receipt confirmation','اشتراكك في نجم Deal نشط بالفعل':'Your Deal Star subscription is already active','اشتراك غير موجود أو تم البت فيه':'Subscription not found or already decided','وقود النمو لمشتركي نجم Deal النشطين فقط':'Growth fuel is for active Deal Star subscribers only','دولة غير مدعومة حالياً':'This country is not supported yet'};
@@ -1106,32 +1122,41 @@ async function openBooking(btn,id){
       b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">${t('client_w')} ${b.agreed_client?t('agreed_w'):t('waiting_w')}</span><span class="chip">${t('talent_w')} ${b.agreed_talent?t('agreed_w'):t('waiting_w')}</span>
       ${((isClient&&!b.agreed_client)||(isTalent&&!b.agreed_talent))?`<button class="btn sm" onclick="act(this,${b.id},'agree')">${t('agree_btn')}</button>`:''}</div>`:'');
     h+=step(`${t('step2')} — ${b.fee} ${b.currency}`, b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'&&isClient?'open':''),
-      b.status==='awaiting_fee'&&isClient?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="feeInfo(this,${b.id})">${t('show_fee')}</button> <span id="feeInfo"></span>
-      <input id="feeRef" placeholder="${t('fee_ref_ph')}"><button class="btn sm" onclick="pay(this,${b.id},'fee','feeRef')">${t('fee_confirm_btn')}</button></div>`
+      b.status==='awaiting_fee'&&isClient?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="feeInfo(this,${b.id})">${t('show_fee')}</button> <span id="feeInfo"></span><div id="feeObligation"></div>
+      <input id="feeRef" placeholder="${t('fee_ref_ph')}"><button class="btn" style="width:100%;font-size:16.5px;padding:12px;margin-top:6px" onclick="pay(this,${b.id},'fee','feeRef')">${t('fee_confirm_btn')}</button></div>`
       :(b.fee_status==='confirmed'?`<div class="mut">${t('fee_confirmed')}</div>`:''));
     h+=step(`${t('step3')} — ${b.deposit} ${b.currency}`, ['in_progress','proof_submitted','awaiting_rest','completed'].includes(b.status)?'done':(b.status==='awaiting_deposit'&&isClient?'open':''),
-      b.status==='awaiting_deposit'&&isClient?`<input id="depRef" placeholder="${t('dep_ref_ph')}"><button class="btn sm" onclick="pay(this,${b.id},'deposit','depRef')">${t('paid_btn')}</button>`:'');
+      b.status==='awaiting_deposit'&&isClient?`<div id="depObligation"></div><input id="depRef" placeholder="${t('dep_ref_ph')}"><button class="btn" style="width:100%;font-size:16.5px;padding:12px;margin-top:6px" onclick="pay(this,${b.id},'deposit','depRef')">${t('paid_btn')}</button>`:'');
     h+=step(t('step4'), ['awaiting_rest','completed'].includes(b.status)?'done':(b.status==='in_progress'&&isTalent?'open':''),
       b.status==='in_progress'&&isTalent?`<input id="proofUrl" placeholder="${t('proof_ph')}"><button class="btn sm" onclick="proof(this,${b.id})">${t('proof_btn')}</button>`
       :(b.proof_url?`<div class="mut">${t('proof_w')}: <a target="_blank" href="${esc(b.proof_url)}">${esc(b.proof_url)}</a> — ${b.proof_check==='verified'?t('proof_verified'):''}</div>`:''));
     if(b.status==='proof_submitted'&&isClient) h+=`<div class="step open"><b>${t('receipt_t')}</b><div class="mut">${t('receipt_d')}</div><button class="btn sm" onclick="act(this,${b.id},'confirm-receipt')">${t('receipt_btn')}</button></div>`;
     h+=step(`${t('step5')} — ${b.rest} ${b.currency}`, b.status==='completed'?'done':(b.status==='awaiting_rest'&&isClient?'open':''),
-      b.status==='awaiting_rest'&&isClient?`<input id="restRef" placeholder="${t('fee_ref_ph')}"><button class="btn sm" onclick="pay(this,${b.id},'rest','restRef')">${t('paid_btn')}</button>`:'');
+      b.status==='awaiting_rest'&&isClient?`<div id="restObligation"></div><input id="restRef" placeholder="${t('fee_ref_ph')}"><button class="btn" style="width:100%;font-size:16.5px;padding:12px;margin-top:6px" onclick="pay(this,${b.id},'rest','restRef')">${t('paid_btn')}</button>`:'');
     if(b.status==='completed') h+=`<div class="step done"><b>${t('completed_t')}</b>${b.can_review?`<div style="margin-top:7px"><div class="row"><select id="rvS" style="max-width:170px"><option value="positive">${t('rv_pos')}</option><option value="negative">${t('rv_neg')}</option></select>
       <select id="rvStars" style="max-width:110px"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
       <input id="rvC" placeholder="${t('rv_comment_ph')}"><button class="btn sm" onclick="review(this,${b.id})">${t('rv_send')}</button></div>`:`<div class="mut">${t('rv_done')}</div>`}</div>`;
     if(!['completed','cancelled','disputed'].includes(b.status)) h+=`<div class="row" style="margin-top:10px"><button class="btn ghost sm" onclick="dispute(this,${b.id})">${t('dispute_btn')}</button></div>`;
     if(b.status==='disputed'&&b.alternatives&&b.alternatives.length) h+=`<div class="guarantee">${t('alternatives_t')} ${b.alternatives.map(a=>esc(a.name)).join('، ')}</div>`;
     h+=`<div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="document.getElementById('bookDlg').close()">${t('close')}</button></div>`;
-    $('#bookBody').innerHTML=h; $('#bookDlg').showModal();
+    $('#bookBody').innerHTML=h;
+    /* التزامات العربون/الدفعة الأخيرة: كود المعاملة + المبلغ بالبصمة في خطوة
+       الدفع نفسها (المستلم هو المقدم — التأكيد يبقى منه كما هو، بلا OCR). */
+    if(b.status==='awaiting_deposit'&&isClient){ const dob=await fetchObligation('booking_deposit',b.id); const el=document.getElementById('depObligation'); if(el&&dob) el.innerHTML=moneyExactHtml(dob)+transferStepsHtml(dob); }
+    if(b.status==='awaiting_rest'&&isClient){ const rob=await fetchObligation('booking_final',b.id); const el=document.getElementById('restObligation'); if(el&&rob) el.innerHTML=moneyExactHtml(rob)+transferStepsHtml(rob); }
+    $('#bookDlg').showModal();
+    /* تركيز تلقائي على خانة المرجع المفتوحة — جاهزة للصق فور فتح الخطوة. */
+    if(isClient) focusEl({awaiting_fee:'feeRef',awaiting_deposit:'depRef',awaiting_rest:'restRef'}[b.status]);
   };
   if(btn) return withBusy(btn,work); return work();
 }
 async function act(btn,id,a){await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/${a}`,{method:'POST',body:'{}'});toast(t('done_t'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
 async function pay(btn,id,kind,inputId){const ref=document.getElementById(inputId).value.trim();if(!ref)return toast(t('ref_required'));
-  await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/pay`,{method:'POST',body:JSON.stringify({kind,ref})});toast(t('payment_saved'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
+  await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/pay`,{method:'POST',body:JSON.stringify({kind,ref})});markPaidOnce();toast(t('payment_saved'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
 async function feeInfo(btn,id){await withBusy(btn,async()=>{try{const f=await api(`/api/bookings/${id}/fee-info`);
-  document.getElementById('feeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`}catch(e){toast(errT(e.message))}})}
+  document.getElementById('feeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`;
+  const ob=document.getElementById('feeObligation'); if(ob&&f.obligation) ob.innerHTML=moneyExactHtml(f.obligation)+transferStepsHtml(f.obligation,{phone:f.phone})+receiptBlockHtml(f.obligation,'fee',{bookingId:id});
+}catch(e){toast(errT(e.message))}})}
 async function proof(btn,id){const url=document.getElementById('proofUrl').value.trim();
   await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/proof`,{method:'POST',body:JSON.stringify({url})});toast(t('proof_done'));await openBooking(null,id);loadBookings()}catch(e){toast(errT(e.message))}})}
 async function review(btn,id){await withBusy(btn,async()=>{try{await api(`/api/bookings/${id}/review`,{method:'POST',body:JSON.stringify({sentiment:$('#rvS').value,stars:+$('#rvStars').value,comment:$('#rvC').value})});toast(t('review_saved'));await openBooking(null,id)}catch(e){toast(errT(e.message))}})}
@@ -1290,7 +1315,7 @@ async function loadDash(){
   if(starCtaEligible(u)){
     let st={state:'none',subscription:null};
     try{ st=await api('/api/star/me'); }catch(e){ /* بطاقة الباقة إضافية */ }
-    starCard=starCtaHtml(st);
+    starCard=starBannerEligible(u,st)?unverifiedStarBannerHtml():starCtaHtml(st);
   }
   const socialRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x,'sm')}<div class="mut">${esc(x.niche||'')}${x.city?` · ${esc(x.city)}`:''}</div></span>${followBtn(x)}${msgBtn(x)}<button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
   $('#dashBody').innerHTML=`${ovStrip}${starCard}<div class="card dash-hero${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
@@ -1409,6 +1434,11 @@ async function loadOwner(){
   try{ support=await api('/api/owner/support-messages'); }catch(e){ /* قسم الدعم إضافي */ }
   let star={items:[],counts:{pending:0,active:0,expired:0,rejected:0},revenue:0,currency:'EGP'};
   try{ star=await api('/api/owner/star'); }catch(e){ /* قسم الباقة إضافي */ }
+  let money={items:[]};
+  try{ money=await api('/api/owner/money'); }catch(e){ /* قسم المال إضافي */ }
+  const moneySection=`<h4>${t('ow_money_t')}</h4>
+  <div class="row"><input id="owMoneyAmt" inputmode="decimal" placeholder="${t('ow_money_search_ph')}" style="flex:1"><button class="btn sm" onclick="moneyLookup(this)">${t('ow_money_search')}</button></div>
+  <div id="owMoneyList" style="margin-top:8px">${money.items.length?money.items.map(moneyRowHtml).join(''):`<div class="mut">${t('ow_money_empty')}</div>`}</div>`;
   const starStateChip=(s)=>{const lbl=t('ow_star_state_'+s.status);
     const col=s.status==='active'?'var(--em)':s.status==='pending'?'var(--gold)':s.status==='rejected'?'#e03131':'var(--mut)';
     return `<span class="chip" style="border-color:${col};color:${col}">${lbl}</span>`};
@@ -1428,7 +1458,51 @@ async function loadOwner(){
   <h4>${t('ow_penalized')}</h4>${d.penalized.length?d.penalized.map(x=>`<div class="step">${esc(x.name)} — ${x.penalty_level}${x.frozen?' · '+t('ow_frozen'):''}${x.banned?' · '+t('ow_banned'):''} <button class="btn sm" onclick="pen(this,${x.id})">${t('ow_unfreeze')}</button></div>`).join(''):`<div class="mut">${t('ow_no_penalized')}</div>`}
   <h4>${t('ow_support')}${support.unread?` <span class="chip" style="border-color:var(--gold);color:var(--gold)">${support.unread} ${t('ow_unread')}</span>`:''}</h4>
   ${support.items.length?support.items.map(m=>`<div class="step">${m.is_read?'':'🆕 '}${m.priority?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('ow_priority')}</span> `:''}<b>${esc(m.question)}</b><div class="mut">${esc(m.user_name||'—')}${m.contact?' · '+esc(m.contact):''} · ${new Date(m.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}</div></div>`).join('')+`<button class="btn ghost sm" onclick="markSupportRead(this)">${t('ow_mark_read')}</button>`:`<div class="mut">${t('ow_no_support')}</div>`}
-  ${starSection}`;
+  ${starSection}
+  ${moneySection}`;
+}
+/* صف التزام مالي في لوحة المالك: كود + نوع + مبلغ بالبصمة + أطراف + حالة +
+   أزرار القرار حسب الحالة (تأكيد/رفض للمعلّق، إلغاء تأكيد للمؤكد، إيصال). */
+function moneyStateChip(o){
+  const col=(o.status==='auto_confirmed'||o.status==='confirmed')?'var(--em)':o.status==='claimed'?'var(--gold)':(o.status==='rejected'||o.status==='revoked')?'#e03131':'var(--mut)';
+  return `<span class="chip" style="border-color:${col};color:${col}">${t('ow_money_state_'+o.status)}</span>`;
+}
+function moneyRowHtml(o){
+  return `<div class="step">${moneyStateChip(o)} <b>${esc(o.code)}</b> <span class="mut">${t('mk_'+o.kind)} · ${t('ow_money_from')}: ${esc(o.payer_name||'—')} · ${t('ow_money_to')}: ${esc(o.payee_name||'—')}${o.booking_id?` · #${o.booking_id}`:''}</span>
+  <div style="margin-top:3px"><span class="money-exact" style="font-size:17px">${Number(o.exact_amount).toFixed(2)} ${esc(o.currency)}</span> <span class="mut">(${o.base_amount} + .${String(o.fingerprint_cents).padStart(2,'0')})</span> ${o.fraud_flag?`<span class="chip" style="border-color:#e03131;color:#ff9d9d">${t('ow_money_fraud')}</span>`:''}${o.receipt_locked?`<span class="chip">${t('rc_locked')}</span>`:''}${o.receipt_attempts?`<span class="mut"> · 📷 ${o.receipt_attempts}</span>`:''}</div>
+  ${o.transfer_ref?`<div class="mut">${t('ow_star_ref')}: <b>${esc(o.transfer_ref)}</b></div>`:''}
+  <div class="mut">${new Date(o.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}</div>
+  <div class="row" style="margin-top:6px">
+  ${o.receipts?`<button class="btn ghost sm" onclick="moneyReceipt(this,${o.id})">${t('ow_money_receipt')}</button>`:''}
+  ${o.status==='claimed'?`<button class="btn sm" onclick="moneyConfirm(this,${o.id})">${t('ow_money_confirm')}</button><button class="btn ghost sm" onclick="moneyReject(this,${o.id})">${t('ow_money_reject')}</button>`:''}
+  ${(o.status==='auto_confirmed'||o.status==='confirmed')?`<button class="btn ghost sm" onclick="moneyRevoke(this,${o.id},false)">${t('ow_money_revoke')}</button><button class="btn ghost sm" onclick="moneyRevoke(this,${o.id},true)">${t('ow_money_revoke_freeze')}</button>`:''}
+  </div></div>`;
+}
+async function moneyLookup(btn){
+  const v=(($('#owMoneyAmt')||{}).value||'').trim(); if(!v) return;
+  await withBusy(btn,async()=>{
+    try{
+      const r=await api('/api/owner/money/lookup?amount='+encodeURIComponent(v));
+      const list=$('#owMoneyList');
+      if(list) list.innerHTML=r.items.length?r.items.map(moneyRowHtml).join(''):`<div class="mut">${t('ow_money_none_found')}</div>`;
+    }catch(e){ toast(errT(e.message)) }
+  });
+}
+async function moneyConfirm(btn,id){await withBusy(btn,async()=>{try{await api(`/api/owner/money/${id}/confirm`,{method:'POST',body:'{}'});toast(t('done_t'));loadOwner()}catch(e){toast(errT(e.message))}})}
+async function moneyReject(btn,id){await withBusy(btn,async()=>{try{await api(`/api/owner/money/${id}/reject`,{method:'POST',body:'{}'});toast(t('done_t'));loadOwner()}catch(e){toast(errT(e.message))}})}
+async function moneyRevoke(btn,id,freeze){await withBusy(btn,async()=>{try{await api(`/api/owner/money/${id}/revoke`,{method:'POST',body:JSON.stringify({freeze_payer:!!freeze})});toast(t('done_t'));loadOwner()}catch(e){toast(errT(e.message))}})}
+async function moneyReceipt(btn,id){
+  await withBusy(btn,async()=>{
+    try{
+      const r=await api(`/api/owner/money/${id}/receipt`);
+      const ex=r.extracted||{};
+      $('#moneyBody').innerHTML=`<h3>🧾 ${esc(r.code||'')}</h3>
+      ${r.image?`<img src="${r.image}" style="max-width:100%;border-radius:12px" alt="">`:`<div class="mut">—</div>`}
+      <div class="step" style="margin-top:8px">${t('rc_amount')}: <b>${ex.amount??'—'}</b><br>${t('rc_recipient')}: <b>${esc(ex.recipient_digits||'—')}</b><br>${t('rc_ref')}: <b>${esc(ex.transfer_ref||'—')}</b><br>${t('rc_date')}: <b>${esc(ex.date||'—')}</b></div>
+      <div class="row" style="margin-top:10px"><button class="btn ghost sm" onclick="document.getElementById('moneyDlg').close()">${t('close')}</button></div>`;
+      $('#moneyDlg').showModal();
+    }catch(e){ toast(errT(e.message)) }
+  });
 }
 async function starConfirm(btn,id){await withBusy(btn,async()=>{try{await api(`/api/owner/star/${id}/confirm`,{method:'POST',body:'{}'});toast(t('done_t'));loadOwner()}catch(e){toast(errT(e.message))}})}
 async function starReject(btn,id){await withBusy(btn,async()=>{try{await api(`/api/owner/star/${id}/reject`,{method:'POST',body:JSON.stringify({reason:'مرجع التحويلة غير صحيح'})});toast(t('done_t'));loadOwner()}catch(e){toast(errT(e.message))}})}
@@ -1742,27 +1816,39 @@ async function loadGuestPage(tok){
   h+=step(t('step1'),b.status!=='pending_agreement'?'done':(!b.agreed_client?'open':''),
     b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">${t('client_w')} ${b.agreed_client?t('agreed_w'):t('waiting_w')}</span><span class="chip">${t('talent_w')} ${b.agreed_talent?t('agreed_w'):t('waiting_w')}</span>${!b.agreed_client?`<button class="btn sm" onclick="gAct(this,'agree')">${t('agree_btn')}</button>`:''}</div>`:'');
   h+=step(`${t('step2')} — ${b.fee} ${b.currency}`,b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'?'open':''),
-    b.status==='awaiting_fee'?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="gFeeInfo(this)">${t('show_fee')}</button> <span id="gFeeInfo"></span>
-    <input id="gFeeRef" placeholder="${t('fee_ref_ph')}"><button class="btn sm" onclick="gPay(this,'fee','gFeeRef')">${t('fee_confirm_btn')}</button></div>`
+    b.status==='awaiting_fee'?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="gFeeInfo(this)">${t('show_fee')}</button> <span id="gFeeInfo"></span><div id="gFeeObligation"></div>
+    <input id="gFeeRef" placeholder="${t('fee_ref_ph')}"><button class="btn" style="width:100%;font-size:16.5px;padding:12px;margin-top:6px" onclick="gPay(this,'fee','gFeeRef')">${t('fee_confirm_btn')}</button></div>`
     :(b.fee_status==='confirmed'?`<div class="mut">${t('fee_confirmed')}</div>`:''));
   h+=step(`${t('step3')} — ${b.deposit} ${b.currency}`,['in_progress','proof_submitted','awaiting_rest','completed'].includes(b.status)?'done':(b.status==='awaiting_deposit'?'open':''),
-    b.status==='awaiting_deposit'?`<input id="gDepRef" placeholder="${t('dep_ref_ph')}"><button class="btn sm" onclick="gPay(this,'deposit','gDepRef')">${t('paid_btn')}</button>`:'');
+    b.status==='awaiting_deposit'?`<div id="gDepObligation"></div><input id="gDepRef" placeholder="${t('dep_ref_ph')}"><button class="btn" style="width:100%;font-size:16.5px;padding:12px;margin-top:6px" onclick="gPay(this,'deposit','gDepRef')">${t('paid_btn')}</button>`:'');
   h+=step(t('step4'),['awaiting_rest','completed'].includes(b.status)?'done':'',
     b.proof_url?`<div class="mut">${t('proof_w')}: <a target="_blank" href="${esc(b.proof_url)}">${esc(b.proof_url)}</a> — ${b.proof_check==='verified'?t('proof_verified'):''}</div>`
     :(b.status==='in_progress'?`<div class="mut">${t('gp_working')}</div>`:''));
   if(b.status==='proof_submitted')h+=`<div class="step open"><b>${t('receipt_t')}</b><div class="mut">${t('receipt_d')}</div><button class="btn sm" onclick="gAct(this,'confirm-receipt')">${t('receipt_btn')}</button></div>`;
   h+=step(`${t('step5')} — ${b.rest} ${b.currency}`,b.status==='completed'?'done':(b.status==='awaiting_rest'?'open':''),
-    b.status==='awaiting_rest'?`<input id="gRestRef" placeholder="${t('fee_ref_ph')}"><button class="btn sm" onclick="gPay(this,'rest','gRestRef')">${t('paid_btn')}</button>`:'');
+    b.status==='awaiting_rest'?`<div id="gRestObligation"></div><input id="gRestRef" placeholder="${t('fee_ref_ph')}"><button class="btn" style="width:100%;font-size:16.5px;padding:12px;margin-top:6px" onclick="gPay(this,'rest','gRestRef')">${t('paid_btn')}</button>`:'');
   if(b.status==='completed')h+=`<div class="step done"><b>${t('completed_t')}</b>${!b.reviewed?`<div style="margin-top:7px"><div class="row"><select id="gRvS" style="max-width:170px"><option value="positive">${t('rv_pos')}</option><option value="negative">${t('rv_neg')}</option></select>
     <select id="gRvStars" style="max-width:110px"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
     <input id="gRvC" placeholder="${t('rv_comment_ph')}"><button class="btn sm" onclick="gReview(this)">${t('rv_send')}</button></div>`:`<div class="mut">${t('rv_done')}</div>`}</div>`;
   $('#guestBody').innerHTML=h;
+  /* التزامات العربون/الدفعة الأخيرة للضيف: الكود + المبلغ بالبصمة (المستلم
+     المقدم — التأكيد منه كما هو). العمولة التزامها يظهر مع زر معلوماتها. */
+  const gObKind=b.status==='awaiting_deposit'?'booking_deposit':b.status==='awaiting_rest'?'booking_final':null;
+  const gObEl=b.status==='awaiting_deposit'?document.getElementById('gDepObligation'):b.status==='awaiting_rest'?document.getElementById('gRestObligation'):null;
+  if(gObKind&&gObEl){
+    try{ const r=await gFetch(`/api/guest/${tok}/obligation?kind=${gObKind}`); if(r&&r.obligation) gObEl.innerHTML=moneyExactHtml(r.obligation)+transferStepsHtml(r.obligation,{guest:true}); }catch(e){}
+  }
+  /* تركيز تلقائي على خانة مرجع الخطوة المفتوحة — جاهزة للصق. */
+  focusEl({awaiting_fee:'gFeeRef',awaiting_deposit:'gDepRef',awaiting_rest:'gRestRef'}[b.status]);
 }
 async function gAct(btn,a){await withBusy(btn,async()=>{try{await gFetch(`/api/guest/${GTOKEN}/${a}`,{method:'POST',body:'{}'});toast(t('done_t'));loadGuestPage(GTOKEN)}catch(e){toast(errT(e.message))}})}
 async function gPay(btn,kind,inputId){const ref=document.getElementById(inputId).value.trim();if(!ref)return toast(t('ref_required'));
   await withBusy(btn,async()=>{try{await gFetch(`/api/guest/${GTOKEN}/pay`,{method:'POST',body:JSON.stringify({kind,ref})});toast(t('payment_saved'));loadGuestPage(GTOKEN)}catch(e){toast(errT(e.message))}})}
 async function gFeeInfo(btn){await withBusy(btn,async()=>{try{const f=await gFetch(`/api/guest/${GTOKEN}/fee-info`);
-  document.getElementById('gFeeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`}catch(e){toast(errT(e.message))}})}
+  document.getElementById('gFeeInfo').innerHTML=`<span class="chip">${f.label}: <b>${f.phone}</b> (${f.methods.join(' / ')}) — ${f.amount} ${f.currency}</span>`;
+  const ob=document.getElementById('gFeeObligation'); if(ob&&f.obligation) ob.innerHTML=moneyExactHtml(f.obligation)+transferStepsHtml(f.obligation,{phone:f.phone,guest:true})+receiptBlockHtml(f.obligation,'gfee',{guest:true,bookingId:f.booking_id||null});
+  focusEl('gFeeRef');
+}catch(e){toast(errT(e.message))}})}
 async function gReview(btn){await withBusy(btn,async()=>{try{await gFetch(`/api/guest/${GTOKEN}/review`,{method:'POST',body:JSON.stringify({sentiment:$('#gRvS').value,stars:+$('#gRvStars').value,comment:$('#gRvC').value})});toast(t('review_saved'));loadGuestPage(GTOKEN)}catch(e){toast(errT(e.message))}})}
 /* ================= روابط الملفات القابلة للمشاركة + الإحالات =================
    رابط كل صانع: #/u/<id> — يفتح ملفه العام مباشرة لأي زائر أو مسجل.
@@ -1823,7 +1909,7 @@ function profilePageHtml(d){
     <div style="margin-top:12px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span></div>
     <div class="row" style="margin-top:12px;justify-content:center">${followBtn(u)}${editBtn}${ownerBtn}${copyBtn}</div></div>${backRow}`;
   }
-  return `<div class="card tcard${u.is_star?' star-frame':''}">
+  return `${(mine&&!u.verified&&starCtaEligible(u))?'<div id="uvBannerSlot"></div>':''}<div class="card tcard${u.is_star?' star-frame':''}">
     <div class="tcover tall" style="background:linear-gradient(120deg,hsl(${nicheHue(u.niche||'')},62%,34%),hsl(${(nicheHue(u.niche||'')+45)%360},68%,17%))"></div>
     <div class="tbody">
     <div class="row"><span class="tava big">${avatarHtml(u,true)}</span><div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
@@ -1849,6 +1935,12 @@ async function loadProfilePage(id){
     const d=await api('/api/talent/'+id);
     document.title='Deal — '+d.user.name;
     body.innerHTML=profilePageHtml(d);
+    /* بانر الباقة في ملف العضو نفسه: يُملأ غير متزامناً بحالة الاشتراك الحالية،
+       ويظهر لصاحب الملف غير الموثّق غير المشترك فقط (منظوره هو). */
+    const uvSlot=$('#uvBannerSlot');
+    if(uvSlot&&ME&&ME.user.id===d.user.id){
+      try{ const st=await api('/api/star/me'); if(starBannerEligible(ME.user,st)) uvSlot.innerHTML=unverifiedStarBannerHtml(); }catch(e){}
+    }
   }catch(e){
     /* ملف المؤسس لغير المخوّلين يرد 404 من الخادم كأنه غير موجود — هنا تظهر
        رسالة واضحة تطلب الدخول، وبلا أي بيان من بياناته. */
@@ -1933,6 +2025,225 @@ function toggleStarTerms(btn){
    الأهلية: صانع/مقدم مسجّل — لا مؤسس ولا مجمّد ولا زائر ولا متجر.
    بلا اشتراك (أو منتهٍ/مرفوض) ← زر ذهبي ضخم يفتح صفحة الباقة على قسم الدفع
    مباشرة؛ «قيد التحقق» و«نشط» ← شارة حالة بلا أي زر دفع. */
+/* ================= المرجع المالي الموحد (واجهة) =================
+   كل خطوة دفع تعرض التزامها: كود المعاملة + «حوّل المبلغ ده بالظبط» بكسور
+   البصمة. ومدفوعات المنصة (عمولة/اشتراك) فيها تأكيد فوري بصورة الإيصال:
+   OCR في المتصفح (tesseract.js يُحمَّل كسولاً من CDN) يملأ الحقول، وأي فشل
+   أو غموض يترك الحقول لملء يدوي والإرسال يذهب لمراجعة المالك — لا رفض. */
+const RC_STATE={};
+/* تركيز آمن على خانة مرجع عند فتح خطوة تأكيد — جاهزة للصق المرجع فوراً. */
+function focusEl(id){
+  if(!id) return;
+  try{
+    const el=document.getElementById(id);
+    if(el&&typeof el.focus==='function'){
+      if(typeof setTimeout==='function') setTimeout(()=>{ try{ el.focus(); }catch(e){} },60);
+      else el.focus();
+    }
+  }catch(e){}
+}
+async function fetchObligation(kind,bookingId){
+  try{ const r=await api(`/api/money/obligation?kind=${kind}&booking_id=${bookingId}`); return r&&r.obligation?r.obligation:null; }
+  catch(e){ return null; }
+}
+function moneyExactHtml(ob){
+  if(!ob) return '';
+  return `<div class="money-ob"><div class="row"><span class="chip" style="border-color:var(--gold);color:var(--gold)">🧾 ${t('money_code')}: <b>${esc(ob.code)}</b></span></div>
+  <div style="margin-top:5px">${t('money_exact')}: <span class="money-exact">${Number(ob.exact_amount).toFixed(2)} ${esc(ob.currency||'')}</span></div>
+  <div class="mut">${t('money_cents_note')}</div></div>`;
+}
+/* دليل «إزاي تحوّل؟» الذكي + نسخ بيانات التحويل:
+   - موسّع افتراضياً في أول مرة، وللضيوف دائماً (لا حساب يحفظ لهم حالة).
+   - بعد أول دفعة ناجحة لعضو يُطوى افتراضياً (علم «دفع مرة» في التخزين
+     المحلي + ذاكرة الجلسة) ويبقى قابلاً للتوسيع بضغطة — صفر احتكاك بعدها.
+   - أزرار النسخ تبقى ظاهرة دائماً حتى والدليل مطوي: موحّد (رقم + مبلغ
+     بالبصمة سطرين جاهزين للصق في المحفظة) ومنفصلان للرقم والمبلغ. */
+let PAID_ONCE=null;
+function xferGuideOpen(guest){
+  if(guest) return true;
+  if(PAID_ONCE===null){ try{ PAID_ONCE=!!localStorage.getItem('deal_paid_once'); }catch(e){ PAID_ONCE=false; } }
+  return !PAID_ONCE;
+}
+function markPaidOnce(){
+  PAID_ONCE=true;
+  try{ localStorage.setItem('deal_paid_once','1'); }catch(e){}
+}
+function transferStepsHtml(ob,opts={}){
+  if(!ob) return '';
+  const phone=opts.phone||ob.payee_phone||'';
+  const amt=Number(ob.exact_amount).toFixed(2);
+  const cur=esc(ob.currency||'');
+  const open=xferGuideOpen(!!opts.guest);
+  const methodLbl=LANG==='en'?(ob.method_label_en||ob.method_label):ob.method_label;
+  const openStep=(ob.country&&ob.country!=='EG'&&methodLbl)
+    ? t('ts_open_local').replace('{m}',esc(methodLbl))
+    : t('ts_open_eg');
+  const numStep=phone?`${t('ts_number')}: <span class="xfer-num">${esc(phone)}</span>`:t('ts_number_alt');
+  return `<div class="xfer-steps" data-phone="${esc(phone)}" data-amount="${amt}">
+  <div class="row"><b>${t('ts_t')}</b><div class="sp"></div><button type="button" class="btn ghost sm" onclick="toggleXferSteps(this)">${open?t('ts_hide'):t('ts_show')}</button></div>
+  <ol class="xfer-ol${open?'':' hide'}">
+    <li>${openStep}</li>
+    <li>${t('ts_choose')}</li>
+    <li>${numStep}</li>
+    <li>${t('ts_amount')}: <span class="xfer-num">${amt} ${cur}</span> — ${t('ts_cents_warn')}</li>
+    <li>${t('ts_confirm')}</li>
+    <li>${t('ts_back')}</li>
+  </ol>
+  <div class="row" style="margin-top:8px">
+    ${phone?`<button type="button" class="btn sm" onclick="copyXfer(this,'all')">${t('cp_all')}</button><button type="button" class="btn ghost sm" onclick="copyXfer(this,'phone')">${t('cp_number')}</button>`:''}
+    <button type="button" class="btn ghost sm" onclick="copyXfer(this,'amount')">${t('cp_amount')}</button>
+  </div></div>`;
+}
+function toggleXferSteps(btn){
+  const box=btn&&btn.closest?btn.closest('.xfer-steps'):null; if(!box) return;
+  const ol=box.querySelector?box.querySelector('.xfer-ol'):null; if(!ol) return;
+  const nowHidden=ol.classList.toggle('hide');
+  btn.textContent=nowHidden?t('ts_show'):t('ts_hide');
+}
+async function copyXfer(btn,part){
+  const box=btn&&btn.closest?btn.closest('.xfer-steps'):null; if(!box||!box.dataset) return;
+  const phone=box.dataset.phone||'', amount=box.dataset.amount||'';
+  const val=part==='phone'?phone:part==='amount'?amount:(phone+'\n'+amount);
+  if(!val) return;
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText) await navigator.clipboard.writeText(val); }catch(e){}
+  if(btn){ const old=btn.textContent; btn.textContent=t('copied'); btn.disabled=true;
+    setTimeout(()=>{btn.textContent=old;btn.disabled=false},2200); }
+  toast(t('copied'));
+}
+function receiptBlockHtml(ob,prefix,opts={}){
+  if(!ob||ob.payee!=='owner') return '';
+  RC_STATE[prefix]={code:ob.code,obligation:ob,guest:!!opts.guest,bookingId:opts.bookingId||null,image:'',hash:''};
+  if(ob.receipt_locked) return `<div class="receipt-box"><b>${t('rc_t')}</b><div class="mut">${t('rc_locked')}</div></div>`;
+  return `<div class="receipt-box"><b>${t('rc_t')}</b><div class="mut">${t('rc_d')}</div>
+  <label>${t('rc_choose')}</label><input type="file" id="${prefix}RcFile" accept="image/*" onchange="rcFileChosen('${prefix}')">
+  <div id="${prefix}RcFields" class="hide">
+    <label>${t('rc_amount')}</label><input id="${prefix}RcAmount" inputmode="decimal">
+    <label>${t('rc_recipient')}</label><input id="${prefix}RcRecipient" inputmode="numeric">
+    <label>${t('rc_ref')}</label><input id="${prefix}RcRef">
+    <label>${t('rc_date')}</label><input id="${prefix}RcDate" type="date">
+    <div class="err" id="${prefix}RcErr"></div>
+    <button type="button" class="btn" style="width:100%;font-size:16.5px;padding:13px" onclick="submitReceipt(this,'${prefix}')">${t('rc_btn')}</button>
+  </div>
+  <div class="mut" id="${prefix}RcMsg"></div></div>`;
+}
+/* استخراج أفضل-جهد من نص OCR: مبلغ (الأقرب لمبلغ البصمة)، ورقم مستلم (أطول
+   سلسلة أرقام هاتفية)، ومرجع (رمز أبجدي-رقمي)، وتاريخ — دالة نقية قابلة للفحص. */
+function rcExtract(text,ob){
+  const out={amount:null,recipient:'',ref:'',date:''};
+  const s=String(text||'');
+  const pad=(x)=>String(x).padStart(2,'0');
+  const nums=[...s.matchAll(/\d{1,3}(?:,\d{3})*(?:\.\d{1,2})|\d+\.\d{1,2}/g)].map((x)=>parseFloat(x[0].replace(/,/g,''))).filter((n)=>isFinite(n)&&n>0);
+  if(ob&&ob.exact_amount!=null){ const hit=nums.find((n)=>Math.abs(n-(+ob.exact_amount))<0.001); if(hit!=null) out.amount=hit; }
+  if(out.amount==null&&nums.length) out.amount=nums[0];
+  const runs=[...s.matchAll(/\d[\d\s-]{7,}\d/g)].map((x)=>x[0].replace(/\D/g,'')).filter((d)=>d.length>=9&&d.length<=15);
+  if(runs.length) out.recipient=runs.sort((a,b)=>b.length-a.length)[0];
+  let dm=/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(s);
+  if(dm) out.date=`${dm[3]}-${pad(dm[2])}-${pad(dm[1])}`;
+  else { dm=/(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s); if(dm) out.date=`${dm[1]}-${pad(dm[2])}-${pad(dm[3])}`; }
+  const toks=[...s.matchAll(/[A-Za-z0-9]{6,}/g)].map((x)=>x[0]);
+  const cand=toks.find((tk)=>/[A-Za-z]/.test(tk)&&/\d/.test(tk)&&tk!==out.recipient);
+  if(cand) out.ref=cand;
+  return out;
+}
+function rcFill(prefix,ex){
+  const set=(id,v)=>{ const el=document.getElementById(prefix+id); if(el&&v) el.value=v; };
+  if(ex.amount!=null) set('RcAmount',ex.amount);
+  set('RcRecipient',ex.recipient); set('RcRef',ex.ref); set('RcDate',ex.date);
+}
+let TESS_LOADING=null;
+function loadTesseract(){
+  if(typeof window!=='undefined'&&window.Tesseract) return Promise.resolve(true);
+  if(!document.head||!document.createElement) return Promise.resolve(false);
+  if(TESS_LOADING) return TESS_LOADING;
+  TESS_LOADING=new Promise((res)=>{
+    try{
+      const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js';
+      s.onload=()=>res(true); s.onerror=()=>res(false);
+      document.head.appendChild(s);
+    }catch(e){ res(false); }
+  });
+  return TESS_LOADING;
+}
+async function rcOcr(prefix){
+  const st=RC_STATE[prefix]; if(!st||!st.image) return;
+  const ok=await loadTesseract(); if(!ok||typeof window==='undefined'||!window.Tesseract) return;
+  const msg=document.getElementById(prefix+'RcMsg'); if(msg)msg.textContent=t('rc_reading');
+  try{
+    const r=await window.Tesseract.recognize(st.image,'ara+eng');
+    rcFill(prefix,rcExtract(r&&r.data?r.data.text:'',st.obligation));
+  }catch(e){ /* قراءة فاشلة — الحقول اليدوية متاحة كما هي */ }
+  if(msg)msg.textContent='';
+}
+/* صورة الإيصال كـ data URL بحد 2MB: الأكبر تُصغَّر عبر canvas قبل الإرسال. */
+function fileToReceiptDataUrl(file){
+  const readRaw=()=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); });
+  if(!file||file.size<=2*1024*1024) return readRaw();
+  return new Promise((res)=>{
+    try{
+      const url=URL.createObjectURL(file); const img=new Image();
+      img.onload=()=>{ try{
+        const scale=Math.min(1,1400/Math.max(img.width,img.height));
+        const c=document.createElement('canvas'); c.width=Math.round(img.width*scale); c.height=Math.round(img.height*scale);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg',0.87));
+      }catch(e){ res(readRaw()); } };
+      img.onerror=()=>res(readRaw());
+      img.src=url;
+    }catch(e){ res(readRaw()); }
+  });
+}
+async function rcFileChosen(prefix){
+  const inp=document.getElementById(prefix+'RcFile');
+  const file=inp&&inp.files&&inp.files[0]; if(!file) return;
+  const st=RC_STATE[prefix]; if(!st) return;
+  const msg=document.getElementById(prefix+'RcMsg'); if(msg)msg.textContent=t('rc_reading');
+  try{ st.image=await fileToReceiptDataUrl(file); }catch(e){ if(msg)msg.textContent=''; return; }
+  /* البصمة تُحسب على بايتات الصورة المرسلة نفسها (بعد أي تصغير) — تطابق حساب الخادم. */
+  try{
+    if(typeof window!=='undefined'&&window.crypto&&crypto.subtle&&st.image.includes(',')){
+      const bin=atob(st.image.split(',')[1]); const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+      const h=await crypto.subtle.digest('SHA-256',bytes.buffer);
+      st.hash=[...new Uint8Array(h)].map((x)=>x.toString(16).padStart(2,'0')).join('');
+    }
+  }catch(e){ st.hash=''; }
+  const fields=document.getElementById(prefix+'RcFields'); if(fields)fields.classList.remove('hide');
+  if(msg)msg.textContent='';
+  rcOcr(prefix);
+}
+async function submitReceipt(btn,prefix){
+  const st=RC_STATE[prefix]; if(!st||!st.image) return toast(t('rc_choose'));
+  const er=document.getElementById(prefix+'RcErr'); if(er)er.classList.remove('show');
+  const dateVal=(document.getElementById(prefix+'RcDate')||{}).value||'';
+  const payload={obligation_code:st.code,image:st.image,image_hash:st.hash||'',extracted:{
+    amount:parseFloat((document.getElementById(prefix+'RcAmount')||{}).value)||null,
+    recipient_digits:(document.getElementById(prefix+'RcRecipient')||{}).value||'',
+    transfer_ref:(document.getElementById(prefix+'RcRef')||{}).value||'',
+    date:dateVal?new Date(dateVal+'T12:00:00').getTime():''}};
+  if(st.guest) payload.guest_token=GTOKEN;
+  await withBusy(btn,async()=>{
+    try{
+      const r=st.guest
+        ? await gFetch('/api/money/verify-receipt',{method:'POST',body:JSON.stringify(payload)})
+        : await api('/api/money/verify-receipt',{method:'POST',body:JSON.stringify(payload)});
+      const msg=document.getElementById(prefix+'RcMsg');
+      if(r.verdict==='auto_confirmed'){
+        markPaidOnce();
+        toast(t('rc_auto_ok')); if(msg)msg.textContent=t('rc_auto_ok');
+        setTimeout(()=>{ if(prefix==='star') loadStarPage(); else if(st.guest) loadGuestPage(GTOKEN); else if(st.bookingId) openBooking(null,st.bookingId); },900);
+      } else { if(msg)msg.textContent=t('rc_review'); toast(t('rc_review')); }
+    }catch(e){ if(er){er.textContent=errT(e.message);er.classList.add('show')} else toast(errT(e.message)); }
+  });
+}
+/* بانر الباقة الدائم لغير الموثّقين: عضو مؤهل للباقة + غير موثّق + بلا اشتراك
+   نشط/معلّق. التوثيق مجاني ومستقل — البانر لا يوحي أن الاشتراك بديله. */
+function starBannerEligible(u,st){
+  return !!(starCtaEligible(u)&&u&&!u.verified&&st&&st.state!=='active'&&st.state!=='pending');
+}
+function unverifiedStarBannerHtml(){
+  return `<div class="uv-banner"><div class="row"><span style="font-size:26px">⭐</span><div style="flex:1"><b style="font-size:16.5px">${t('uv_t')}</b><div>${t('uv_d')}</div><div class="mut" style="margin-top:3px">${t('uv_note')}</div></div><button type="button" class="btn star-cta-btn" onclick="goStarSubscribe()">${t('star_get')}</button></div></div>`;
+}
 function starCtaEligible(u){ return !!(u&&['creator','provider'].includes(u.role)&&!u.is_platform_founder&&!u.frozen); }
 function starCtaHtml(st){
   if(!st) return '';
@@ -1951,7 +2262,7 @@ async function refreshStarCtas(){
   let st=null;
   try{ st=await api('/api/star/me'); }catch(e){ return; }
   if(ME!==meRef||!mkt) return; // تبدّلت الجلسة أثناء الجلب — لا رسم من سياق قديم
-  mkt.innerHTML=starCtaHtml(st);
+  mkt.innerHTML=starBannerEligible(ME.user,st)?unverifiedStarBannerHtml():starCtaHtml(st);
 }
 /* ضغط الزر: صفحة الباقة تُفتح، وloadStarPage نفسه يعرض رقم الدفع تلقائياً
    وينزّل لقسم الاشتراك — بلا أي خطوة وسيطة. */
@@ -1980,7 +2291,7 @@ async function loadStarPage(){
     try{ st=await api('/api/star/me'); }catch(e){}
     if(st.state==='pending'){
       stateHtml=`<div class="star-terms" style="text-align:center"><b style="font-size:17px;color:var(--gold)">${t('star_pending_t')}</b><div style="margin-top:6px">${t('star_pending_d')}</div>
-      <div class="mut" style="margin-top:6px">${t('ow_star_ref')}: <b>${esc(st.subscription?st.subscription.ref:'')}</b></div></div>`;
+      <div class="mut" style="margin-top:6px">${t('ow_star_ref')}: <b>${esc(st.subscription?st.subscription.ref:'')}</b></div><div id="starObligation"></div></div>`;
     } else if(st.state==='active'){
       const sub=st.subscription||{};
       let fuelHtml='';
@@ -2014,6 +2325,7 @@ async function loadStarPage(){
           <div class="star-pay-amount">${money(info.price, info.currency)}</div>
           <div style="margin-top:4px">${t('star_pay_line')}</div>
           <div id="starPayInfo" style="margin-top:6px"><span class="mut">${t('loading')}</span></div>
+          <div id="starObligation"></div>
         </div>
         <label>${t('star_ref_ph')}</label><input id="starRef" placeholder="REF-…">
         <label class="row" style="align-items:flex-start;gap:8px;margin:8px 0"><input type="checkbox" id="starTermsOk" style="width:auto;margin-top:3px"><span>${t('star_accept')}</span></label>
@@ -2035,8 +2347,25 @@ async function loadStarPage(){
      ثم نزول تلقائي للقسم — فالضغطة على زر الباقة توصل للدفع على طول. */
   if(showPayForm){
     await starPayInfo();
+    /* التزام الاشتراك: الكود + المبلغ بالبصمة + تأكيد فوري بالإيصال. */
+    try{
+      const mo=await api('/api/money/obligation?kind=star_subscription');
+      const ob=$('#starObligation');
+      if(ob&&mo&&mo.obligation) ob.innerHTML=moneyExactHtml(mo.obligation)+transferStepsHtml(mo.obligation)+receiptBlockHtml(mo.obligation,'star');
+      focusEl('starRef');
+    }catch(e){}
     const ps=$('#starPaySec');
     if(ps&&typeof ps.scrollIntoView==='function') ps.scrollIntoView({behavior:'smooth',block:'start'});
+  } else {
+    /* «قيد التحقق»: نفس التزام الاشتراك معروضاً (الكود والمبلغ بالبصمة ورفع
+       الإيصال) — بلا رقم دفع ولا قسم دفع: إثبات إضافي فقط لو لزم. */
+    const ob=$('#starObligation');
+    if(ob){
+      try{
+        const mo=await api('/api/money/obligation?kind=star_subscription');
+        if(mo&&mo.obligation) ob.innerHTML=moneyExactHtml(mo.obligation)+receiptBlockHtml(mo.obligation,'star');
+      }catch(e){}
+    }
   }
 }
 /* رقم دفع الباقة يُجلب ويُعرض تلقائياً داخل قسم الدفع — من /api/star/payment-info
@@ -2060,6 +2389,7 @@ async function doSubscribeStar(btn){
   await withBusy(btn,async()=>{
     try{
       await api('/api/star/subscribe',{method:'POST',body:JSON.stringify({ref:ref.trim(),terms_accepted:true,terms_version:(STAR_INFO&&STAR_INFO.terms_version)||'star-terms-v1'})});
+      markPaidOnce();
       toast(t('star_subscribed_t')); loadStarPage();
     }catch(e){ if(er){er.textContent=errT(e.message);er.classList.add('show')} }
   });

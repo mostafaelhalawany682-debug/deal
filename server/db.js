@@ -272,6 +272,62 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, recipient_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_inbox ON messages(recipient_id, sender_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(recipient_id, is_read);
+
+CREATE TABLE IF NOT EXISTS money_obligations (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL CHECK(kind IN ('star_subscription','booking_commission','booking_deposit','booking_final')),
+  booking_id INTEGER DEFAULT NULL,
+  user_id INTEGER DEFAULT NULL,
+  base_amount DOUBLE PRECISION NOT NULL,
+  fingerprint_cents INTEGER NOT NULL,
+  exact_amount DOUBLE PRECISION NOT NULL,
+  currency TEXT DEFAULT 'EGP',
+  payer_user_id INTEGER DEFAULT NULL,
+  guest_token TEXT DEFAULT '',
+  payee TEXT NOT NULL DEFAULT 'owner',
+  payee_user_id INTEGER DEFAULT NULL,
+  status TEXT DEFAULT 'open',
+  transfer_ref TEXT DEFAULT '',
+  receipt_hash TEXT DEFAULT '',
+  receipt_attempts INTEGER DEFAULT 0,
+  receipt_locked INTEGER DEFAULT 0,
+  fraud_flag INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT DEFAULT 0,
+  decided_by INTEGER DEFAULT NULL,
+  decided_at BIGINT DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_money_ob_open_exact ON money_obligations(payee, exact_amount) WHERE status IN ('open','claimed');
+CREATE INDEX IF NOT EXISTS idx_money_ob_booking ON money_obligations(booking_id, kind);
+CREATE INDEX IF NOT EXISTS idx_money_ob_user ON money_obligations(user_id, kind, status);
+
+CREATE TABLE IF NOT EXISTS money_ledger (
+  id SERIAL PRIMARY KEY,
+  obligation_id INTEGER NOT NULL,
+  from_status TEXT DEFAULT '',
+  to_status TEXT NOT NULL,
+  actor TEXT DEFAULT 'system',
+  note TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_money_ledger_ob ON money_ledger(obligation_id, id);
+
+CREATE TABLE IF NOT EXISTS money_receipts (
+  id SERIAL PRIMARY KEY,
+  obligation_id INTEGER NOT NULL,
+  uploader_user_id INTEGER DEFAULT NULL,
+  guest_token TEXT DEFAULT '',
+  image TEXT NOT NULL,
+  image_hash TEXT NOT NULL UNIQUE,
+  extracted_amount DOUBLE PRECISION DEFAULT NULL,
+  extracted_recipient TEXT DEFAULT '',
+  extracted_ref TEXT DEFAULT '',
+  extracted_date BIGINT DEFAULT 0,
+  verdict TEXT DEFAULT 'review',
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_money_receipts_ob ON money_receipts(obligation_id, id);
 `;
 
 /* ترحيلات «طلب العميل كضيف»: آمنة للتكرار على قواعد قائمة (إنتاج Supabase)
@@ -356,6 +412,60 @@ CREATE TABLE IF NOT EXISTS star_subscriptions (
   reminded_expired INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_star_subs_user ON star_subscriptions(user_id, status);
+ALTER TABLE star_subscriptions ADD COLUMN IF NOT EXISTS obligation_id INTEGER DEFAULT NULL;
+CREATE TABLE IF NOT EXISTS money_obligations (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL CHECK(kind IN ('star_subscription','booking_commission','booking_deposit','booking_final')),
+  booking_id INTEGER DEFAULT NULL,
+  user_id INTEGER DEFAULT NULL,
+  base_amount DOUBLE PRECISION NOT NULL,
+  fingerprint_cents INTEGER NOT NULL,
+  exact_amount DOUBLE PRECISION NOT NULL,
+  currency TEXT DEFAULT 'EGP',
+  payer_user_id INTEGER DEFAULT NULL,
+  guest_token TEXT DEFAULT '',
+  payee TEXT NOT NULL DEFAULT 'owner',
+  payee_user_id INTEGER DEFAULT NULL,
+  status TEXT DEFAULT 'open',
+  transfer_ref TEXT DEFAULT '',
+  receipt_hash TEXT DEFAULT '',
+  receipt_attempts INTEGER DEFAULT 0,
+  receipt_locked INTEGER DEFAULT 0,
+  fraud_flag INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT DEFAULT 0,
+  decided_by INTEGER DEFAULT NULL,
+  decided_at BIGINT DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_money_ob_open_exact ON money_obligations(payee, exact_amount) WHERE status IN ('open','claimed');
+CREATE INDEX IF NOT EXISTS idx_money_ob_booking ON money_obligations(booking_id, kind);
+CREATE INDEX IF NOT EXISTS idx_money_ob_user ON money_obligations(user_id, kind, status);
+CREATE TABLE IF NOT EXISTS money_ledger (
+  id SERIAL PRIMARY KEY,
+  obligation_id INTEGER NOT NULL,
+  from_status TEXT DEFAULT '',
+  to_status TEXT NOT NULL,
+  actor TEXT DEFAULT 'system',
+  note TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_money_ledger_ob ON money_ledger(obligation_id, id);
+CREATE TABLE IF NOT EXISTS money_receipts (
+  id SERIAL PRIMARY KEY,
+  obligation_id INTEGER NOT NULL,
+  uploader_user_id INTEGER DEFAULT NULL,
+  guest_token TEXT DEFAULT '',
+  image TEXT NOT NULL,
+  image_hash TEXT NOT NULL UNIQUE,
+  extracted_amount DOUBLE PRECISION DEFAULT NULL,
+  extracted_recipient TEXT DEFAULT '',
+  extracted_ref TEXT DEFAULT '',
+  extracted_date BIGINT DEFAULT 0,
+  verdict TEXT DEFAULT 'review',
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_money_receipts_ob ON money_receipts(obligation_id, id);
 `;
 
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
@@ -402,6 +512,7 @@ const ID_TABLES = new Set([
   'users', 'shop_requests', 'campaigns', 'campaign_applications', 'bookings',
   'payments', 'disputes', 'reviews', 'notifications', 'profile_views',
   'portfolio_items', 'support_messages', 'messages', 'star_subscriptions',
+  'money_obligations', 'money_ledger', 'money_receipts',
 ]);
 
 function toPgSql(sql) {

@@ -14,8 +14,11 @@ const PORT = process.env.PORT || 3000;
 const COMMISSION_RATE = 0.10;
 const COMMISSION_PHONE = process.env.COMMISSION_PHONE || ''; // server-side only — من متغير البيئة فقط، بلا أي قيمة افتراضية في الكود
 const FEE_REVIEW_WINDOW_MS = 24 * 3600 * 1000;   // نافذة رفض المالك لمرجع عمولة خاطئ: ٢٤ ساعة (قرار المالك)
-const RECEIPT_AUTO_CONFIRM_MS = 24 * 3600 * 1000; // صمت العميل بعد إثبات سليم = تأكيد استلام تلقائي بعد ٢٤ ساعة
-const RECEIPT_WARN_MS = 12 * 3600 * 1000;         // تنبيه العميل عند انقضاء ١٢ ساعة من الإثبات (قبل التأكيد التلقائي)
+/* نموذج إفراج باينانس (قرار المستخدم النهائي 2026-11-23): لا تأكيد استلام
+   تلقائياً بالوقت أبداً — المحتجَز لا يتحرك إلا بتأكيد العميل نفسه (إفراج
+   فوري)، أو بقرار مراجعة موثّق من المالك. سكوت العميل بعد إثبات سليم يفتح
+   للمقدم «طلب مراجعة الإفراج» بعد ٣ ساعات من تسليم الإثبات. */
+const APPEAL_AFTER_MS = 3 * 3600 * 1000; // طلب مراجعة الإفراج متاح بعد ٣ ساعات من إثبات سليم بلا تأكيد عميل
 
 /* ---------------- باقة «نجم Deal» — إعدادات واحدة من الخادم ----------------
    السعر والمدة والعملة ثابتة هنا فقط (قابلة للتعديل لاحقاً من مكان واحد)،
@@ -174,7 +177,7 @@ async function myStarState(userId) {
    قاعدة الأمان الحاكمة: لا حالة فلوس تتحرك بكلمة طرف واحد — الادعاء (claimed)
    وحده لا يؤكّد؛ التأكيد يحتاج مطابقة إيصال كاملة صارمة، أو قرار المستلم/المالك،
    أو مهلة قائمة في آلة الحجز. */
-const MONEY_OB_TTL_MS = 48 * 3600 * 1000;      // عمر الالتزام المفتوح قبل انتهائه
+const MONEY_OB_TTL_MS = 24 * 3600 * 1000;      // مهلة الدفع الموحّدة (٢٤ ساعة) — عمر الالتزام المفتوح قبل انتهائه
 const RECEIPT_MAX_BYTES = 2 * 1024 * 1024;     // أقصى حجم لصورة الإيصال
 const RECEIPT_MAX_ATTEMPTS = 5;                // بعدها يُقفل الرفع على الالتزام
 const RECEIPT_DATE_WINDOW_MS = 48 * 3600 * 1000; // حداثة تاريخ الإيصال المطلوبة
@@ -250,6 +253,7 @@ function obligationView(ob) {
     code: ob.code, kind: ob.kind, booking_id: ob.booking_id,
     base_amount: ob.base_amount, exact_amount: mround(ob.exact_amount),
     currency: ob.currency, status: ob.status, payee: ob.payee,
+    created_at: ob.created_at, expires_at: ob.expires_at,
     receipt_locked: !!ob.receipt_locked,
   };
 }
@@ -448,8 +452,9 @@ async function ambassadorView(appt) {
    قرار المالك الملزم: الـ٤٥٪ الأخيرة لا تذهب للمقدم مباشرة — العميل يحوّلها
    إلى رقم Deal فتُحتجَز هناك (التزام booking_final بمستلم owner بنفس المرجع
    المالي الموحد: كود DL + مبلغ ببصمة + تأكيد تلقائي بالإيصال)، ولا تُفرَج
-   للمقدم إلا بعد تأكيد الاستلام (يدوياً، أو تلقائياً بصمت العميل ٢٤ ساعة من
-   إثبات سليم مع تنبيه عند ١٢ ساعة). فعل المالك اليدوي الوحيد في الدورة كلها:
+   للمقدم إلا بعد تأكيد الاستلام من العميل نفسه (نموذج باينانس: لا تأكيد
+   تلقائياً بالوقت أبداً — وسكوت العميل يفتح للمقدم طلب مراجعة بعد ٣ ساعات
+   يحسمه المالك من الأدلة: إفراج أو رد). فعل المالك اليدوي الوحيد في الدورة كلها:
    تنفيذ تحويلة الإفراج من محفظته وتسجيل مرجعها بضغطة. حالات الاحتجاز على
    الحجز نفسه (bookings.escrow_status): '' لم تبدأ | awaiting_transfer بانتظار
    تحويل العميل | awaiting_confirmation التحويلة عند المالك للتحقق | held
@@ -537,6 +542,7 @@ async function buildEvidenceBundle(b) {
   const finalOb = await finalObligation(b.id);
   const ledger = finalOb ? await db.prepare('SELECT from_status,to_status,actor,note,created_at FROM money_ledger WHERE obligation_id=? ORDER BY id ASC').all(finalOb.id) : [];
   const dispute = await db.prepare('SELECT id,opened_by,reason,status,created_at FROM disputes WHERE booking_id=? ORDER BY id DESC LIMIT 1').get(b.id);
+  const appeals = await db.prepare('SELECT id,status,client_note,created_at,decided_at,decision FROM release_appeals WHERE booking_id=? ORDER BY id ASC').all(b.id);
   const chat = await db.prepare('SELECT sender,body,created_at FROM guest_messages WHERE booking_id=? ORDER BY created_at ASC, id ASC').all(b.id);
   const fmt = (ts) => (ts ? new Date(ts).toISOString() : null);
   const amounts = bookingLegAmounts(b);
@@ -545,7 +551,7 @@ async function buildEvidenceBundle(b) {
     generated_at: fmt(now()),
     booking: { id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status, source: b.source, created_at: fmt(b.created_at), completed_at: fmt(b.completed_at) },
     parties: {
-      client: client ? { id: client.id, name: client.name } : { guest_name: b.guest_name || '', guest_phone: b.guest_phone || '' },
+      client: client ? { id: client.id, name: client.name } : { guest_name: b.guest_name || '' },
       talent: talent ? { id: talent.id, name: talent.name, role: talent.role, niche: talent.niche, city: talent.city } : null,
     },
     amounts: { fee: amounts.fee, deposit: amounts.deposit, final: amounts.rest, net_to_talent: b.price - amounts.fee },
@@ -553,7 +559,8 @@ async function buildEvidenceBundle(b) {
       { step: 'booking_created', at: fmt(b.created_at) },
       ...(b.fee_confirmed_at ? [{ step: 'fee_confirmed', at: fmt(b.fee_confirmed_at), ref: b.fee_ref }] : []),
       ...(b.proof_at ? [{ step: 'proof_submitted_verified', at: fmt(b.proof_at), url: b.proof_url, check: b.proof_check }] : []),
-      ...(b.receipt_confirmed_at ? [{ step: b.receipt_auto ? 'receipt_auto_confirmed_24h' : 'receipt_confirmed_by_client', at: fmt(b.receipt_confirmed_at) }] : []),
+      ...(b.receipt_confirmed_at ? [{ step: appeals.some((x) => x.status === 'decided_release') ? 'receipt_confirmed_by_owner_appeal_decision' : 'receipt_confirmed_by_client', at: fmt(b.receipt_confirmed_at) }] : []),
+      ...appeals.map((x) => ({ step: `release_appeal_${x.status}`, at: fmt(x.decided_at || x.created_at), appeal_id: x.id })),
       ...(b.escrow_released_at ? [{ step: 'escrow_released_to_talent', at: fmt(b.escrow_released_at), ref: b.escrow_released_ref }] : []),
     ],
     payments: pays.map((p) => ({ kind: p.kind, amount: p.amount, ref: p.ref, status: p.status, at: fmt(p.created_at) })),
@@ -561,6 +568,7 @@ async function buildEvidenceBundle(b) {
     escrow: { status: b.escrow_status || '', final_obligation_code: finalOb ? finalOb.code : null, ledger: ledger.map((e) => ({ from: e.from_status, to: e.to_status, actor: e.actor, note: e.note, at: fmt(e.created_at) })) },
     proof: b.proof_url ? { url: b.proof_url, server_timestamp: fmt(b.proof_at), check: b.proof_check } : null,
     dispute: dispute ? { id: dispute.id, reason: dispute.reason, status: dispute.status, opened_at: fmt(dispute.created_at) } : null,
+    appeals: appeals.map((x) => ({ id: x.id, status: x.status, client_note: x.client_note || '', created_at: fmt(x.created_at), decided_at: fmt(x.decided_at), decision: x.decision || '' })),
     chat: chat.map((m) => ({ sender: m.sender, body: m.body, at: fmt(m.created_at) })),
     statement: 'هذه الحزمة مُولَّدة آلياً من سجلات منصة Deal المختومة بوقت الخادم، وتثبت أن العمل المنشور على رابط الإثبات نُفّذ ضمن حجز مدفوع المراحل على المنصة — صالحة للاستخدام في بلاغات حقوق النشر لدى المنصات.',
   };
@@ -770,14 +778,36 @@ async function syncBadges(userId) {
 async function applyPenalties(userId) {
   if (!userId || !(await getUser(userId))) return; // ضيف بلا حساب — لا عقوبات
   const neg = (await db.prepare(`SELECT COUNT(*) c FROM reviews WHERE reviewee_id=? AND sentiment='negative'`).get(userId)).c;
+  const frauds = (await db.prepare(`SELECT COUNT(*) c FROM money_obligations WHERE payer_user_id=? AND fraud_flag=1`).get(userId)).c;
   const u = await getUser(userId);
   let level = 'none';
-  if (neg >= 5) level = 'suspended'; else if (neg >= 3) level = 'warning';
+  if (neg >= 5 || frauds >= 2) level = 'suspended'; else if (neg >= 3 || frauds >= 1) level = 'warning';
   if (level !== u.penalty_level && !u.banned) {
     const frozen = level === 'suspended' ? 1 : u.frozen;
     await db.prepare('UPDATE users SET penalty_level=?, frozen=? WHERE id=?').run(level, frozen, userId);
     if (level === 'warning') await notify(userId, 'penalty', 'تنبيه: تراكمت لديك 3 تقييمات سلبية', '');
     if (level === 'suspended') await notify(userId, 'penalty', 'تم تعليق حسابك وتجميد رصيدك داخل المنصة بسبب 5 تقييمات سلبية', '');
+  }
+}
+
+/* صرامة باينانس: إعلان «حوّلت» كاذب (مطالبة بلا تحويل فعلي — يثبت بمطابقة
+   الإيصال/المرجع آلياً أو بقرار رفض المالك) يدخل سلم العقوبات المتدرج القائم
+   نفسه: أول مرة تنبيه رسمي، والثانية تعليق وتجميد، والحظر النهائي قرار
+   المالك من لوحته (احتيال) كما هو قائم. العدد يُحتسب من الالتزامات الموسومة
+   بعلم الاحتيال للمستخدم نفسه — فلا سجل موازٍ جديد، وكل خطوة في money_ledger. */
+async function applyFraudPenalty(userId) {
+  if (!userId) return; // ضيف بلا حساب — الرفض الموثّق يكفي
+  const u = await getUser(userId);
+  if (!u || u.banned) return;
+  const n = (await db.prepare(`SELECT COUNT(*) c FROM money_obligations WHERE payer_user_id=? AND fraud_flag=1`).get(userId)).c;
+  if (n >= 2 && u.penalty_level !== 'suspended') {
+    await db.prepare('UPDATE users SET penalty_level=?, frozen=1 WHERE id=?').run('suspended', userId);
+    await notify(userId, 'penalty', 'تم تعليق حسابك وتجميد رصيدك داخل المنصة: تكرار إعلانات دفع كاذبة (مطالبات بلا تحويل فعلي) — تواصل مع الدعم لو فيه خطأ', '');
+    await notifyOwner('penalty', `⛔ تعليق تلقائي بسلم العقوبات: المستخدم #${userId} كرر إعلان دفع كاذب (${n} مرات)`, `user:${userId}`);
+  } else if (n >= 1 && u.penalty_level === 'none') {
+    await db.prepare('UPDATE users SET penalty_level=? WHERE id=?').run('warning', userId);
+    await notify(userId, 'penalty', 'تنبيه رسمي: سُجّل عليك إعلان دفع كاذب (مطالبة بلا تحويل فعلي). تكراره يعلّق حسابك ويجمّد رصيدك داخل المنصة، والاحتيال يؤدي للحظر', '');
+    await notifyOwner('penalty', `⚠️ تنبيه بسلم العقوبات: المستخدم #${userId} أعلن دفعاً كاذباً (أول مرة)`, `user:${userId}`);
   }
 }
 
@@ -1053,7 +1083,7 @@ app.post('/api/me/availability', auth, async (req, res) => {
   res.json({ ok: true, available_today: !!avail, daily_capacity: cap });
 });
 app.get('/api/me/tasks', auth, async (req, res) => {
-  await sweepAutoConfirm();
+  await sweepStepExpiry();
   const u = req.user;
   const rows = await db.prepare(`SELECT * FROM bookings WHERE talent_id=? AND status NOT IN ('cancelled','completed') ORDER BY created_at DESC`).all(u.id);
   const items = [];
@@ -1621,6 +1651,36 @@ app.post('/api/verify/check', auth, async (req, res) => {
 });
 
 /* ---------------- bookings (commission-first P2P) ---------------- */
+/* حالة الطلب الصريحة بنظام باينانس P2P — تُشتق من حالة الحجز والاحتجاز فقط،
+   فلا توجد حالة موازية مخزّنة قد تنحرف عن الحقيقة:
+   awaiting_payment ← paid_awaiting_confirmation ← confirmed_awaiting_release
+   ← completed، وفرعيتان: cancelled وunder_arbitration. */
+function orderStateFor(b) {
+  if (b.status === 'cancelled') return 'cancelled';
+  if (b.status === 'disputed') return 'under_arbitration';
+  if (b.status === 'proof_submitted') return 'paid_awaiting_confirmation';
+  if (b.status === 'awaiting_rest') return 'confirmed_awaiting_release';
+  if (b.status === 'completed') return b.escrow_status === 'ready_release' ? 'confirmed_awaiting_release' : 'completed';
+  return 'awaiting_payment'; // pending_agreement / awaiting_fee / awaiting_deposit / in_progress
+}
+/* إلغاء تلقائي نظيف بنظام باينانس وبصرامته: مهلة الدفع ٢٤ ساعة حاسمة — بلا
+   تمديد وبلا استثناءات. انتهاؤها بلا أي إعلان دفع → يُلغى الطلب في تلك الخطوة
+   نهائياً ويُختم الالتزام «منتهياً» في السجل — لا مبلغ يتحرك إطلاقاً. أما لو
+   وُجد إعلان دفع/مطالبة (الالتزام «مُدّعى» أو أبعد) فلا إلغاء تلقائياً أبداً:
+   المسار تأكيد أو تحكيم. هذا الإلغاء ليس «تأكيداً تلقائياً» — لا يحرّك مبلغاً. */
+const STEP_OBLIGATION_KIND = { awaiting_fee: 'booking_commission', awaiting_deposit: 'booking_deposit', awaiting_rest: 'booking_final', proof_submitted: 'booking_final' };
+async function sweepStepExpiry() {
+  const rows = await db.prepare(`SELECT * FROM bookings WHERE status IN ('awaiting_fee','awaiting_deposit','awaiting_rest','proof_submitted')`).all();
+  for (const b of rows) {
+    const ob = await db.prepare('SELECT * FROM money_obligations WHERE kind=? AND booking_id=? ORDER BY id DESC LIMIT 1').get(STEP_OBLIGATION_KIND[b.status], b.id);
+    if (!ob || ob.status !== 'open' || !ob.expires_at || ob.expires_at > now()) continue;
+    await setObligationStatus(ob, 'expired', 'system', 'انتهت مهلة الدفع (٢٤ ساعة) بلا أي إعلان دفع — إلغاء تلقائي نهائي للطلب (نظام باينانس)');
+    await db.prepare(`UPDATE bookings SET status='cancelled', escrow_status=CASE WHEN escrow_status='awaiting_transfer' THEN '' ELSE escrow_status END WHERE id=?`).run(b.id);
+    await notify(b.talent_id, 'order_cancelled', `حجز #${b.id}: اتلغى الطلب نهائياً — انتهت مهلة دفع الخطوة الحالية (٢٤ ساعة) من غير أي إعلان دفع`, `booking:${b.id}`);
+    if (b.client_id) await notify(b.client_id, 'order_cancelled', `حجز #${b.id}: اتلغى الطلب نهائياً — انتهت مهلة الدفع (٢٤ ساعة) من غير إعلان دفع. تقدر تبدأ طلباً جديداً في أي وقت`, `booking:${b.id}`);
+    await notifyOwner('order_cancelled', `حجز #${b.id}: إلغاء تلقائي نهائي بانتهاء مهلة الدفع (الالتزام ${ob.code}) — لا مبالغ تحركت`, `booking:${b.id}`);
+  }
+}
 async function getBooking(id) { return await db.prepare('SELECT * FROM bookings WHERE id=?').get(id); }
 async function bookingView(b, viewer) {
   const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
@@ -1630,11 +1690,13 @@ async function bookingView(b, viewer) {
   delete view.guest_token; // رمز وصول الضيف لا يخرج في أي رد أبداً
   delete view.escrow_prev_status; // حالة احتجاز سابقة — تفصيلة داخلية لاستعادة النزاع فقط
   view.has_dispute = !!(await db.prepare('SELECT id FROM disputes WHERE booking_id=? LIMIT 1').get(b.id));
-  // رقم واتساب الضيف يظهر للمنفّذ المسجّل فقط (للتواصل)، ولا يظهر لأي شخص آخر
-  if (!(viewer && viewer.id === b.talent_id)) delete view.guest_phone;
+  view.appeal = appealView(await openAppealFor(b.id)); // طلب مراجعة إفراج قائم (نموذج باينانس) أو null
+  // رقم هاتف الضيف لا يظهر لأي صانع/مقدم خدمة — التواصل داخل المنصة فقط؛ المالك المؤسس وحده يراه
+  if (!(viewer && viewer.is_platform_founder)) delete view.guest_phone;
   return {
     ...view,
     is_guest: !!b.guest_token,
+    order_state: orderStateFor(b),
     urgent: !!b.urgent,
     fee, net, deposit: Math.round(net / 2 * 100) / 100, rest: Math.round(net / 2 * 100) / 100,
     client: b.client_id ? await publicUser(await getUser(b.client_id)) : null, talent: await publicUser(await getUser(b.talent_id)),
@@ -1652,33 +1714,20 @@ async function verifiedAlternatives(b) {
   rows.sort((a, c) => ((starSet.has(c.id) ? 1 : 0) - (starSet.has(a.id) ? 1 : 0)) || (a.id - c.id));
   return Promise.all(rows.slice(0, 3).map(u => publicUser(u)));
 }
-async function sweepAutoConfirm() {
-  const t = now();
-  /* تنبيه الـ١٢ ساعة: مرة واحدة لكل حجز (proof_warned) وللعميل المسجل فقط —
-     الضيف بلا حساب ويرى العدّاد الحي في صفحة متابعته. */
-  const warn = await db.prepare(`SELECT * FROM bookings WHERE status='proof_submitted' AND proof_check='verified' AND proof_at>0 AND proof_warned=0 AND ? - proof_at >= ? AND ? - proof_at < ?`)
-    .all(t, RECEIPT_WARN_MS, t, RECEIPT_AUTO_CONFIRM_MS);
-  for (const b of warn) {
-    await db.prepare(`UPDATE bookings SET proof_warned=1 WHERE id=?`).run(b.id);
-    await notify(b.client_id, 'booking', `حجز #${b.id}: ⏰ فاتت ١٢ ساعة على إثبات التنفيذ — لو الشغل وصلك أكّد الاستلام دلوقتي؛ لو ما أكدتش هيتأكد الاستلام تلقائياً بعد ١٢ ساعة كمان حمايةً للمنفذ`, `booking:${b.id}`);
-  }
-  /* التأكيد التلقائي بعد ٢٤ ساعة: صمت العميل = تأكيد استلام. إن كان الباقي
-     محتجَزاً أصلاً يكتمل الحجز فوراً ويصير جاهزاً للإفراج. */
-  const due = await db.prepare(`SELECT * FROM bookings WHERE status='proof_submitted' AND proof_check='verified' AND proof_at>0 AND ? - proof_at >= ?`)
-    .all(t, RECEIPT_AUTO_CONFIRM_MS);
-  for (const b of due) {
-    await db.prepare(`UPDATE bookings SET receipt_confirmed_at=?, receipt_auto=1 WHERE id=?`).run(t, b.id);
-    const fresh = await getBooking(b.id);
-    const ob = await finalObligation(b.id);
-    if (ob && ['confirmed', 'auto_confirmed'].includes(ob.status)) {
-      await syncFinalEscrow(b.id);
-    } else {
-      await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
-      if (!fresh.escrow_status) await setEscrow(fresh, 'awaiting_transfer');
-    }
-    await notify(b.client_id, 'booking', `حجز #${b.id}: تأكد الاستلام تلقائياً بعد ٢٤ ساعة من الإثبات — حوّل الباقي لـDeal عشان يتحجز ويُفرَج عنه للمنفذ`, `booking:${b.id}`);
-    await notify(b.talent_id, 'booking', `حجز #${b.id}: تأكد الاستلام تلقائياً بعد ٢٤ ساعة — الباقي في طريقه للاحتجاز عند Deal`, `booking:${b.id}`);
-  }
+/* ---------------- طلبات مراجعة الإفراج (نموذج باينانس P2P) ----------------
+   لا يوجد أي مسح زمني يؤكد الاستلام: الاستلام يتأكد من العميل نفسه فقط، أو
+   بقرار مراجعة موثّق من المالك بعد طلب المقدم. طلب المراجعة المفتوح لحجز ما
+   يُقرأ من جدوله مباشرة في كل عرض — فلا حالة مخزنة تنفصل عن الحقيقة. */
+async function openAppealFor(bookingId) {
+  return await db.prepare(`SELECT * FROM release_appeals WHERE booking_id=? AND status='open' ORDER BY id DESC LIMIT 1`).get(bookingId);
+}
+function appealView(a) {
+  if (!a) return null;
+  return { id: a.id, booking_id: a.booking_id, status: a.status, client_note: a.client_note || '', created_at: a.created_at, decided_at: a.decided_at || 0, decision: a.decision || '' };
+}
+/* إغلاق أي طلب مراجعة مفتوح على الحجز بسبب حدث حاسم (تأكيد عميل/فتح نزاع). */
+async function closeOpenAppeal(bookingId, status) {
+  await db.prepare(`UPDATE release_appeals SET status=? WHERE booking_id=? AND status='open'`).run(status, bookingId);
 }
 
 app.post('/api/bookings', auth, async (req, res) => {
@@ -1697,13 +1746,13 @@ app.post('/api/bookings', auth, async (req, res) => {
 });
 
 app.get('/api/bookings', auth, async (req, res) => {
-  await sweepAutoConfirm();
+  await sweepStepExpiry();
   const rows = await db.prepare('SELECT * FROM bookings WHERE client_id=? OR talent_id=? ORDER BY created_at DESC').all(req.user.id, req.user.id);
   res.json({ items: await Promise.all(rows.map(b => bookingView(b, req.user))) });
 });
 
 app.get('/api/bookings/:id', auth, async (req, res) => {
-  await sweepAutoConfirm();
+  await sweepStepExpiry();
   const b = await getBooking(+req.params.id);
   if (!b || (b.client_id !== req.user.id && b.talent_id !== req.user.id && !req.user.is_platform_founder)) return res.status(404).json({ error: 'غير موجود' });
   res.json({ booking: await bookingView(b, req.user) });
@@ -1757,6 +1806,14 @@ async function applyClientPayment(b, kind, ref) {
 async function applyConfirmReceipt(b) {
   if (b.status !== 'proof_submitted') return { error: 'لا يوجد إثبات بانتظار التأكيد' };
   await db.prepare(`UPDATE bookings SET receipt_confirmed_at=?, receipt_auto=0 WHERE id=?`).run(now(), b.id);
+  /* تأكيد العميل أثناء مراجعة قائمة: الحجز يكمل مساره الطبيعي فوراً وطلب
+     المراجعة يُغلق تلقائياً (لم يعد له موضوع) ويُعلَم المالك. */
+  const openAp = await openAppealFor(b.id);
+  if (openAp) {
+    await closeOpenAppeal(b.id, 'closed_confirmed');
+    await notifyOwner('appeal_closed', `✅ حجز #${b.id}: العميل أكد الاستلام بنفسه — أُغلق طلب مراجعة الإفراج #${openAp.id} تلقائياً`, `booking:${b.id}`);
+    await notify(b.talent_id, 'appeal', `حجز #${b.id}: العميل أكد الاستلام — أُغلق طلب المراجعة بتاعك تلقائياً`, `booking:${b.id}`);
+  }
   const ob = await finalObligation(b.id);
   if (ob && ['confirmed', 'auto_confirmed'].includes(ob.status)) {
     // الباقي محتجَز أصلاً + الاستلام تأكد الآن = اكتمال فوري وجاهزية إفراج.
@@ -1844,17 +1901,15 @@ app.post('/api/bookings/:id/confirm-receipt', auth, async (req, res) => {
   res.json({ booking: await bookingView(r.booking, req.user) });
 });
 
-app.post('/api/bookings/:id/dispute', auth, async (req, res) => {
-  const { reason = '' } = req.body || {};
-  const b = await getBooking(+req.params.id);
-  if (!b || (b.client_id !== req.user.id && b.talent_id !== req.user.id)) return res.status(403).json({ error: 'لست طرفاً' });
-  /* النزاع مفتوح في كل المراحل النشطة — وعلى الحجز المكتمل أيضاً ما دام باقيه
-     محتجَزاً عند Deal ولم يُفرَج عنه بعد (هذه لحظة حماية الاحتجاز الحقيقية)؛
-     بعد الإفراج/الرد تنتهي سلطة المنصة على المال فيُقفل باب النزاع. */
+/* فتح نزاع — آلة مشتركة بين العميل العضو والعميل الضيف (من صفحة رمزه):
+   تجميد فوري للمحتجَز + حزمة أدلة + إغلاق أي طلب مراجعة إفراج قائم لصالح
+   مسار النزاع (المراجعة تُعلَّق/تُغلق والنزاع هو المسار الحاكم). */
+async function applyOpenDispute(b, openedBy, reason) {
   const escrowDisputable = b.status === 'completed' && b.escrow_status === 'ready_release';
-  if (['cancelled', 'disputed'].includes(b.status) || (b.status === 'completed' && !escrowDisputable)) return res.status(400).json({ error: 'لا يمكن فتح نزاع الآن' });
-  const info = await db.prepare('INSERT INTO disputes (booking_id,opened_by,reason,created_at) VALUES (?,?,?,?)').run(b.id, req.user.id, reason, now());
+  if (['cancelled', 'disputed'].includes(b.status) || (b.status === 'completed' && !escrowDisputable)) return { error: 'لا يمكن فتح نزاع الآن' };
+  const info = await db.prepare('INSERT INTO disputes (booking_id,opened_by,reason,created_at) VALUES (?,?,?,?)').run(b.id, openedBy, reason, now());
   await db.prepare(`UPDATE bookings SET prev_status=status, status='disputed' WHERE id=?`).run(b.id);
+  await closeOpenAppeal(b.id, 'closed_dispute');
   /* المبلغ المحتجَز عند Deal يتجمد فوراً مع النزاع (لا إفراج ولا رد حتى قرار
      المالك)، و«حزمة الأدلة» تُولَّد تلقائياً من سجل الحجز وتُحفظ مع النزاع. */
   let nb = await getBooking(b.id);
@@ -1871,7 +1926,61 @@ app.post('/api/bookings/:id/dispute', auth, async (req, res) => {
   const founder = await db.prepare('SELECT id FROM users WHERE is_platform_founder=1').get();
   if (founder) await notify(founder.id, 'dispute', `نزاع جديد على حجز #${b.id}`, `booking:${b.id}`);
   if (froze) await notifyOwner('escrow_frozen', `🧊 نزاع على حجز #${b.id}: المبلغ المحتجَز عند Deal اتجمّد فوراً لحد قرارك (إفراج للمنفذ أو رد للعميل من قسم «مبالغ محتجزة»)`, `booking:${b.id}`);
-  res.json({ dispute_id: info.lastInsertRowid, alternatives: await verifiedAlternatives(b) });
+  return { dispute_id: info.lastInsertRowid, alternatives: await verifiedAlternatives(b) };
+}
+
+app.post('/api/bookings/:id/dispute', auth, async (req, res) => {
+  const { reason = '' } = req.body || {};
+  const b = await getBooking(+req.params.id);
+  if (!b || (b.client_id !== req.user.id && b.talent_id !== req.user.id)) return res.status(403).json({ error: 'لست طرفاً' });
+  /* النزاع مفتوح في كل المراحل النشطة — وعلى الحجز المكتمل أيضاً ما دام باقيه
+     محتجَزاً عند Deal ولم يُفرَج عنه بعد (هذه لحظة حماية الاحتجاز الحقيقية)؛
+     بعد الإفراج/الرد تنتهي سلطة المنصة على المال فيُقفل باب النزاع. */
+  const r = await applyOpenDispute(b, req.user.id, reason);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+
+/* ---------------- طلب مراجعة الإفراج (نموذج باينانس) ----------------
+   المقدم يطلب، والعميل يُنبَّه فوراً ويقدر قبل قرار المالك: يؤكد الاستلام
+   (اكتمال طبيعي فوري + إغلاق المراجعة)، أو يفتح نزاعاً (تجميد فوري + إغلاق
+   المراجعة لصالح النزاع)، أو يرد بملاحظة تظهر للمالك داخل المراجعة. قرار
+   المالك نهائي داخل المنصة وموثّق: «إفراج» = تأكيد استلام موثّق بقرار
+   مراجعة يُسجَّل في money_ledger برقم المراجعة، و«رد» = مسار رد المحتجَز. */
+app.post('/api/bookings/:id/appeal', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b || b.talent_id !== req.user.id) return res.status(403).json({ error: 'طلب المراجعة من المنفذ صاحب الحجز فقط' });
+  if (b.status !== 'proof_submitted' || b.proof_check !== 'verified' || !(b.proof_at > 0)) return res.status(400).json({ error: 'طلب المراجعة يحتاج إثبات تنفيذ مُسلَّماً وصحيحاً وعميلاً لم يؤكد الاستلام بعد' });
+  if (await db.prepare('SELECT id FROM disputes WHERE booking_id=? AND status=? LIMIT 1').get(b.id, 'open')) return res.status(400).json({ error: 'يوجد نزاع مفتوح على الحجز — المراجعة متوقفة لمسار النزاع' });
+  if (await openAppealFor(b.id)) return res.status(400).json({ error: 'عندك طلب مراجعة قائم على الحجز ده — بانتظار قرار المالك' });
+  const waited = now() - b.proof_at;
+  if (waited < APPEAL_AFTER_MS) {
+    const leftMin = Math.ceil((APPEAL_AFTER_MS - waited) / 60000);
+    return res.status(400).json({ error: `طلب المراجعة يفتح بعد ٣ ساعات من تسليم الإثبات — باقي ${leftMin} دقيقة`, appeal_in_ms: APPEAL_AFTER_MS - waited });
+  }
+  const info = await db.prepare('INSERT INTO release_appeals (booking_id,talent_id,created_at) VALUES (?,?,?)').run(b.id, req.user.id, now());
+  const appeal = await db.prepare('SELECT * FROM release_appeals WHERE id=?').get(info.lastInsertRowid);
+  if (b.client_id) await notify(b.client_id, 'appeal', `حجز #${b.id}: ⚖️ المنفذ طلب مراجعة إفراج الباقي المحتجَز — لو الشغل وصلك أكد الاستلام دلوقتي فيُفرَج فوراً، ولو عندك اعتراض افتح نزاعاً أو سيب ملاحظة للمالك من صفحة الحجز`, `booking:${b.id}`);
+  await notifyOwner('appeal', `⚖️ طلب مراجعة إفراج #${appeal.id} على حجز #${b.id} — راجع حزمة الأدلة واحسم: إفراج للمنفذ أو رد للعميل`, `booking:${b.id}`);
+  res.json({ appeal: appealView(appeal), booking: await bookingView(await getBooking(b.id), req.user) });
+});
+
+/* ملاحظة العميل داخل طلب مراجعة قائم — مشتركة بين العضو والضيف. */
+async function applyAppealNote(b, note) {
+  const ap = await openAppealFor(b.id);
+  if (!ap) return { error: 'لا يوجد طلب مراجعة قائم على الحجز' };
+  const txt = String(note || '').trim().slice(0, 1000);
+  if (!txt) return { error: 'اكتب ملاحظتك أولاً' };
+  await db.prepare('UPDATE release_appeals SET client_note=? WHERE id=?').run(txt, ap.id);
+  await notifyOwner('appeal_note', `💬 حجز #${b.id}: العميل سيب ملاحظة في طلب مراجعة الإفراج #${ap.id} — شوفها من لوحتك قبل القرار`, `booking:${b.id}`);
+  return { appeal: appealView(await db.prepare('SELECT * FROM release_appeals WHERE id=?').get(ap.id)) };
+}
+app.post('/api/bookings/:id/appeal-note', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b || b.client_id !== req.user.id) return res.status(403).json({ error: 'الملاحظة من عميل الحجز فقط' });
+  const r = await applyAppealNote(b, (req.body || {}).note);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json(r);
 });
 
 /* ---------------- reviews ---------------- */
@@ -1902,13 +2011,14 @@ app.post('/api/requests', auth, async (req, res) => {
   res.json({ id: info.lastInsertRowid });
 });
 app.get('/api/requests', async (req, res) => {
-  // رقم واتساب الضيف يظهر للمسجلين فقط — الزائر العام لا يراه أبداً
+  // رقم هاتف الضيف لا يظهر لأي صانع/مقدم خدمة (التواصل داخل المنصة فقط) — المالك المؤسس وحده يراه
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   const s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
+  const sUser = s ? await db.prepare('SELECT * FROM users WHERE id=?').get(s.user_id) : null;
   const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, r.country, r.urgent, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' AND r.target_talent_id IS NULL ORDER BY r.urgent DESC, r.created_at DESC`).all();
   const items = rows.map(r => {
     const it = { ...r, is_guest: !!r.is_guest, urgent: !!r.urgent };
-    if (!s) delete it.guest_phone;
+    if (!(sUser && sUser.is_platform_founder)) delete it.guest_phone;
     return it;
   });
   res.json({ items });
@@ -1928,7 +2038,7 @@ app.get('/api/opportunities', auth, async (req, res) => {
   // العامة ولا في فرص غيره — ويُقدَّم له بمطابقة كاملة وسبب صريح.
   const reqs = (await db.prepare(`SELECT * FROM shop_requests WHERE status='open' AND (target_talent_id IS NULL OR target_talent_id=?)`).all(req.user.id))
     .map(r => {
-      const { guest_token, ...rest } = r;
+      const { guest_token, guest_phone, ...rest } = r;
       const targeted = r.target_talent_id === req.user.id;
       const it = { kind: 'request', ...rest, is_guest: !!r.is_guest, targeted, ...matchScore(req.user, r) };
       if (targeted) { it.score = 100; it.reasons = ['طلب موجّه ليك مباشرة', ...it.reasons.filter((x) => x !== 'الميزانية مناسبة')]; }
@@ -1997,7 +2107,7 @@ app.post('/api/guest-requests', async (req, res) => {
   if (!city || !String(city).trim()) return res.status(400).json({ error: 'المدينة مطلوبة' });
   if (!niche || !String(niche).trim()) return res.status(400).json({ error: 'نوع الإعلان / المجال مطلوب' });
   if (budget == null || budget === '' || !isFinite(+budget) || +budget < 0) return res.status(400).json({ error: 'ميزانية تقريبية صحيحة مطلوبة' });
-  if (!details || !String(details).trim()) return res.status(400).json({ error: 'اوصف الشغلانة المطلوبة' });
+  if (!details || !String(details).trim()) return res.status(400).json({ error: 'اوصف الخدمة المطلوبة' });
   // استهداف اختياري: الطلب يوجَّه لصانع/مقدم خدمة بعينه — يُتحقق أنه موجود فعلاً
   // وأنه عضو قابل للطلب (صانع أو مقدم خدمة، غير محظور)، والمؤسس مرفوض صراحة
   // لأنه حساب عرض فقط لا يقبل طلبات إطلاقاً.
@@ -2075,6 +2185,7 @@ async function guestBookingView(b) {
   const myReview = await db.prepare('SELECT * FROM reviews WHERE booking_id=? AND reviewer_id IS NULL').get(b.id);
   return {
     id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status,
+    order_state: orderStateFor(b),
     fee_status: b.fee_status, agreed_client: !!b.agreed_client, agreed_talent: !!b.agreed_talent,
     fee, net, deposit: half, rest: half,
     proof_url: b.proof_url, proof_check: b.proof_check, proof_at: b.proof_at || 0, created_at: b.created_at,
@@ -2083,6 +2194,7 @@ async function guestBookingView(b) {
     chat_unread: (await db.prepare(`SELECT COUNT(*) c FROM guest_messages WHERE booking_id=? AND sender='talent' AND is_read=0`).get(b.id)).c,
     escrow_status: b.escrow_status || '', escrow_released_ref: b.escrow_released_ref || '',
     escrow_released_at: b.escrow_released_at || 0, escrow_release_seen: b.escrow_release_seen || '',
+    appeal: appealView(await openAppealFor(b.id)),
     has_dispute: !!(await db.prepare('SELECT id FROM disputes WHERE booking_id=? LIMIT 1').get(b.id)),
     talent: await publicUser(await getUser(b.talent_id)),
     reviewed: !!myReview,
@@ -2090,7 +2202,7 @@ async function guestBookingView(b) {
 }
 
 app.get('/api/guest/:token', async (req, res) => {
-  await sweepAutoConfirm();
+  await sweepStepExpiry();
   const bk = await guestBookingByToken(req.params.token);
   if (bk) return res.json({ type: 'booking', booking: await guestBookingView(bk) });
   const rq = await db.prepare('SELECT id,title,niche,city,budget,currency,details,status,created_at FROM shop_requests WHERE guest_token=? AND is_guest=1').get(req.params.token);
@@ -2158,6 +2270,25 @@ app.post('/api/guest/:token/confirm-receipt', async (req, res) => {
   const r = await applyConfirmReceipt(b);
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ booking: await guestBookingView(r.booking) });
+});
+
+/* نزاع الضيف من صفحة رمزه — نفس آلة النزاع المشتركة (تجميد فوري + حزمة
+   أدلة + إغلاق أي طلب مراجعة قائم لصالح النزاع). opened_by=0 لأنه بلا حساب. */
+app.post('/api/guest/:token/dispute', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  const r = await applyOpenDispute(b, 0, String((req.body || {}).reason || ''));
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ...r, booking: await guestBookingView(await getBooking(b.id)) });
+});
+
+/* ملاحظة الضيف داخل طلب مراجعة قائم — من صفحة رمزه، تظهر للمالك في المراجعة. */
+app.post('/api/guest/:token/appeal-note', async (req, res) => {
+  const b = await guestBookingByToken(req.params.token);
+  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
+  const r = await applyAppealNote(b, (req.body || {}).note);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ...r, booking: await guestBookingView(await getBooking(b.id)) });
 });
 
 app.post('/api/guest/:token/review', async (req, res) => {
@@ -2239,7 +2370,7 @@ app.get('/api/bookings/:id/guest-messages', auth, async (req, res) => {
   if (b.talent_id === req.user.id) {
     await db.prepare(`UPDATE guest_messages SET is_read=1 WHERE booking_id=? AND sender='guest' AND is_read=0`).run(b.id);
   }
-  res.json({ items: await guestChatItems(b.id), booking_id: b.id, guest_name: b.guest_name || '', guest_phone: b.talent_id === req.user.id ? (b.guest_phone || '') : '' });
+  res.json({ items: await guestChatItems(b.id), booking_id: b.id, guest_name: b.guest_name || '', guest_phone: '' });
 });
 app.post('/api/bookings/:id/guest-messages', auth, async (req, res) => {
   const b = await getBooking(+req.params.id);
@@ -2319,8 +2450,8 @@ app.post('/api/notifications/read', auth, async (req, res) => {
 const SUPPORT_KB = [
   { id: 'what', q_ar: 'ما هو Deal وكيف يعمل؟', q_en: 'What is Deal and how does it work?',
     keys: ['ما هو', 'ازاي بيشتغل', 'كيف يعمل', 'يعني ايه', 'what is deal', 'how does it work', 'how it works', 'about deal'],
-    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل ينشر شغلانة أو يحجز صانعاً مباشرة، والدفع يتم على مراحل بحماية «ضمان Deal»: عمولة أولاً، ثم عربون للصانع، والدفعة الأخيرة تُحتجَز عند Deal ولا تُفرَج للصانع إلا بعد تأكيد الاستلام — وكل خطوة موثّقة بسجل رسمي.',
-    a_en: 'Deal — the platform for all content creators: creators register a profile (niche, city, price), clients post a job or book a creator directly, and payment happens in protected stages under the Deal Guarantee: fee first, then a deposit to the creator, and the final instalment is held by Deal and released to the creator only after receipt is confirmed — every step documented in an official ledger.' },
+    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل يطلب خدمة أو يحجز صانعاً مباشرة، والدفع يتم على مراحل بحماية «ضمان Deal»: عمولة أولاً، ثم عربون للصانع، والدفعة الأخيرة تُحتجَز عند Deal ولا تُفرَج للصانع إلا بعد تأكيد الاستلام — وكل خطوة موثّقة بسجل رسمي.',
+    a_en: 'Deal — the platform for all content creators: creators register a profile (niche, city, price), clients request a service or book a creator directly, and payment happens in protected stages under the Deal Guarantee: fee first, then a deposit to the creator, and the final instalment is held by Deal and released to the creator only after receipt is confirmed — every step documented in an official ledger.' },
   { id: 'register', q_ar: 'كيف أسجّل كصانع محتوى؟', q_en: 'How do I register as a creator?',
     keys: ['تسجيل', 'اسجل', 'حساب جديد', 'انشاء حساب', 'register', 'sign up', 'create account', 'join as creator'],
     a_ar: 'من زر «دخول / تسجيل» اختر «صانع محتوى» واملأ الاسم والمجال والمدينة وعدد المتابعين وسعرك ووسيلة تواصل واحدة (رقم هاتف أو إيميل) — التسجيل مجاني ووسيلة التواصل هي وسيلة دخولك بعد ذلك.',
@@ -2329,22 +2460,22 @@ const SUPPORT_KB = [
     keys: ['مرتين', 'حسابين', 'ملفين', 'مسجلة من قبل', 'تسجيل مكرر', 'two accounts', 'register twice', 'duplicate', 'already registered'],
     a_ar: 'كل شخص له حساب واحد فقط على Deal — وسيلة التواصل الواحدة = ملف واحد، حتى تبقى التقييمات والسمعة مرتبطة بشخص حقيقي واحد ولا تتشتت. لو سجلت من قبل، استخدم «دخول» بنفس الرقم أو الإيميل (بأي صيغة: +20 أو 0 — النظام يوحّدها).',
     a_en: 'Each person gets exactly one Deal account — one contact = one profile, so ratings and reputation stay tied to a single real person. If you registered before, just log in with the same number or email (any format: +20 or 0 — the system normalizes it).' },
-  { id: 'guest_post', q_ar: 'كيف أنشر شغلانة كعميل دون تسجيل؟', q_en: 'How do I post a job as a client without registering?',
-    keys: ['ضيف', 'دون تسجيل', 'بدون تسجيل', 'بدون حساب', 'انشر شغلانة', 'نشر طلب', 'عندي محل', 'guest', 'without registering', 'without account', 'post a job', 'post job'],
-    a_ar: 'من زر «📣 انشر شغلانة» في الواجهة: اكتب اسم نشاطك ورقم واتسابك والمدينة ونوع الإعلان والميزانية ووصف الشغلانة — بدون أي حساب. طلبك يظهر للصناع فوراً ويتواصلون معك واتساب، وستحصل على رابط متابعة خاص تكمل منه خطوات الحجز والدفع والتقييم.',
-    a_en: 'Use the "📣 Post a job" button on the home page: enter your business name, WhatsApp number, city, ad type, budget and a description — no account needed. Creators see your request instantly and contact you on WhatsApp, and you get a private follow-up link to complete booking, payment and rating steps.' },
+  { id: 'guest_post', q_ar: 'كيف أطلب خدمة كعميل دون تسجيل؟', q_en: 'How do I request a service as a client without registering?',
+    keys: ['ضيف', 'دون تسجيل', 'بدون تسجيل', 'بدون حساب', 'طلب خدمة', 'اطلب خدمة', 'نشر طلب', 'عندي محل', 'guest', 'without registering', 'without account', 'request a service', 'request service'],
+    a_ar: 'من زر «📣 طلب خدمة» في الواجهة: اكتب اسم نشاطك ورقم هاتفك والمدينة ونوع الإعلان والميزانية ووصف الخدمة — بدون أي حساب. طلبك يظهر للصناع فوراً، والتواصل مع مقدم الخدمة يتم داخل Deal من صفحة متابعة طلبك (محادثة الطلب)، وستحصل على رابط متابعة خاص تكمل منه خطوات الحجز والدفع والتقييم.',
+    a_en: 'Use the "📣 Request a service" button on the home page: enter your business name, phone number, city, ad type, budget and a description — no account needed. Providers see your request instantly, and all communication with the provider happens inside Deal from your request follow-up page (the order chat); you also get a private follow-up link to complete booking, payment and rating steps.' },
   { id: 'fee_why', q_ar: 'ما هي عمولة Deal ولماذا تُدفع أولاً؟', q_en: 'What is the Deal fee and why is it paid first?',
     keys: ['عمولة', 'ليه العمولة', 'لماذا العمولة', '10%', '١٠', 'fee', 'commission', 'why fee first', '10 percent'],
-    a_ar: 'عمولة Deal هي 10% من قيمة الشغلانة، وتُدفع أولاً قبل أي مبلغ للصانع: بها يتأكد جدية الحجز ويُفتح باقي خطوات الدفع المحمي، وهي مصدر تشغيل المنصة وخدمة الضمان والتوثيق. العميل يدفع السعر المعلن بالضبط — العمولة جزء منه وتُخصم من حصة الصانع (صافي الصانع 90%).',
-    a_en: 'The Deal fee is 10% of the job value, paid first before any money reaches the creator: it confirms the booking is serious and unlocks the protected payment stages, and it funds the platform, guarantee and verification services. The client pays exactly the listed price — the fee is part of it and comes out of the creator\'s share (the creator nets 90%).' },
+    a_ar: 'عمولة Deal هي 10% من قيمة الطلب، وتُدفع أولاً قبل أي مبلغ للصانع: بها يتأكد جدية الحجز ويُفتح باقي خطوات الدفع المحمي، وهي مصدر تشغيل المنصة وخدمة الضمان والتوثيق. العميل يدفع السعر المعلن بالضبط — العمولة جزء منه وتُخصم من حصة الصانع (صافي الصانع 90%).',
+    a_en: 'The Deal fee is 10% of the order value, paid first before any money reaches the creator: it confirms the booking is serious and unlocks the protected payment stages, and it funds the platform, guarantee and verification services. The client pays exactly the listed price — the fee is part of it and comes out of the creator\'s share (the creator nets 90%).' },
   { id: 'fee_how', q_ar: 'كيف أدفع العمولة؟', q_en: 'How do I pay the fee?',
     keys: ['ادفع العمولة ازاي', 'كيف ادفع', 'فودافون كاش', 'انستاباي', 'مرجع التحويل', 'رقم التحويلة', 'how to pay', 'vodafone cash', 'instapay', 'transfer reference', 'payment reference'],
     a_ar: 'داخل خطوة «عمولة Deal أولاً» في حجزك اضغط «إظهار حساب عمولات Deal» وسيظهر رقم حساب العمولات (يظهر فقط للعميل الدافع وداخل هذه الخطوة فقط). حوّل مبلغ العمولة إليه من محفظتك (فودافون كاش أو إنستاباي)، ثم اكتب مرجع عملية التحويل في الحجز واضغط تأكيد — التأكيد تلقائي.',
     a_en: 'Inside the "Deal fee first" step of your booking, tap "Show Deal fee account" — the fee account number appears only to the paying client and only at this step. Transfer the fee amount from your wallet (Vodafone Cash or InstaPay), then enter the transfer reference in the booking and confirm — confirmation is automatic.' },
   { id: 'stages', q_ar: 'كيف يتم الدفع على مراحل (45/45)؟', q_en: 'How does the staged payment (45/45) work?',
     keys: ['مراحل', '45', '٤٥', 'عربون', 'الباقي', 'دفعتين', 'staged', 'deposit', 'stages', 'two payments', 'installments'],
-    a_ar: 'بعد العمولة (10%)، يدفع العميل 45% من السعر عربوناً للصانع مباشرة فيبدأ التنفيذ، وبعد إثبات التنفيذ يحوّل العميل الـ45% الأخيرة إلى Deal حيث تُحتجَز بأمان، ولا تُفرَج للصانع إلا بعد تأكيد الاستلام (أو التأكيد التلقائي بعد 24 ساعة) — فيصل للصانع صافيه كاملاً (90%): العميل لا يخسر باقيه قبل ما يستلم، والصانع ضامن باقيه بعد ما يسلّم.',
-    a_en: 'After the 10% fee, the client pays 45% of the price directly to the creator as a deposit so work starts, and after proof of delivery the client transfers the final 45% to Deal where it is held safely — released to the creator only after receipt is confirmed (or auto-confirmed after 24 hours) — so the creator receives the full net (90%): the client never loses the rest before delivery, and the creator\'s rest is guaranteed after delivery.' },
+    a_ar: 'بعد العمولة (10%)، يدفع العميل 45% من السعر عربوناً للصانع مباشرة فيبدأ التنفيذ، وبعد إثبات التنفيذ يحوّل العميل الـ45% الأخيرة إلى Deal حيث تُحتجَز بأمان، ولا تُفرَج للصانع إلا بعد تأكيد العميل للاستلام — ولا يوجد أي تأكيد تلقائي: لو سكت العميل بعد إثبات سليم يقدر الصانع طلب تحكيم بعد ٣ ساعات من الإثبات فتحسم Deal من الأدلة (إفراج أو رد) — فيصل للصانع صافيه كاملاً (90%): العميل لا يخسر باقيه قبل ما يستلم، والصانع ضامن باقيه بعد ما يسلّم.',
+    a_en: 'After the 10% fee, the client pays 45% of the price directly to the creator as a deposit so work starts, and after proof of delivery the client transfers the final 45% to Deal where it is held safely — released to the creator only after the client confirms receipt — there is no auto-confirmation: if the client stays silent after a valid proof, the creator can request arbitration 3 hours after the proof and Deal decides from the evidence (release or refund) — so the creator receives the full net (90%): the client never loses the rest before delivery, and the creator\'s rest is guaranteed after delivery.' },
   { id: 'guarantee', q_ar: 'ما هو ضمان Deal؟', q_en: 'What is the Deal Guarantee?',
     keys: ['ضمان', 'حماية', 'امان', 'أمان', 'guarantee', 'protection', 'safe', 'trust'],
     a_ar: '«حجز محمي بضمان Deal» يعني: دفع مرحلي موثّق داخل الحجز، عمولة مؤكدة أولاً، إثبات تنفيذ تتحقق منه المنصة ويُختم بوقته، احتجاز الدفعة الأخيرة عند Deal فلا تُفرَج إلا بعد تأكيد الاستلام، إمكانية فتح نزاع يجمّد الحجز والمبلغ المحتجَز فوراً حتى تراجعه الإدارة (إفراج للمنفذ أو رد للعميل)، وعند إخلال المنفذ تقترح المنصة بدائل موثّقة من نفس مدينتك ومجالك.',
@@ -2357,10 +2488,10 @@ const SUPPORT_KB = [
     keys: ['اثبات', 'إثبات', 'رابط العمل', 'proof', 'delivery proof', 'published work link'],
     a_ar: 'بعد التنفيذ يرسل الصانع رابط العمل المنشور علناً (الفيديو/المنشور) داخل الحجز؛ المنصة تتحقق آلياً أن الرابط يعمل وعلني ويختمه بوقت الإرسال. الدفعة الأخيرة لا تُفتح إلا بإثبات سليم، والإثبات يُحفظ تلقائياً في معرض أعمال الصانع.',
     a_en: 'After delivery, the creator submits the publicly published work link inside the booking; the platform automatically verifies the link is live and public and timestamps it. The final payment only unlocks with a valid proof, and the proof is automatically saved to the creator\'s portfolio.' },
-  { id: 'auto_confirm', q_ar: 'ما هو التأكيد التلقائي بعد 24 ساعة؟', q_en: 'What is the 24-hour auto-confirmation?',
-    keys: ['24', '٢٤', 'تأكيد تلقائي', 'التأكيد التلقائي', 'سكوت', 'ما رديتش', 'auto confirm', '24 hours', 'automatic confirmation', 'no response'],
-    a_ar: 'لو قدّم الصانع إثبات تنفيذ سليماً ولم يؤكد العميل الاستلام يدوياً خلال 24 ساعة من الإثبات، يؤكَّد الاستلام تلقائياً (وبيوصلك تنبيه عند 12 ساعة) — حمايةً للصانع من التأخير، وحق العميل في النزاع يبقى قائماً عند وجود مشكلة حقيقية ما دام الباقي محتجَزاً عند Deal.',
-    a_en: 'If the creator submits a valid proof of delivery and the client does not manually confirm receipt within 24 hours of the proof, receipt is auto-confirmed (you get a warning at 12 hours) — protecting the creator from delays, while the client\'s right to dispute a real problem remains as long as the rest is still held by Deal.' },
+  { id: 'auto_confirm', q_ar: 'ماذا يحدث لو لم يؤكد العميل الاستلام؟', q_en: 'What happens if the client does not confirm receipt?',
+    keys: ['تأكيد تلقائي', 'التأكيد التلقائي', 'طلب مراجعة', 'مراجعة الإفراج', 'طلب تحكيم', 'تحكيم', 'لم يؤكد', 'ما اكدش', 'سكوت', 'ما رديتش', 'auto confirm', 'automatic confirmation', 'appeal', 'arbitration', 'release review', 'no response', 'did not confirm'],
+    a_ar: 'لا يوجد تأكيد تلقائي في Deal أبداً — المحتجَز لا يتحرك إلا بتأكيد العميل نفسه للاستلام (ويُفرَج فوراً وقتها). لو العميل ساكت بعد إثبات تنفيذ سليم، يقدر الصانع بعد ٣ ساعات من تسليم الإثبات يضغط «طلب تحكيم» داخل الحجز: يُنبَّه العميل فوراً، ويقدر قبل قرار المالك أن يؤكد الاستلام بنفسه (فيكتمل الحجز فوراً) أو يفتح نزاعاً (فيتجمّد كل شيء) أو يترك ملاحظة تصل للمالك. المالك يراجع حزمة الأدلة (الإثبات + محادثة الطلب + السجل) ويقرر: إفراج للمقدم كتأكيد استلام موثّق، أو رد للعميل — والقرار نهائي ومسجّل في سجل الأموال.',
+    a_en: 'There is never any auto-confirmation in Deal — held money moves only when the client confirms receipt (with instant release at that moment). If the client stays silent after a valid proof of delivery, the creator can, 3 hours after submitting the proof, tap "Request arbitration" inside the booking: the client is notified instantly, and before the owner decides the client can confirm receipt personally (completing the booking at once), open a dispute (freezing everything), or leave a note for the owner. The owner reviews the evidence bundle (proof + order chat + ledger) and decides: release to the provider as a documented receipt confirmation, or refund to the client — the decision is final and recorded in the money ledger.' },
   { id: 'reviews', q_ar: 'متى أستطيع تقييم الطرف الآخر؟', q_en: 'When can I rate the other side?',
     keys: ['تقييم', 'نجوم', 'رأيي', 'review', 'rating', 'rate', 'stars'],
     a_ar: 'التقييم يفتح فقط بعد «اكتمال القبض» (انتهاء كل مراحل الدفع)، مرة واحدة لكل طرف ولكل حجز، ولا يمكن تعديله بعد إرساله — هكذا تبقى التقييمات مرتبطة بصفقات حقيقية مكتملة فعلاً.',
@@ -2375,8 +2506,8 @@ const SUPPORT_KB = [
     a_en: 'The first 100 creators to register on Deal receive a permanent "Founding Member" badge on their profile — an early distinction that is not granted once the first hundred is complete.' },
   { id: 'disputes', q_ar: 'كيف أفتح نزاعاً على حجز؟', q_en: 'How do I open a dispute on a booking?',
     keys: ['نزاع', 'مشكلة في حجز', 'اشتكي', 'شكوى', 'dispute', 'complaint', 'problem with booking'],
-    a_ar: 'من داخل الحجز اضغط «فتح نزاع» واكتب السبب: يتجمّد الحجز فوراً في مرحلته الحالية (لا دفعات جديدة)، ولو فيه مبلغ محتجَز عند Deal بيتجمّد معاه فوراً لحد قرار الإدارة (إفراج للمنفذ أو رد للعميل)، وبتتولّد «حزمة أدلة» تلقائياً من سجل الحجز تقدر تستخدمها في بلاغات حقوق النشر على المنصات. ثم يُحل النزاع إما بإرجاع الحجز لمساره أو إلغائه — وكل ذلك موثّق داخل الحجز نفسه.',
-    a_en: 'From inside the booking, tap "Open dispute" and state the reason: the booking freezes immediately at its current stage (no new payments), and any amount held by Deal freezes with it instantly until the admin decides (release to the creator or refund to the client), and an "evidence bundle" is auto-generated from the booking record for use in platform copyright reports. The dispute is then resolved either by restoring the booking to its track or cancelling it — all documented inside the booking itself.' },
+    a_ar: 'من داخل الحجز اضغط «فتح نزاع» واكتب السبب: يتجمّد الحجز فوراً في مرحلته الحالية (لا دفعات جديدة)، ولو فيه مبلغ محتجَز عند Deal بيتجمّد معاه فوراً لحد قرار الإدارة (إفراج للمنفذ أو رد للعميل)، وبتتولّد «حزمة أدلة» تلقائياً من سجل الحجز تقدر تستخدمها في بلاغات حقوق النشر على المنصات. ثم يُحل النزاع إما بإرجاع الحجز لمساره أو إلغائه — وكل ذلك موثّق داخل الحجز نفسه. تنبيه مهم: محادثة الطلب داخل Deal هي قناة الأدلة الوحيدة — أي اتفاق خارجها لا يُقبل دليلاً في التحكيم.',
+    a_en: 'From inside the booking, tap "Open dispute" and state the reason: the booking freezes immediately at its current stage (no new payments), and any amount held by Deal freezes with it instantly until the admin decides (release to the creator or refund to the client), and an "evidence bundle" is auto-generated from the booking record for use in platform copyright reports. The dispute is then resolved either by restoring the booking to its track or cancelling it — all documented inside the booking itself. Important: the in-app order chat is the only evidence channel — agreements made outside it are not accepted as arbitration evidence.' },
   { id: 'penalties', q_ar: 'ما هي العقوبات والتجميد؟', q_en: 'What are the penalties and freezing rules?',
     keys: ['عقوبات', 'تجميد', 'تعليق', 'حظر', 'تقييمات سلبية', 'penalties', 'penalty', 'frozen', 'suspended', 'banned', 'negative reviews'],
     a_ar: 'العقوبات متدرجة وتلقائية من التقييمات السلبية: عند 3 تقييمات سلبية تنبيه رسمي، وعند 5 يُعلَّق الحساب ويُجمَّد رصيده داخل المنصة ولا يستقبل حجوزات جديدة، والاحتيال يؤدي للحظر بعد مراجعة الإدارة. أموالك في محفظتك الخارجية لا تستطيع المنصة تجميدها — التجميد داخل نظام Deal فقط.',
@@ -2407,12 +2538,12 @@ const SUPPORT_KB = [
     a_en: 'The "Deal Star" package (EGP 199 for 30 days) is built to grow and distinguish you: a gold badge and frame in the market, ranking priority and first recommendation to clients, your shot at "Star of the Week" with a shareable card, monthly "growth fuel" with your own stats and content ideas for your niche, and priority support. Subscribe from the package page in the menu: transfer the amount to the Deal fee account, enter the transfer reference and accept the terms — the package activates only after the owner confirms the money actually arrived, and your 30 days start at that moment with an activation message.' },
   { id: 'campaigns', q_ar: 'ما هي الحملات وكيف أقدّم عليها؟', q_en: 'What are campaigns and how do I apply?',
     keys: ['حملات', 'حملة', 'اقدم على', 'براند', 'campaign', 'campaigns', 'apply', 'brand'],
-    a_ar: 'الحملات شغلانات تنشرها البراندات من قسم «الحملات» ببريف وميزانية: الصانع يقدّم عليها من بطاقتها، وإذا قبل البراند تقديمه يُفتح حجز عادي تلقائياً بنفس حماية Deal ومراحل دفعها.',
-    a_en: 'Campaigns are jobs posted by brands in the "Campaigns" section with a brief and budget: creators apply from the campaign card, and if the brand accepts, a normal booking opens automatically with the same Deal protection and payment stages.' },
+    a_ar: 'الحملات طلبات خدمة تنشرها البراندات من قسم «الحملات» ببريف وميزانية: الصانع يقدّم عليها من بطاقتها، وإذا قبل البراند تقديمه يُفتح حجز عادي تلقائياً بنفس حماية Deal ومراحل دفعها.',
+    a_en: 'Campaigns are service requests posted by brands in the "Campaigns" section with a brief and budget: creators apply from the campaign card, and if the brand accepts, a normal booking opens automatically with the same Deal protection and payment stages.' },
   { id: 'countries', q_ar: 'هل Deal متاح في بلدي؟ ما هي الدول المتاحة؟', q_en: 'Is Deal available in my country? Which countries are supported?',
     keys: ['الدول المتاحه', 'دول متاحه', 'متاح في بلدي', 'في بلدي', 'بلدي متاح', 'دول عربية', 'available countries', 'which countries', 'supported countries', 'my country'],
-    a_ar: 'Deal متاح الآن في 19 دولة عربية: مصر، السعودية، الإمارات، الكويت، قطر، الأردن، المغرب، البحرين، عُمان، العراق، الجزائر، تونس، لبنان، فلسطين، ليبيا، السودان، اليمن، سوريا، وموريتانيا. اختر دولتك عند التسجيل (أو في نموذج «انشر شغلانة» كضيف) وسيظهر سعرك بعملة بلدك، ورقم هاتفك يُتحقق منه بقاعدة بلدك، والدفع المحلي عندك هو وسيلة التحويل المعروفة في بلدك (مثل فودافون كاش/إنستاباي في مصر، وSTC Pay/مدى في السعودية، وCliQ في الأردن).',
-    a_en: 'Deal is now available in 19 Arab countries: Egypt, Saudi Arabia, UAE, Kuwait, Qatar, Jordan, Morocco, Bahrain, Oman, Iraq, Algeria, Tunisia, Lebanon, Palestine, Libya, Sudan, Yemen, Syria and Mauritania. Pick your country when you register (or in the guest "Post a job" form) and your price shows in your country\'s currency, your phone is validated by your country\'s rules, and payments use your local method (e.g. Vodafone Cash/InstaPay in Egypt, STC Pay/mada in Saudi Arabia, CliQ in Jordan).' },
+    a_ar: 'Deal متاح الآن في 19 دولة عربية: مصر، السعودية، الإمارات، الكويت، قطر، الأردن، المغرب، البحرين، عُمان، العراق، الجزائر، تونس، لبنان، فلسطين، ليبيا، السودان، اليمن، سوريا، وموريتانيا. اختر دولتك عند التسجيل (أو في نموذج «طلب خدمة» كضيف) وسيظهر سعرك بعملة بلدك، ورقم هاتفك يُتحقق منه بقاعدة بلدك، والدفع المحلي عندك هو وسيلة التحويل المعروفة في بلدك (مثل فودافون كاش/إنستاباي في مصر، وSTC Pay/مدى في السعودية، وCliQ في الأردن).',
+    a_en: 'Deal is now available in 19 Arab countries: Egypt, Saudi Arabia, UAE, Kuwait, Qatar, Jordan, Morocco, Bahrain, Oman, Iraq, Algeria, Tunisia, Lebanon, Palestine, Libya, Sudan, Yemen, Syria and Mauritania. Pick your country when you register (or in the guest "Request a service" form) and your price shows in your country\'s currency, your phone is validated by your country\'s rules, and payments use your local method (e.g. Vodafone Cash/InstaPay in Egypt, STC Pay/mada in Saudi Arabia, CliQ in Jordan).' },
 ];
 function normSupportText(s) {
   return String(s || '').toLowerCase()
@@ -2877,6 +3008,7 @@ app.post('/api/money/verify-receipt', async (req, res) => {
   if (dupImage || dupRef) {
     await setObligationStatus(ob, ob.status, asUser ? 'user' : 'guest', `اشتباه احتيال: ${dupImage ? 'صورة إيصال مكررة' : 'مرجع تحويلة مستخدم من قبل'}`, { fraud_flag: 1 });
     await notifyOwner('money_fraud', `🚨 اشتباه احتيال على معاملة ${ob.code}: ${dupImage ? 'نفس صورة الإيصال قُدّمت من قبل' : 'مرجع تحويلة مستخدم في معاملة أخرى'}`, `money:${ob.code}`);
+    if (ob.payer_user_id) await applyFraudPenalty(ob.payer_user_id);
     return res.status(409).json({ error: 'الإيصال أو مرجع التحويلة مستخدم من قبل — تم إبلاغ الإدارة وستُراجع المعاملة يدوياً', fraud: true });
   }
   // حفظ الإيصال (صورته للمالك فقط عند المراجعة) ثم تقييم القواعد الصارمة.
@@ -2976,7 +3108,12 @@ app.post('/api/owner/money/:id/reject', auth, ownerOnly, async (req, res) => {
   if (!ob) return res.status(404).json({ error: 'معاملة غير موجودة' });
   if (!['open', 'claimed'].includes(ob.status)) return res.status(400).json({ error: 'هذه المعاملة تم البت فيها' });
   const reason = String((req.body || {}).reason || 'التحويلة لم تصل فعلياً').slice(0, 300);
-  ob = await setObligationStatus(ob, 'rejected', 'owner', `رفض المالك: ${reason}`, { decided_by: req.user.id, decided_at: now() });
+  /* رفض مطالبة قائمة (الدافع أعلن «حوّلت» والمالك قرر أن التحويل لم يصل فعلاً)
+     = إعلان دفع كاذب مثبت بمراجعة المالك: يُوسم بعلم الاحتيال ويُسجَّل في
+     السجل ويدخل سلم العقوبات المتدرج القائم. رفض التزام بلا مطالبة ليس احتيالاً. */
+  const falseClaim = ob.status === 'claimed';
+  ob = await setObligationStatus(ob, 'rejected', 'owner', `رفض المالك: ${reason}${falseClaim ? ' — إعلان دفع كاذب موثّق بمراجعة المالك' : ''}`, { decided_by: req.user.id, decided_at: now(), ...(falseClaim ? { fraud_flag: 1 } : {}) });
+  if (falseClaim) await applyFraudPenalty(ob.payer_user_id);
   if (ob.kind === 'star_subscription') {
     const sub = await db.prepare(`SELECT * FROM star_subscriptions WHERE obligation_id=? AND status='pending' ORDER BY id DESC LIMIT 1`).get(ob.id);
     if (sub) {
@@ -3086,6 +3223,85 @@ app.post('/api/owner/escrow/:bookingId/refund', auth, ownerOnly, async (req, res
   if (b.client_id) await notify(b.client_id, 'escrow', `حجز #${b.id}: اترد لك الباقي المحتجَز ${rest} ${b.currency} — راجع محفظتك`, `booking:${b.id}`);
   res.json({ ok: true, item: await escrowItemView(await getBooking(b.id)) });
 });
+/* ---------------- لوحة المالك: طلبات مراجعة الإفراج (نموذج باينانس) ----------------
+   كل طلب مفتوح بحجزه وأطرافه وإثباته وملاحظة العميل إن وجدت، وحزمة الأدلة
+   جاهزة من نفس مسارها. القرار نهائي داخل المنصة ويُسجَّل في سجل المراجعة
+   (لا يُحذف) وفي money_ledger برقم المراجعة، والطرفان يُنبَّهان فوراً. */
+app.get('/api/owner/appeals', auth, ownerOnly, async (req, res) => {
+  const rows = await db.prepare(`SELECT * FROM release_appeals WHERE status='open' ORDER BY created_at ASC`).all();
+  const items = [];
+  for (const a of rows) {
+    const b = await getBooking(a.booking_id);
+    if (!b) continue;
+    const talent = await getUser(b.talent_id);
+    const client = b.client_id ? await getUser(b.client_id) : null;
+    items.push({
+      ...appealView(a),
+      title: b.title, price: b.price, currency: b.currency,
+      amount: bookingLegAmounts(b).rest,
+      booking_status: b.status, escrow_status: b.escrow_status || '',
+      client_name: client ? client.name : (b.guest_name || 'عميل ضيف'),
+      talent_name: talent ? talent.name : '—', talent_id: b.talent_id,
+      proof_url: b.proof_url || '', proof_at: b.proof_at || 0,
+    });
+  }
+  res.json({ items });
+});
+app.post('/api/owner/appeals/:id/decide', auth, ownerOnly, async (req, res) => {
+  const a = await db.prepare('SELECT * FROM release_appeals WHERE id=?').get(+req.params.id);
+  if (!a || a.status !== 'open') return res.status(404).json({ error: 'طلب مراجعة غير قائم' });
+  const b = await getBooking(a.booking_id);
+  if (!b) return res.status(404).json({ error: 'الحجز غير موجود' });
+  const action = String((req.body || {}).action || '');
+  if (action === 'release') {
+    /* «إفراج للمقدم» = تأكيد استلام موثّق بقرار مراجعة: الحجز يمشي مسار
+       الاكتمال الطبيعي نفسه (محتجَز أصلاً → جاهز للإفراج فوراً). */
+    if (b.status !== 'proof_submitted') return res.status(400).json({ error: 'الحجز لم يعد بانتظار تأكيد الاستلام' });
+    await db.prepare(`UPDATE release_appeals SET status='decided_release', decided_at=?, decided_by=?, decision=? WHERE id=?`)
+      .run(now(), req.user.id, 'إفراج للمقدم — تأكيد استلام موثّق بقرار مراجعة من حزمة الأدلة', a.id);
+    await db.prepare(`UPDATE bookings SET receipt_confirmed_at=?, receipt_auto=0 WHERE id=?`).run(now(), b.id);
+    const ob = await finalObligation(b.id);
+    if (ob) await moneyLedger(ob.id, ob.status, ob.status, 'owner', `قرار مراجعة إفراج #${a.id}: تأكيد استلام موثّق بقرار مالك — إفراج للمقدم`);
+    const fresh = await getBooking(b.id);
+    if (ob && ['confirmed', 'auto_confirmed'].includes(ob.status)) {
+      await syncFinalEscrow(b.id);
+    } else {
+      await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
+      if (!fresh.escrow_status) await setEscrow(fresh, 'awaiting_transfer');
+    }
+    const nb = await getBooking(b.id);
+    await notify(nb.talent_id, 'appeal_decided', `حجز #${nb.id}: ⚖️ حسم المالك طلب مراجعة الإفراج #${a.id} من الأدلة: تأكيد الاستلام والإفراج — باقيك في طريقه ليك`, `booking:${nb.id}`);
+    if (nb.client_id) await notify(nb.client_id, 'appeal_decided', `حجز #${nb.id}: ⚖️ حسم المالك طلب مراجعة الإفراج #${a.id} من الأدلة: تأكيد الاستلام والإفراج للمنفذ`, `booking:${nb.id}`);
+    return res.json({ ok: true, booking: await bookingView(nb, req.user) });
+  }
+  if (action === 'refund') {
+    /* «رد للعميل» = مسار رد المحتجَز القائم نفسه حين يوجد مبلغ محتجَز فعلياً؛
+       وإن لم يكن الباقي قد احتُجز بعد يُقفل الحجز ملغياً بقرار المراجعة. */
+    await db.prepare(`UPDATE release_appeals SET status='decided_refund', decided_at=?, decided_by=?, decision=? WHERE id=?`)
+      .run(now(), req.user.id, 'رد للعميل بقرار مراجعة من حزمة الأدلة', a.id);
+    const ob = await finalObligation(b.id);
+    if (['held', 'ready_release', 'frozen_dispute'].includes(b.escrow_status)) {
+      await db.prepare(`UPDATE bookings SET escrow_status='refunded', status='cancelled' WHERE id=?`).run(b.id);
+      const pay = await restPaymentRow(b.id);
+      if (pay) await db.prepare(`UPDATE payments SET status='refunded' WHERE id=?`).run(pay.id);
+      if (ob) await moneyLedger(ob.id, ob.status, ob.status, 'owner', `قرار مراجعة إفراج #${a.id}: ردّ المالك الباقي المحتجَز للعميل من محفظته`);
+    } else {
+      await db.prepare(`UPDATE bookings SET status='cancelled' WHERE id=?`).run(b.id);
+      const pay = await restPaymentRow(b.id);
+      if (pay && pay.status === 'claimed') {
+        await db.prepare(`UPDATE payments SET status='rejected' WHERE id=?`).run(pay.id);
+        await db.prepare(`UPDATE bookings SET escrow_status='' WHERE id=?`).run(b.id);
+      }
+      if (ob) await moneyLedger(ob.id, ob.status, ob.status, 'owner', `قرار مراجعة إفراج #${a.id}: رد للعميل — لا مبلغ محتجَزاً فعلياً بعد، أُقفل الحجز ملغياً`);
+    }
+    const rest = bookingLegAmounts(b).rest;
+    await notify(b.talent_id, 'appeal_decided', `حجز #${b.id}: ⚖️ حسم المالك طلب مراجعة الإفراج #${a.id} من الأدلة: رد الباقي (${rest} ${b.currency}) للعميل — الحجز اتلغى`, `booking:${b.id}`);
+    if (b.client_id) await notify(b.client_id, 'appeal_decided', `حجز #${b.id}: ⚖️ حسم المالك طلب مراجعة الإفراج #${a.id} من الأدلة: الباقي المحتجَز بيرجع لك`, `booking:${b.id}`);
+    return res.json({ ok: true, booking: await bookingView(await getBooking(b.id), req.user) });
+  }
+  return res.status(400).json({ error: 'قرار غير صحيح — اختر إفراجاً أو رداً' });
+});
+
 /* ---------------- سفراء المدن = نقاط التحصيل المحلية (اقتراح ٤) ----------------
    تعيين المالك وحده: عضو موثّق (غير موثّق → 400)، لا مؤسس أبداً، برقم تحصيل
    محلي صالح لدولة النطاق، وسفير فعّال واحد لكل (دولة، مدينة) — تعيين بديل

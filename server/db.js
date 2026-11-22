@@ -622,6 +622,29 @@ ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS collector_phone TEXT DEFA
 ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS collector_at BIGINT DEFAULT 0;
 `;
 
+/* ترحيلات جولة «إفراج باينانس»: جدول طلبات مراجعة الإفراج (Appeals) — طلب
+   واحد مفتوح لكل حجز كحد أقصى (فهرس فريد جزئي على الحالة open)، وسجل الطلب
+   لا يُحذف أبداً: إغلاقه/قراره يُختم بحالته ووقته ومن قرّر، فيبقى القرار
+   موثّقاً أمام الطرفين. حالاته: open | closed_confirmed (أكد العميل فأُغلق
+   تلقائياً) | closed_dispute (فُتح نزاع فانتقل المسار للنزاع) |
+   decided_release (قرار مالك: تأكيد استلام موثّق وإفراج) | decided_refund
+   (قرار مالك: رد المحتجَز للعميل). */
+const BINANCE_MIGRATIONS_SQL = `
+CREATE TABLE IF NOT EXISTS release_appeals (
+  id SERIAL PRIMARY KEY,
+  booking_id INTEGER NOT NULL,
+  talent_id INTEGER NOT NULL,
+  status TEXT DEFAULT 'open',
+  client_note TEXT DEFAULT '',
+  created_at BIGINT NOT NULL,
+  decided_at BIGINT DEFAULT 0,
+  decided_by INTEGER DEFAULT NULL,
+  decision TEXT DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_appeals_one_open ON release_appeals(booking_id) WHERE status='open';
+CREATE INDEX IF NOT EXISTS idx_appeals_booking ON release_appeals(booking_id, id);
+`;
+
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
    موحّدة (0xxxxxxxxxx) مهما كانت الصيغة المدخلة (+20 / 0020 / مسافات).
    يُستخدم في التسجيل والدخول معاً حتى لا يتكرر حساب لنفس الشخص أبداً. */
@@ -645,6 +668,7 @@ function init() {
       await pool.query(MIGRATIONS_SQL);
       await pool.query(SOCIAL_MIGRATIONS_SQL);
       await pool.query(AMBASSADOR_MIGRATIONS_SQL);
+      await pool.query(BINANCE_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -670,6 +694,7 @@ const ID_TABLES = new Set([
   'portfolio_items', 'support_messages', 'messages', 'star_subscriptions',
   'friendships', 'profile_posts',
   'money_obligations', 'money_ledger', 'money_receipts', 'ambassadors',
+  'release_appeals',
 ]);
 
 function toPgSql(sql) {

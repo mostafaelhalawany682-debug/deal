@@ -69,16 +69,20 @@ async function onReferralVerified(u) {
   }
   await syncBadges(referrer.id);
 }
-/* ملخص اجتماعي آمن للقوائم (متابِعون/محادثات): هوية علنية فقط — بلا أي وسيلة تواصل. */
+/* ملخص اجتماعي آمن للقوائم (متابِعون/محادثات): هوية علنية فقط — بلا أي وسيلة تواصل.
+   ومدينة المؤسس تحديداً لا تخرج لأي أحد غيره (طلب المالك الصريح): تُحذف من
+   ملخصه في كل القوائم، بينما مدن الصناع العاديين تبقى كما هي. */
 function socialSummary(u) {
   if (!u) return null;
   const founder = !!u.is_platform_founder;
-  return {
+  const s = {
     id: u.id, name: u.name, role: u.role, niche: u.niche, city: u.city,
     avatar: founder ? '' : (u.avatar || ''),
     verified: !!u.verified, pioneer: !!u.pioneer,
     is_platform_founder: founder, is_founder_member: !!u.is_founder_member,
   };
+  if (founder) delete s.city;
+  return s;
 }
 
 async function publicUser(u, viewerId = null) {
@@ -88,7 +92,7 @@ async function publicUser(u, viewerId = null) {
   // حساب المؤسس عرض فقط: بلا سعر وبلا معرض أعمال وبلا أي وسيلة تواصل في أي رد عام.
   // (contact/phone لا يخرجان من publicUser أصلاً لأي مستخدم — والمؤسس تحديداً لا
   // يظهر سعره ولا أعماله، وسعره يُحجب حتى عن الحقول الرقمية.)
-  return {
+  const out = {
     id: u.id, name: u.name, role: u.role, niche: u.niche,
     provider_category: u.provider_category, city: u.city, country: u.country,
     currency: u.currency, followers: u.followers,
@@ -113,6 +117,11 @@ async function publicUser(u, viewerId = null) {
     followers_count: await followersCount(u.id),
     is_following: await isFollowing(viewerId, u.id),
   };
+  // مدينة المؤسس غير ظاهرة للعامة (طلب المالك الصريح): تُحذف من كل رد عام
+  // (الدليل، الملف العام، أطراف الحجوزات...) — وتبقى له وحده عندما يكون
+  // المشاهد هو نفسه، وهو ما يحدث في /api/me ولوحته وتعديل ملفه فقط.
+  if (founder && viewerId !== u.id) delete out.city;
+  return out;
 }
 
 async function portfolioOf(userId) {
@@ -151,13 +160,21 @@ const BADGE_DEFS = [
   { key: 'ambassador',name: 'سفير Deal',      color: '#7048c9' },
   { key: 'veteran',   name: 'مخضرم',          color: '#1098ad' },
 ];
-async function computeBadges(userId) {
+/* مدخلات الشارات الخام من السجلات — مصدر الحقيقة الوحيد: computeBadges يبني
+   منها قرار التحصيل، ومسار /api/me/badges-progress يبني منها أرقام التقدم،
+   فلا توجد قواعد موازية يمكن أن تختلف عن المحرك الفعلي. */
+async function badgeMetrics(userId) {
   const u = await getUser(userId);
   const s = await talentStats(userId);
   const lastProofs = await db.prepare(`SELECT proof_at, deadline FROM bookings WHERE talent_id=? AND status='completed' AND proof_at>0 ORDER BY completed_at DESC LIMIT 5`).all(userId);
-  const onTime = lastProofs.length === 5 && lastProofs.every(p => !p.deadline || p.proof_at <= p.deadline);
+  const onTimeCount = lastProofs.filter(p => !p.deadline || p.proof_at <= p.deadline).length;
   const invitedDone = await verifiedReferralCount(userId); // إحالات موثقة عبر رابط الملف — تُحتسب بعد توثيق المسجَّل
   const ageMs = now() - u.created_at;
+  return { s, lastProofs, onTimeCount, invitedDone, ageMs };
+}
+async function computeBadges(userId) {
+  const { s, lastProofs, invitedDone, ageMs } = await badgeMetrics(userId);
+  const onTime = lastProofs.length === 5 && lastProofs.every(p => !p.deadline || p.proof_at <= p.deadline);
   const defs = {
     perfect:    { earned: s.completed_deals >= 10 && s.completion_rate === 100, progress: `${Math.min(s.completed_deals,10)}/10 صفقات بإتمام 100%` },
     top_rated:  { earned: s.reviews_count >= 10 && s.positive_pct >= 95, progress: `${Math.min(s.reviews_count,10)}/10 تقييمات بإيجابية 95%+` },
@@ -490,7 +507,12 @@ app.get('/api/directory', async (req, res) => {
   if (niche) { sql += ' AND niche=?'; args.push(niche); }
   if (city) { sql += ' AND city=?'; args.push(city); }
   if (q) { sql += ' AND (name LIKE ? OR niche LIKE ? OR city LIKE ?)'; args.push(`%${q}%`, `%${q}%`, `%${q}%`); }
-  const rows = await db.prepare(sql).all(...args);
+  let rows = await db.prepare(sql).all(...args);
+  // مدينة المؤسس ليست علنية (طلب المالك): لا يجوز أن يطابقها فلتر مدينة، ولا
+  // أن يصل إليها بحث نصي عبر حقل المدينة — يبقى المؤسس قابلاً للإيجاد باسمه
+  // أو مجاله العلنيين فقط، فلا تتسرب مدينته من أي باب خلفي في الدليل.
+  if (city) rows = rows.filter((u) => !u.is_platform_founder);
+  else if (q) rows = rows.filter((u) => !u.is_platform_founder || String(u.name).includes(q) || String(u.niche || '').includes(q));
   const dealsMap = {};
   await Promise.all(rows.map(async (u) => { dealsMap[u.id] = (await talentStats(u.id)).completed_deals; }));
   const t = now();
@@ -1009,8 +1031,8 @@ app.post('/api/notifications/read', auth, async (req, res) => {
 const SUPPORT_KB = [
   { id: 'what', q_ar: 'ما هو Deal وكيف يعمل؟', q_en: 'What is Deal and how does it work?',
     keys: ['ما هو', 'ازاي بيشتغل', 'كيف يعمل', 'يعني ايه', 'what is deal', 'how does it work', 'how it works', 'about deal'],
-    a_ar: 'Deal سوق محلي يربط صناع المحتوى الصغار بمحلات وبراندات مدينتهم: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل ينشر شغلانة أو يحجز صانعاً مباشرة، والدفع يتم بين الطرفين على مراحل بحماية «ضمان Deal» — التطبيق ينظّم الخطوات ويوثّقها ولا يمسك فلوس حد.',
-    a_en: 'Deal is a local marketplace connecting small content creators with shops and brands in their city: creators register a profile (niche, city, price), clients post a job or book a creator directly, and payment happens between the two sides in protected stages under the Deal Guarantee — the app organizes and documents the steps and never holds anyone\'s money.' },
+    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل ينشر شغلانة أو يحجز صانعاً مباشرة، والدفع يتم بين الطرفين على مراحل بحماية «ضمان Deal» — التطبيق ينظّم الخطوات ويوثّقها ولا يمسك فلوس حد.',
+    a_en: 'Deal — the platform of all content creators: creators register a profile (niche, city, price), clients post a job or book a creator directly, and payment happens between the two sides in protected stages under the Deal Guarantee — the app organizes and documents the steps and never holds anyone\'s money.' },
   { id: 'register', q_ar: 'كيف أسجّل كصانع محتوى؟', q_en: 'How do I register as a creator?',
     keys: ['تسجيل', 'اسجل', 'حساب جديد', 'انشاء حساب', 'register', 'sign up', 'create account', 'join as creator'],
     a_ar: 'من زر «دخول / تسجيل» اختر «صانع محتوى» واملأ الاسم والمجال والمدينة وعدد المتابعين وسعرك ووسيلة تواصل واحدة (رقم هاتف أو إيميل) — التسجيل مجاني ووسيلة التواصل هي وسيلة دخولك بعد ذلك.',
@@ -1178,6 +1200,51 @@ app.get('/api/me/overview', auth, async (req, res) => {
     followers: await followersCount(u.id),
     verified_referrals: await verifiedReferralCount(u.id),
   });
+});
+
+/* ---------------- تقدّم الشارات: مستويات الصانع نحو كل شارة ----------------
+   لكل شارة في محرك الشارات القائم: قيمتها الحالية والهدف ونسبة التقدم وعلم
+   التحصيل — وكلها من badgeMetrics نفسها التي يقرر بها computeBadges التحصيل
+   (لا قواعد موازية). تعريف «التقدم» لكل شارة موثّق في TESTING-DESIGN-FOUNDER.md:
+   للشارات العدّية النسبة = الحالي/الهدف؛ وللشارتين ذواتَي الشرط النوعي الإضافي
+   (إتمام مثالي: نسبة إتمام 100%، الأعلى تقييماً: إيجابية 95%+) تُعرَض القيمة
+   الحالية للشرط في detail بصدق وتُحجَب النسبة عند 99 حتى يتحقق الشرطان معاً؛
+   و«مخضرم» بوابتها المزدوجة (عمر + صفقات) نسبتُها نسبةُ البوابة الأبطأ. */
+app.get('/api/me/badges-progress', auth, async (req, res) => {
+  const badges = await computeBadges(req.user.id);
+  const m = await badgeMetrics(req.user.id);
+  const s = m.s;
+  const byKey = {
+    perfect:    { current: Math.min(s.completed_deals, 10), target: 10,
+                  detail: { completed_deals: s.completed_deals, completion_rate: s.completion_rate, required_rate: 100 } },
+    top_rated:  { current: Math.min(s.reviews_count, 10), target: 10,
+                  detail: { reviews_count: s.reviews_count, positive_pct: s.positive_pct, required_positive: 95 } },
+    fast:       { current: m.onTimeCount, target: 5,
+                  detail: { proofs_considered: m.lastProofs.length, on_time: m.onTimeCount } },
+    rising:     { current: Math.min(s.completed_deals, 5), target: 5,
+                  detail: { completed_deals: s.completed_deals } },
+    ambassador: { current: Math.min(m.invitedDone, REFERRAL_AMBASSADOR_TARGET), target: REFERRAL_AMBASSADOR_TARGET,
+                  detail: { verified_referrals: m.invitedDone } },
+    veteran:    { current: Math.min(s.completed_deals, 20), target: 20,
+                  detail: { completed_deals: s.completed_deals, age_days: Math.floor(m.ageMs / (24 * 3600 * 1000)), required_age_days: 180 } },
+  };
+  const items = badges.map((b) => {
+    const d = byKey[b.key] || { current: 0, target: 0, detail: {} };
+    let pct = b.earned ? 100 : (d.target ? Math.round((100 * Math.min(d.current, d.target)) / d.target) : 0);
+    if (!b.earned) {
+      // شرط نوعي إضافي غير متحقّق رغم اكتمال العدد: النسبة لا تدّعي الاكتمال.
+      if (b.key === 'perfect' && s.completed_deals >= 10 && s.completion_rate < 100) pct = Math.min(pct, 99);
+      if (b.key === 'top_rated' && s.reviews_count >= 10 && (s.positive_pct ?? 0) < 95) pct = Math.min(pct, 99);
+      // مخضرم: النسبة هي نسبة البوابة الأبطأ (العمر أو الصفقات) — لا متوسط مختلق.
+      if (b.key === 'veteran') pct = Math.round(100 * Math.min(Math.min(m.ageMs / (180 * 24 * 3600 * 1000), 1), Math.min(s.completed_deals / 20, 1)));
+    }
+    return {
+      key: b.key, name: b.name, color: b.color, earned: b.earned,
+      current: d.current, target: d.target, remaining: Math.max(0, d.target - d.current),
+      pct, detail: d.detail,
+    };
+  });
+  res.json({ items });
 });
 
 /* ---------------- creator stats ---------------- */

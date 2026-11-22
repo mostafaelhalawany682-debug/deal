@@ -822,12 +822,36 @@ function setRoleFilter(btn,role){
   $$('#roleFilter [data-rolef]').forEach(b=>{const on=b.dataset.rolef===role;b.classList.toggle('ghost',!on);b.classList.toggle('btn',true)});
   loadMarket();
 }
+/* سياق عرض الدليل: «من أي جلسة رُسم DOM السوق/الدليل الحالي؟» — عضو أم زائر.
+   أصل تسرب المؤسس بعد الخروج: logout كان يمسح قوائم الجلسة (حجوزات/فرص/لوحة)
+   لكنه لا يمسّ DOM الدليل نفسه — فتبقى بطاقات العضو (وفيها بطاقة المؤسس، وهي
+   مشروعة في دليل العضو) وخيارات الفلاتر المبنية من جلب العضو (وفيها مجال
+   المؤسس) معروضة في وجه الزائر حتى يستقر جلب الزائر ويكتب فوقها، ولا يوجد أي
+   حارس يمنع ردّ جلبٍ بدأ كعضو وانتهى بعد الخروج من الرسم فوق عرض الزائر.
+   الإصلاح في الجذر: (1) أي تبدّل سياق (دخول/خروج) يمسح DOM الدليل كله فوراً
+   ومتزامناً قبل أي رسم (resetDirectoryDom عبر ensureDirCtx وفي logout نفسه)،
+   (2) كل مسار رسم يلتقط سياقه عند البدء ويُهمِل ردّه إن تبدّل السياق أثناء
+   الجلب — فمسار رسم الزائر لا يستخدم إلا بيانات جلب الزائر نفسه. */
+let DIR_CTX=null;
+function dirCtx(){ return ME?'member':'guest'; }
+function resetDirectoryDom(){
+  ['marketGrid','svcGrid','reqGrid','campGrid'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
+  const fn=$('#fNiche'), fc=$('#fCity'), q=$('#q');
+  if(fn)fn.innerHTML=`<option value="">${t('all_niches')}</option>`;
+  if(fc)fc.innerHTML=`<option value="">${t('all_cities')}</option>`;
+  if(q)q.value='';
+  FILTERS_READY=false; ROLE_FILTER='';
+  $$('#roleFilter [data-rolef]').forEach(b=>{const on=b.dataset.rolef==='';b.classList.toggle('ghost',!on);b.classList.toggle('btn',true)});
+}
+function ensureDirCtx(){ const c=dirCtx(); if(c!==DIR_CTX){ resetDirectoryDom(); DIR_CTX=c; } }
 async function loadFilterOptions(){
   // خيارات الفلاتر تُبنى من الدليل الكامل مرة واحدة وتُحفَظ اختيارات المستخدم —
   // (كانت تُعاد كتابتها من نتيجة الفلترة نفسها فتُمحى القيم المختارة ولا يعمل البحث).
   // فلتر «المجال/الخدمة» موحّد: مجالات الصناع + خدمات المقدمين (المفتاح للقائمة
   // والنص الحر لـ«أخرى») في قائمة واحدة بقيم/عناوين منفصلة.
+  const ctx=dirCtx();
   const d=await api('/api/directory');
+  if(ctx!==dirCtx()) return; // تبدّل السياق أثناء الجلب (خروج/دخول): ردّ سياق آخر لا تُبنى منه خيارات فلاتر هذا العرض
   const optMap=new Map();
   d.items.forEach(i=>{
     if(i.role==='provider'){ const v=i.provider_category==='other'?(i.provider_custom||''):(i.provider_category||'');
@@ -845,11 +869,13 @@ async function loadFilterOptions(){
 function skelHtml(){return Array.from({length:6},()=>`<div class="card skel"><div class="row"><div class="sk" style="width:42px;height:42px;border-radius:50%"></div><div style="flex:1"><div class="sk" style="height:12px;width:55%"></div><div class="sk" style="height:10px;width:35%;margin-top:7px"></div></div></div><div class="sk" style="height:10px;margin-top:13px"></div><div class="sk" style="height:10px;width:70%;margin-top:7px"></div></div>`).join('')}
 async function loadMarket(btn){
   const work=async()=>{
+    ensureDirCtx(); const ctx=DIR_CTX;
     const mg=$('#marketGrid');
     if(mg&&!mg.innerHTML.trim()) mg.innerHTML=skelHtml();
     if(!FILTERS_READY) await loadFilterOptions();
     const q=encodeURIComponent($('#q').value||''), n=encodeURIComponent($('#fNiche').value||''), c=encodeURIComponent($('#fCity').value||'');
     const d=await api(`/api/directory?q=${q}&niche=${n}&city=${c}${ROLE_FILTER?`&role=${ROLE_FILTER}`:''}`);
+    if(ctx!==dirCtx()) return; // ردّ متأخر من سياق سابق (عضو) لا يُرسم أبداً في عرض الزائر الحالي
     $('#marketGrid').innerHTML=d.items.length?d.items.map(talentCard).join(''):`<div class="mut">${t('empty_market')}</div>`;
     await loadRequests();
   };
@@ -870,7 +896,9 @@ async function loadServices(cat,btn){
   SVC_CAT=cat||'all';
   $$('#svcChips .svc-chip').forEach(b=>b.classList.toggle('on', b.getAttribute('onclick')===`loadServices('${SVC_CAT}',this)`));
   const work=async()=>{
+    ensureDirCtx(); const ctx=DIR_CTX;
     const d=await api('/api/directory?role=provider');
+    if(ctx!==dirCtx()) return; // نفس حراسة السياق: ردّ سياق سابق لا يُرسم في العرض الحالي
     const items=SVC_CAT==='all'?d.items:d.items.filter(i=>i.provider_category===SVC_CAT);
     $('#svcGrid').innerHTML=items.length?items.map(talentCard).join(''):`<div class="mut">${t('no_providers')}</div>`;
   };
@@ -1290,6 +1318,10 @@ function logout(){TOKEN='';ME=null;localStorage.removeItem('deal_token');
   /* مسح كامل لحالة الجلسة المحلية: القوائم المخزنة في الصفحة (حجوزات/فرص/لوحات/تنبيهات)
      وشارة الجرس — ثم إعادة رسم فورية كزائر (السوق يُجلب بلا جلسة فتختفي بطاقة المؤسس). */
   FILTERS_READY=false; MSG_UNREAD=0; THREAD_WITH=null;
+  /* مسح متزامن فوري لـDOM الدليل كله (شبكات السوق/الخدمات/الطلبات/الحملات +
+     خيارات فلاتر المجال/المدينة + البحث + فلتر النوع) قبل أي رسم لعرض الزائر —
+     فلا تظهر بطاقة المؤسس ولا خيار مجاله للزائر ولو لحظة واحدة قبل استقرار جلبه. */
+  resetDirectoryDom(); DIR_CTX=null;
   ['bookList','oppList','dashBody','ownerBody','notifBody','convList','threadMsgs'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML=''});
   closeThread();
   const bc=$('#bellCount'); if(bc){bc.textContent='0';bc.classList.add('hide')}

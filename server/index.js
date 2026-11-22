@@ -93,6 +93,8 @@ function socialSummary(u) {
   const s = {
     id: u.id, name: u.name, role: u.role, niche: u.niche, city: u.city,
     avatar: founder ? '' : (u.avatar || ''),
+    accent: founder ? '' : (u.accent || ''),
+    founder_seat: founder ? null : (u.founder_seat ?? null),
     verified: !!u.verified, pioneer: !!u.pioneer,
     is_platform_founder: founder, is_founder_member: !!u.is_founder_member,
   };
@@ -480,10 +482,41 @@ async function applyObligationEffect(ob, actor) {
   }
 }
 
+/* ---------------- تخصيص البروفايل: لوحة ألوان التمييز المنسّقة ----------------
+   ثمانية ألوان فاخرة يختار منها العضو مفتاحاً واحداً؛ اللون نفسه يُشتق من
+   المفتاح هنا وفي الواجهة من نفس القائمة، فلا لون حراً يخرج عن الهوية.
+   المؤسس مستثنى: هويته الفحمية/الذهبية ثابتة ولا لون له. */
+const ACCENTS = {
+  gold: '#c9a227', emerald: '#0e9f6e', sapphire: '#2b5fd9', ruby: '#c2255c',
+  violet: '#7048c9', teal: '#1098ad', copper: '#e8720c', rose: '#d6336c',
+};
+const ACCENT_KEYS = Object.keys(ACCENTS);
+
+/* ---------------- الصداقة (طلبات صداقة مقبولة = بوابة المراسلة) ----------------
+   حالة العلاقة بين عضوين من سجل واحد في أي اتجاه:
+   none | pending_out (أنا أرسلت) | pending_in (وصلني) | friends | declined. */
+async function friendshipRow(a, b) {
+  return await db.prepare('SELECT * FROM friendships WHERE (requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?)')
+    .get(a, b, b, a) || null;
+}
+async function friendState(viewerId, userId) {
+  if (!viewerId || viewerId === userId) return 'self';
+  const r = await friendshipRow(viewerId, userId);
+  if (!r) return 'none';
+  if (r.status === 'accepted') return 'friends';
+  if (r.status === 'pending') return r.requester_id === viewerId ? 'pending_out' : 'pending_in';
+  return 'declined';
+}
+async function areFriends(a, b) {
+  const r = await friendshipRow(a, b);
+  return !!r && r.status === 'accepted';
+}
+
 async function publicUser(u, viewerId = null) {
   if (!u) return null;
   const stats = await talentStats(u.id);
   const founder = !!u.is_platform_founder;
+  const earnedBadges = (await computeBadges(u.id)).filter(b => b.earned);
   // حساب المؤسس عرض فقط: بلا سعر وبلا معرض أعمال وبلا أي وسيلة تواصل في أي رد عام.
   // (contact/phone لا يخرجان من publicUser أصلاً لأي مستخدم — والمؤسس تحديداً لا
   // يظهر سعره ولا أعماله، وسعره يُحجب حتى عن الحقول الرقمية.)
@@ -496,6 +529,12 @@ async function publicUser(u, viewerId = null) {
     avatar: founder ? '' : (u.avatar || ''),
     is_platform_founder: founder,
     is_founder_member: !!u.is_founder_member,
+    // مقعد المؤسس المرقّم (١–١٠٠ بالأسبقية العالمية): المؤسس صاحب المنصة بلا
+    // مقعد — ختمه «مؤسس Deal» منفصل تماماً عن فئة الأعضاء المؤسسين.
+    founder_seat: founder ? null : (u.founder_seat ?? null),
+    // غلاف شخصي + لون تمييز من اللوحة المنسّقة — المؤسس بهوية ثابتة بلا كليهما.
+    cover: founder ? '' : (u.cover || ''),
+    accent: founder ? '' : (u.accent || ''),
     verified: !!u.verified, pioneer: !!u.pioneer,
     // باقة «نجم Deal»: لا تظهر إلا لاشتراك نشط فعلياً (مؤكد وغير منتهٍ) — المؤسس
     // لا يشترك أصلاً فتبقى false له دائماً. star_of_week لنجم الأسبوع الحالي وحده.
@@ -506,9 +545,15 @@ async function publicUser(u, viewerId = null) {
     member_since: u.created_at,
     completion_rate: stats.completion_rate,
     completed_deals: stats.completed_deals,
+    // عدّاد «صفقات موثقة عبر Deal»: من الحجوزات المكتملة فعلياً في السجلات فقط.
+    verified_deals: stats.completed_deals,
     positive_pct: stats.positive_pct,
     avg_stars: stats.avg_stars,
-    badges: (await computeBadges(u.id)).filter(b => b.earned).slice(0, 3).map(b => b.key),
+    badges: earnedBadges.slice(0, 3).map(b => b.key),
+    // أعلى شارة مكتسبة (أول محصّلة بترتيب تعريف الشارات) تقود لمسة البروفايل البصرية.
+    top_badge: earnedBadges.length ? { key: earnedBadges[0].key, color: earnedBadges[0].color } : null,
+    // حالة الصداقة مع المشاهد المسجل (لبناء أزرار مراسلة/صداقة صادقة في الواجهة).
+    friend_state: viewerId && viewerId !== u.id ? await friendState(viewerId, u.id) : (viewerId === u.id ? 'self' : 'none'),
     portfolio: founder ? [] : await portfolioOf(u.id),
     frozen: !!u.frozen, penalty_level: u.penalty_level,
     // متابِعو Deal (من جدول follows) — مختلف عن followers (متابعو حساباته الخارجية).
@@ -678,6 +723,16 @@ app.post('/api/auth/register', async (req, res) => {
   const info = await db.prepare(`INSERT INTO users (name,role,niche,provider_category,provider_custom,city,country,currency,contact,phone,followers,price,bio,links,is_platform_founder,is_founder_member,referred_by,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(name, role, niche, provider_category, role === 'provider' ? String(provider_custom || '').trim() : '', city, country, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, referredBy, now());
+  /* مقعد المؤسس المرقّم: يُسنَد فوراً عند التسجيل برقم = ترتيب هذا العضو بين
+     المؤهلين (صناع/مقدمون، بلا صاحب المنصة) — أول ١٠٠ فقط، والرقم لا يتغير
+     أبداً بعد إسناده (نفس قاعدة الإسناد الرجعي في ترحيلات db.js). */
+  if (!isFounder && ['creator', 'provider'].includes(role)) {
+    const newId = info.lastInsertRowid;
+    const rank = (await db.prepare(`SELECT COUNT(*) c FROM users WHERE role IN ('creator','provider') AND is_platform_founder=0 AND id<=?`).get(newId)).c;
+    if (rank >= 1 && rank <= 100) {
+      await db.prepare('UPDATE users SET founder_seat=? WHERE id=? AND founder_seat IS NULL').run(rank, newId);
+    }
+  }
   const user = await getUser(info.lastInsertRowid);
   if (referredBy) await notify(referredBy, 'referral', `سجّل ${user.name} من رابط ملفك على Deal`, `user:${user.id}`);
   res.json({ token: await makeSession(user.id), user: await publicUser(user) });
@@ -717,6 +772,7 @@ app.get('/api/me', auth, async (req, res) => {
 
 /* ---------------- ملفي الشخصي: تعديل + صورة + نماذج شورتس ---------------- */
 const AVATAR_MAX_BYTES = 200 * 1024;
+const COVER_MAX_BYTES = 400 * 1024; // الغلاف أعرض من الصورة الرمزية: حدّ أكبر بنفس خط المعالجة
 app.patch('/api/me/profile', auth, async (req, res) => {
   const b = req.body || {};
   // قائمة بيضاء صارمة: حقول الملف فقط. أي حقل امتياز (is_platform_founder،
@@ -760,6 +816,27 @@ app.patch('/api/me/profile', auth, async (req, res) => {
       if (bytes > AVATAR_MAX_BYTES) return res.status(400).json({ error: 'الصورة أكبر من 200KB — صغّرها وحاول مجدداً' });
       sets.push('avatar=?'); args.push(av);
     } else { sets.push('avatar=?'); args.push(''); }
+  }
+  /* الغلاف الشخصي + لون التمييز: المؤسس بهوية فحمية/ذهبية ثابتة — لا غلاف
+     ولا لون له إطلاقاً (نفس قاعدة منعه من الشورتس). الغلاف بنفس خط معالجة
+     الصورة الرمزية (data URL مصغّرة من العميل) بحدّ أكبر لأنه أعرض. */
+  if (b.cover !== undefined || b.accent !== undefined) {
+    if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس بهوية ثابتة — لا غلاف ولا لون تمييز' });
+  }
+  if (b.cover !== undefined) {
+    const cv = String(b.cover || '');
+    if (cv) {
+      const m = /^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\s]+)$/.exec(cv);
+      if (!m) return res.status(400).json({ error: 'غلاف غير صالح — أرسل صورة JPEG/PNG كـ data URL' });
+      const bytes = Buffer.from(m[2], 'base64').length;
+      if (bytes > COVER_MAX_BYTES) return res.status(400).json({ error: 'الغلاف أكبر من 400KB — صغّره وحاول مجدداً' });
+      sets.push('cover=?'); args.push(cv);
+    } else { sets.push('cover=?'); args.push(''); }
+  }
+  if (b.accent !== undefined) {
+    const ac = String(b.accent || '');
+    if (ac && !ACCENT_KEYS.includes(ac)) return res.status(400).json({ error: 'لون تمييز غير معروف — اختر من لوحة الألوان' });
+    sets.push('accent=?'); args.push(ac);
   }
   // لا حقول قابلة للتعديل في الطلب (مثلاً حقول امتياز متجاهَلة فقط): نعيد المستخدم
   // الحالي كما هو دون تغيير — فلا طريق أبداً لتفعيل أي امتياز عبر هذا المسار.
@@ -901,11 +978,241 @@ app.get('/api/me/social', auth, async (req, res) => {
   const me = req.user.id;
   const followerRows = await db.prepare('SELECT u.* FROM follows f JOIN users u ON u.id=f.follower_id WHERE f.followee_id=? ORDER BY f.created_at DESC').all(me);
   const followingRows = await db.prepare('SELECT u.* FROM follows f JOIN users u ON u.id=f.followee_id WHERE f.follower_id=? ORDER BY f.created_at DESC').all(me);
+  /* حالة الصداقة تُرفق بكل صف: زر المراسلة في الواجهة يظهر للأصدقاء فقط،
+     والخادم يفرض القاعدة نفسها عند الإرسال. */
+  const withFriendState = async (rows) => Promise.all(rows.map(async (x) => ({ ...socialSummary(x), friend_state: await friendState(req.user.id, x.id) })));
   res.json({
     followers_count: followerRows.length,
     following_count: followingRows.length,
-    followers: followerRows.map(socialSummary),
-    following: followingRows.map(socialSummary),
+    followers: await withFriendState(followerRows),
+    following: await withFriendState(followingRows),
+  });
+});
+
+/* ---------------- طلبات الصداقة: إرسال/قبول/رفض/إلغاء + قائمتي ----------------
+   الصداقة المقبولة هي بوابة المراسلة عضو↔عضو الوحيدة (قرار المالك). المؤسس
+   خارج الصداقة تماماً من الطرفين — طريقه الاجتماعي الوحيد هو المتابعة. */
+function friendTargetGuard(req, target) {
+  if (!target) return [404, 'غير موجود'];
+  if (target.id === req.user.id) return [400, 'لا يمكنك إرسال طلب صداقة لنفسك'];
+  if (target.is_platform_founder || req.user.is_platform_founder) {
+    return [400, 'حساب المؤسس خارج الصداقة تماماً — متابعته هي طريقه الاجتماعي الوحيد'];
+  }
+  if (target.banned || target.frozen) return [400, 'هذا الحساب غير متاح حالياً'];
+  return null;
+}
+app.post('/api/users/:id/friend-request', auth, async (req, res) => {
+  const target = await getUser(+req.params.id);
+  const guard = friendTargetGuard(req, target);
+  if (guard) return res.status(guard[0]).json({ error: guard[1] });
+  const me = req.user.id;
+  const row = await friendshipRow(me, target.id);
+  if (row && row.status === 'accepted') return res.json({ ok: true, friend_state: 'friends' });
+  if (row && row.status === 'pending' && row.requester_id === me) return res.json({ ok: true, friend_state: 'pending_out' });
+  if (row && row.status === 'pending' && row.addressee_id === me) {
+    // وصلني طلب منه أصلاً: إرسالي المضاد = قبول مباشر (لا طلبان متقاطعان).
+    await db.prepare('UPDATE friendships SET status=?, decided_at=? WHERE id=?').run('accepted', now(), row.id);
+    await notify(target.id, 'friend_accepted', `قبل ${req.user.name} طلب صداقتك — بقيتوا أصدقاء على Deal`, `user:${me}`);
+    return res.json({ ok: true, friend_state: 'friends' });
+  }
+  if (row) { // طلب مرفوض سابقاً: إعادة الإرسال مسموحة وتعيد فتح الصف كطلب جديد مني
+    await db.prepare('UPDATE friendships SET requester_id=?, addressee_id=?, status=?, created_at=?, decided_at=0 WHERE id=?')
+      .run(me, target.id, 'pending', now(), row.id);
+  } else {
+    await db.prepare('INSERT INTO friendships (requester_id,addressee_id,status,created_at) VALUES (?,?,?,?)')
+      .run(me, target.id, 'pending', now());
+  }
+  await notify(target.id, 'friend_request', `أرسل ${req.user.name} طلب صداقة إليك على Deal`, `user:${me}`);
+  res.json({ ok: true, friend_state: 'pending_out' });
+});
+app.post('/api/users/:id/friend-accept', auth, async (req, res) => {
+  const target = await getUser(+req.params.id);
+  if (!target) return res.status(404).json({ error: 'غير موجود' });
+  if (target.is_platform_founder || req.user.is_platform_founder) {
+    return res.status(400).json({ error: 'حساب المؤسس خارج الصداقة تماماً — متابعته هي طريقه الاجتماعي الوحيد' });
+  }
+  const row = await db.prepare('SELECT * FROM friendships WHERE requester_id=? AND addressee_id=? AND status=?').get(target.id, req.user.id, 'pending');
+  if (!row) return res.status(404).json({ error: 'لا يوجد طلب صداقة معلّق من هذا العضو' });
+  await db.prepare('UPDATE friendships SET status=?, decided_at=? WHERE id=?').run('accepted', now(), row.id);
+  await notify(target.id, 'friend_accepted', `قبل ${req.user.name} طلب صداقتك — بقيتوا أصدقاء على Deal`, `user:${req.user.id}`);
+  res.json({ ok: true, friend_state: 'friends' });
+});
+app.post('/api/users/:id/friend-decline', auth, async (req, res) => {
+  const target = await getUser(+req.params.id);
+  if (!target) return res.status(404).json({ error: 'غير موجود' });
+  const row = await db.prepare('SELECT * FROM friendships WHERE requester_id=? AND addressee_id=? AND status=?').get(target.id, req.user.id, 'pending');
+  if (!row) return res.status(404).json({ error: 'لا يوجد طلب صداقة معلّق من هذا العضو' });
+  await db.prepare('UPDATE friendships SET status=?, decided_at=? WHERE id=?').run('declined', now(), row.id);
+  res.json({ ok: true, friend_state: 'declined' });
+});
+async function friendRemove(req, res) {
+  const target = await getUser(+req.params.id);
+  if (!target) return res.status(404).json({ error: 'غير موجود' });
+  // إلغاء طلبي المعلّق أو إنهاء صداقة قائمة أو سحب طلب مرفوض — حذف الصف كله.
+  await db.prepare('DELETE FROM friendships WHERE (requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?)')
+    .run(req.user.id, target.id, target.id, req.user.id);
+  res.json({ ok: true, friend_state: 'none' });
+}
+app.post('/api/users/:id/friend-cancel', auth, friendRemove);
+app.delete('/api/users/:id/friend', auth, friendRemove);
+app.post('/api/users/:id/unfriend', auth, friendRemove);
+app.get('/api/me/friends', auth, async (req, res) => {
+  const me = req.user.id;
+  const accRows = await db.prepare(`SELECT u.* FROM friendships f JOIN users u ON u.id = CASE WHEN f.requester_id=? THEN f.addressee_id ELSE f.requester_id END
+    WHERE (f.requester_id=? OR f.addressee_id=?) AND f.status='accepted' ORDER BY f.decided_at DESC`).all(me, me, me);
+  const inRows = await db.prepare(`SELECT u.* FROM friendships f JOIN users u ON u.id=f.requester_id WHERE f.addressee_id=? AND f.status='pending' ORDER BY f.created_at DESC`).all(me);
+  const outRows = await db.prepare(`SELECT u.* FROM friendships f JOIN users u ON u.id=f.addressee_id WHERE f.requester_id=? AND f.status='pending' ORDER BY f.created_at DESC`).all(me);
+  res.json({
+    friends_count: accRows.length,
+    friends: accRows.map(socialSummary),
+    incoming: inRows.map(socialSummary),
+    outgoing: outRows.map(socialSummary),
+  });
+});
+
+/* ---------------- منشورات البروفايل + التفاعلات ----------------
+   منشور: نص + رابط عمل اختياري، على البروفايل العام لصاحبه. التفاعل نوعان
+   فقط (❤️/👏)، ضغطة لكل عضو لكل نوع، والإلغاء بضغطة ثانية. الزوار يقرأون
+   فقط. المؤسس عرض فقط — لا منشورات له (كقاعدة الشورتس نفسها). */
+const POST_MAX = 1000;
+const REACTION_KINDS = ['love', 'clap'];
+async function postView(p, viewerId) {
+  const counts = { love: 0, clap: 0 };
+  const rows = await db.prepare('SELECT kind, COUNT(*) c FROM post_reactions WHERE post_id=? GROUP BY kind').all(p.id);
+  for (const r of rows) counts[r.kind] = r.c;
+  let mine = [];
+  if (viewerId) {
+    mine = (await db.prepare('SELECT kind FROM post_reactions WHERE post_id=? AND user_id=?').all(p.id, viewerId)).map((r) => r.kind);
+  }
+  return {
+    id: p.id, user_id: p.user_id, body: p.body, link: p.link || '',
+    pinned: !!p.pinned, created_at: p.created_at, updated_at: p.updated_at || 0,
+    reactions: counts, my_reactions: mine,
+  };
+}
+app.get('/api/users/:id/posts', async (req, res) => {
+  const u = await getUser(+req.params.id);
+  if (!u) return res.status(404).json({ error: 'غير موجود' });
+  const viewer = await optionalViewer(req);
+  if (u.is_platform_founder && (!viewer || (viewer.id !== u.id && !canSeeFounder(viewer)))) {
+    return res.status(404).json({ error: 'غير موجود' });
+  }
+  const rows = await db.prepare('SELECT * FROM profile_posts WHERE user_id=? ORDER BY pinned DESC, created_at DESC, id DESC').all(u.id);
+  res.json({ items: await Promise.all(rows.map((p) => postView(p, viewer ? viewer.id : null))) });
+});
+app.post('/api/users/:id/posts', auth, async (req, res) => {
+  if (+req.params.id !== req.user.id) return res.status(403).json({ error: 'تنشر على بروفايلك فقط' });
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس عرض فقط — لا منشورات' });
+  const body = String((req.body || {}).body || '').trim();
+  const link = String((req.body || {}).link || '').trim();
+  if (!body) return res.status(400).json({ error: 'اكتب نص المنشور أولاً' });
+  if (body.length > POST_MAX) return res.status(400).json({ error: `المنشور أطول من الحد الأقصى (${POST_MAX} حرف)` });
+  if (link && !/^https?:\/\/\S+$/i.test(link)) return res.status(400).json({ error: 'رابط العمل غير صحيح' });
+  if (link.length > 600) return res.status(400).json({ error: 'الرابط أطول من اللازم' });
+  const info = await db.prepare('INSERT INTO profile_posts (user_id,body,link,created_at) VALUES (?,?,?,?)')
+    .run(req.user.id, body, link, now());
+  const p = await db.prepare('SELECT * FROM profile_posts WHERE id=?').get(info.lastInsertRowid);
+  res.json({ ok: true, post: await postView(p, req.user.id) });
+});
+async function ownPost(req, res) {
+  const p = await db.prepare('SELECT * FROM profile_posts WHERE id=?').get(+req.params.id);
+  if (!p) { res.status(404).json({ error: 'المنشور غير موجود' }); return null; }
+  if (p.user_id !== req.user.id) { res.status(403).json({ error: 'المنشور ليس منشورك' }); return null; }
+  return p;
+}
+app.patch('/api/posts/:id', auth, async (req, res) => {
+  const p = await ownPost(req, res); if (!p) return;
+  const body = String((req.body || {}).body ?? p.body).trim();
+  const link = String((req.body || {}).link ?? p.link ?? '').trim();
+  if (!body) return res.status(400).json({ error: 'اكتب نص المنشور أولاً' });
+  if (body.length > POST_MAX) return res.status(400).json({ error: `المنشور أطول من الحد الأقصى (${POST_MAX} حرف)` });
+  if (link && !/^https?:\/\/\S+$/i.test(link)) return res.status(400).json({ error: 'رابط العمل غير صحيح' });
+  await db.prepare('UPDATE profile_posts SET body=?, link=?, updated_at=? WHERE id=?').run(body, link, now(), p.id);
+  const fresh = await db.prepare('SELECT * FROM profile_posts WHERE id=?').get(p.id);
+  res.json({ ok: true, post: await postView(fresh, req.user.id) });
+});
+app.delete('/api/posts/:id', auth, async (req, res) => {
+  const p = await ownPost(req, res); if (!p) return;
+  await db.prepare('DELETE FROM post_reactions WHERE post_id=?').run(p.id);
+  await db.prepare('DELETE FROM profile_posts WHERE id=?').run(p.id);
+  res.json({ ok: true });
+});
+app.post('/api/posts/:id/pin', auth, async (req, res) => {
+  const p = await ownPost(req, res); if (!p) return;
+  // منشور مثبّت واحد فقط لكل بروفايل: تثبيت الجديد يفكّ القديم تلقائياً.
+  await db.prepare('UPDATE profile_posts SET pinned=0 WHERE user_id=?').run(req.user.id);
+  await db.prepare('UPDATE profile_posts SET pinned=1 WHERE id=?').run(p.id);
+  const fresh = await db.prepare('SELECT * FROM profile_posts WHERE id=?').get(p.id);
+  res.json({ ok: true, post: await postView(fresh, req.user.id) });
+});
+app.post('/api/posts/:id/unpin', auth, async (req, res) => {
+  const p = await ownPost(req, res); if (!p) return;
+  await db.prepare('UPDATE profile_posts SET pinned=0 WHERE id=?').run(p.id);
+  const fresh = await db.prepare('SELECT * FROM profile_posts WHERE id=?').get(p.id);
+  res.json({ ok: true, post: await postView(fresh, req.user.id) });
+});
+app.post('/api/posts/:id/react', auth, async (req, res) => {
+  const kind = String((req.body || {}).kind || '');
+  if (!REACTION_KINDS.includes(kind)) return res.status(400).json({ error: 'نوع تفاعل غير معروف' });
+  const p = await db.prepare('SELECT * FROM profile_posts WHERE id=?').get(+req.params.id);
+  if (!p) return res.status(404).json({ error: 'المنشور غير موجود' });
+  const me = req.user.id;
+  const existing = await db.prepare('SELECT 1 x FROM post_reactions WHERE post_id=? AND user_id=? AND kind=?').get(p.id, me, kind);
+  if (existing) {
+    await db.prepare('DELETE FROM post_reactions WHERE post_id=? AND user_id=? AND kind=?').run(p.id, me, kind);
+  } else {
+    // «أول تفاعل من كل شخص» على هذا المنشور (بأي نوع) يُشعر صاحبه — مرة واحدة فقط.
+    const anyBefore = await db.prepare('SELECT 1 x FROM post_reactions WHERE post_id=? AND user_id=?').get(p.id, me);
+    await db.prepare('INSERT INTO post_reactions (post_id,user_id,kind,created_at) VALUES (?,?,?,?)').run(p.id, me, kind, now());
+    if (!anyBefore && p.user_id !== me) {
+      await notify(p.user_id, 'post_reaction', `تفاعل ${req.user.name} مع منشورك على بروفايلك`, `post:${p.id}`);
+    }
+  }
+  res.json({ ok: true, post: await postView(p, me) });
+});
+
+/* ---------------- جدار المؤسسين: المقاعد ١–١٠٠ كما هي في السجلات ----------------
+   المشغولة بالعضو (اسم/مدينة/دولة/مجال) والشاغرة «مقعد متاح» — والفئة مغلقة
+   نهائياً عند اكتمال المئة (closed=true) ولا تُفتح ثانية أبداً. */
+app.get('/api/founders-wall', async (req, res) => {
+  const rows = await db.prepare(`SELECT * FROM users WHERE founder_seat IS NOT NULL AND founder_seat BETWEEN 1 AND 100 ORDER BY founder_seat ASC`).all();
+  const bySeat = new Map(rows.map((u) => [u.founder_seat, u]));
+  const seats = [];
+  for (let n = 1; n <= 100; n++) {
+    const u = bySeat.get(n);
+    seats.push(u ? {
+      seat: n, taken: true, user_id: u.id, name: u.name, role: u.role,
+      niche: u.niche || '', provider_category: u.provider_category || '', provider_custom: u.provider_custom || '',
+      city: u.city || '', country: u.country || '', avatar: u.avatar || '', verified: !!u.verified,
+    } : { seat: n, taken: false });
+  }
+  res.json({ seats, taken: rows.length, closed: rows.length >= 100 });
+});
+
+/* ---------------- بطاقة «صفقة موثقة عبر Deal» (#/d/<bookingId>) ----------------
+   صفحة عامة لصفقة مكتملة فقط (غير ذلك 404): قائمة بيضاء صارمة للحقول —
+   اسم الصانع ومجاله ومدينته، الاسم الأول من اسم نشاط العميل، وتاريخ الإتمام.
+   بلا مبلغ وبلا هاتف وبلا أي وسيلة تواصل إطلاقاً. */
+app.get('/api/deals/:bookingId', async (req, res) => {
+  const b = await getBooking(+req.params.bookingId);
+  if (!b || b.status !== 'completed') return res.status(404).json({ error: 'غير موجود' });
+  const talent = await getUser(b.talent_id);
+  if (!talent) return res.status(404).json({ error: 'غير موجود' });
+  let clientName = '';
+  if (b.client_id) { const c = await getUser(b.client_id); clientName = c ? c.name : ''; }
+  else clientName = b.guest_name || '';
+  const firstName = String(clientName || '').trim().split(/\s+/)[0] || '';
+  res.json({
+    booking_id: b.id,
+    verified_deal: true,
+    completed_at: b.completed_at || 0,
+    talent: {
+      id: talent.id, name: talent.name, role: talent.role,
+      niche: talent.niche || '', provider_category: talent.provider_category || '', provider_custom: talent.provider_custom || '',
+      city: talent.city || '', country: talent.country || '',
+      founder_seat: talent.founder_seat ?? null, verified: !!talent.verified,
+    },
+    client_first_name: firstName,
   });
 });
 
@@ -935,6 +1242,8 @@ app.get('/api/messages', auth, async (req, res) => {
       user: socialSummary(await getUser(c.other_id)),
       last: { body: c.last.body, created_at: c.last.created_at, mine: c.last.sender_id === me },
       unread: c.unread,
+      // محادثة مع غير صديق = للقراءة فقط (تظهر في القائمة بحالتها الصادقة).
+      can_message: await areFriends(me, c.other_id),
     });
   }
   res.json({ items, unread_total, guest_unread_total: await guestUnreadForTalent(me) });
@@ -947,8 +1256,11 @@ app.get('/api/messages/:userId', auth, async (req, res) => {
   const rows = await db.prepare(`SELECT * FROM (SELECT * FROM messages WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?)
     ORDER BY created_at DESC, id DESC LIMIT 200) recent ORDER BY created_at ASC, id ASC`)
     .all(req.user.id, other.id, other.id, req.user.id);
+  const fstate = await friendState(req.user.id, other.id);
   res.json({
     user: socialSummary(other),
+    friend_state: fstate,
+    can_message: fstate === 'friends',
     items: rows.map(m => ({ id: m.id, body: m.body, created_at: m.created_at, mine: m.sender_id === req.user.id, is_read: !!m.is_read })),
   });
 });
@@ -960,6 +1272,11 @@ app.post('/api/messages/:userId', auth, async (req, res) => {
     return res.status(400).json({ error: 'حساب المؤسس خارج المراسلة — عرضه ومتابعته فقط' });
   }
   if (other.banned || other.frozen) return res.status(400).json({ error: 'هذا الحساب غير متاح للمراسلة حالياً' });
+  /* بوابة الصداقة (قرار المالك): المراسلة عضو↔عضو للأصدقاء المقبولين فقط.
+     المحادثات القائمة مع غير أصدقاء تبقى قابلة للقراءة، والإرسال وحده يُرفض. */
+  if (!(await areFriends(req.user.id, other.id))) {
+    return res.status(403).json({ error: 'المراسلة متاحة للأصدقاء المقبولين فقط — أرسل طلب صداقة أولاً · Messaging is for accepted friends only — send a friend request first' });
+  }
   const body = String((req.body || {}).body || '').trim();
   if (!body) return res.status(400).json({ error: 'اكتب رسالة أولاً' });
   if (body.length > MSG_MAX) return res.status(400).json({ error: `الرسالة أطول من الحد الأقصى (${MSG_MAX} حرف)` });
@@ -1013,7 +1330,8 @@ const TAXONOMY = {
     { "code": "SY", "ar": "سوريا", "en": "Syria", "dial": "963", "currency": "SYP", "curAr": "ليرة", "curEn": "SYP", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^9[0-9]{8}$" },
     { "code": "MR", "ar": "موريتانيا", "en": "Mauritania", "dial": "222", "currency": "MRU", "curAr": "أوقية", "curEn": "MRU", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[234][0-9]{7}$" }
   ],
-  "link_platforms": ["facebook.com", "instagram.com", "youtube.com", "tiktok.com", "x.com", "twitter.com", "snapchat.com"]
+  "link_platforms": ["facebook.com", "instagram.com", "youtube.com", "tiktok.com", "x.com", "twitter.com", "snapchat.com"],
+  "accents": { "gold": "#c9a227", "emerald": "#0e9f6e", "sapphire": "#2b5fd9", "ruby": "#c2255c", "violet": "#7048c9", "teal": "#1098ad", "copper": "#e8720c", "rose": "#d6336c" }
 };
 const SERVICE_KEYS = TAXONOMY.services.map((s) => s.key);
 app.get('/api/taxonomy', (req, res) => res.json(TAXONOMY));

@@ -345,6 +345,35 @@ html.has-tabbar .toast{bottom:102px}
 .tava .avatar,.tava .avatar-fb{border:3px solid var(--card);box-shadow:0 8px 18px rgba(0,0,0,.4)}
 /* ===== باقة «نجم Deal»: هوية ذهبية فاخرة (فحمي/ذهبي) — إطار البطاقات وصفحة الباقة ===== */
 .card.star-frame{border:1.5px solid var(--gold);box-shadow:0 0 0 3px rgba(212,160,23,.16),0 10px 26px rgba(0,0,0,.4)}
+/* ===== الملف الاجتماعي: إطار مقعد المؤسس + لمسة أعلى شارة + الغلاف الشخصي ===== */
+.card.seat-frame{border:1.5px solid #a87c0e;box-shadow:0 0 0 3px rgba(201,162,39,.22),0 0 22px rgba(201,162,39,.13),0 10px 26px rgba(0,0,0,.4)}
+.seat-chip{border-color:#a87c0e!important;color:#e9cd8d!important;background:linear-gradient(120deg,rgba(201,162,39,.22),rgba(201,162,39,.06));font-weight:900}
+.badge-frame{box-shadow:0 0 0 2px var(--bf,#c9a227),0 10px 26px rgba(0,0,0,.38)}
+.tcover.has-cover{background-size:cover;background-position:center}
+.tcover.has-cover::after{background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.38))}
+/* لوحة ألوان التمييز في حوار التعديل */
+.accent-swatches{display:flex;gap:9px;flex-wrap:wrap;margin:6px 0 2px}
+.accent-sw{width:34px;height:34px;border-radius:50%;border:2px solid rgba(255,255,255,.25);cursor:pointer;padding:0;flex:none}
+.accent-sw.on{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.35)}
+.accent-sw.none{background:transparent;color:var(--mut);font-size:11px;width:auto;height:34px;border-radius:17px;padding:0 12px}
+/* جدار المؤسسين */
+.wall-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin-top:14px}
+.wall-cell{border:1px solid rgba(201,162,39,.35);border-radius:12px;padding:9px 8px;text-align:center;background:rgba(201,162,39,.06);min-height:86px}
+.wall-cell .n{font-weight:900;color:#e9cd8d;font-size:13px}
+.wall-cell .who{font-size:12.5px;margin-top:3px;line-height:1.45}
+.wall-cell .meta{font-size:11px;color:#cbbd93;margin-top:2px}
+.wall-cell.free{border-style:dashed;background:transparent;opacity:.55}
+.wall-cell.free .who{color:#cbbd93}
+/* منشورات البروفايل */
+.post-card{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;background:rgba(255,255,255,.02)}
+.post-card.pinned{border-color:#a87c0e;background:linear-gradient(140deg,rgba(201,162,39,.13),rgba(201,162,39,.03))}
+.react-btn{border:1px solid var(--line);background:transparent;border-radius:999px;padding:4px 12px;cursor:pointer;color:inherit;font-size:13.5px}
+.react-btn.on{border-color:var(--gold);background:rgba(212,160,23,.16);font-weight:800}
+.react-btn:disabled{opacity:.55;cursor:default}
+/* بطاقة «صفقة موثقة عبر Deal» */
+.deal-card-view{max-width:520px;margin:26px auto;background:linear-gradient(160deg,#151a20,#0b0d10 55%,#1d1604);border:1.5px solid #a87c0e;border-radius:22px;padding:30px 24px;text-align:center;color:#fdf6e0;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.deal-card-view .big-seal{font-size:40px}
+.deal-card-view h2{margin:6px 0 2px;font-size:27px;font-weight:900}
 .star-hero{position:relative;overflow:hidden;text-align:center;border-radius:26px;padding:38px 22px 30px;
 background:linear-gradient(165deg,#232a12,#141204 45%,#0b0d10 80%);border:2px solid var(--gold);
 box-shadow:0 30px 60px rgba(0,0,0,.5),0 0 0 6px rgba(212,160,23,.14);color:#fdf6e0}
@@ -566,6 +595,12 @@ background-image:radial-gradient(rgba(212,160,23,.10) 1.5px,transparent 1.7px);b
       <div class="seats-dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div style="color:#cbbd93;font-size:13.5px" data-i18n="seats_total">برنامج المؤسسين: 100 مقعد فقط</div>
       <div style="margin-top:16px"><button class="btn" style="font-size:16px;padding:13px 26px" onclick="openAuth('creator')" data-i18n="seats_cta">احجز مقعدك — سجّل كصانع</button></div>
+      <div style="margin-top:12px"><button class="btn ghost" style="color:#e9cd8d;border-color:rgba(201,162,39,.5)" onclick="toggleWall(this)">🏛️ <span data-i18n="wall_t">جدار المؤسسين</span></button></div>
+      <div id="wallBox" class="hide" style="text-align:start">
+        <p style="color:#e8dcc0;margin:14px 0 0" data-i18n="wall_d">أول ١٠٠ صانع ومقدم خدمة سجّلوا على Deal من أي دولة — مقاعد مرقّمة بالأسبقية العالمية، والفئة تُغلق نهائياً عند اكتمال المئة.</p>
+        <div class="row" style="margin-top:8px"><span class="chip" id="wallProgress"></span><span class="chip hide" id="wallClosed" style="border-color:#a87c0e;color:#e9cd8d" data-i18n="wall_closed">اكتملت فئة المؤسسين — أُغلقت نهائياً</span></div>
+        <div class="wall-grid" id="wallGrid"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -633,7 +668,7 @@ background-image:radial-gradient(rgba(212,160,23,.10) 1.5px,transparent 1.7px);b
       <div id="threadMsgs" class="chatlog" style="margin-top:12px"></div>
       <div class="err" id="msgErr"></div>
       <div class="row" style="margin-top:8px"><input id="msgInput" data-i18n-ph="msg_ph" placeholder="اكتب رسالتك…" style="flex:1" maxlength="1000">
-      <button class="btn sm" onclick="sendMsg(this)" data-i18n="send">إرسال</button></div>
+      <button class="btn sm" id="msgSendBtn" onclick="sendMsg(this)" data-i18n="send">إرسال</button></div>
     </div>
   </section>
 
@@ -666,6 +701,11 @@ background-image:radial-gradient(rgba(212,160,23,.10) 1.5px,transparent 1.7px);b
   <!-- SHAREABLE STAR-OF-WEEK CARD PAGE (#/s/<id>) -->
   <section id="tab-starcard" class="hide">
     <div id="starCardBody"></div>
+  </section>
+
+  <!-- SHAREABLE VERIFIED-DEAL CARD PAGE (#/d/<bookingId>) -->
+  <section id="tab-dealcard" class="hide">
+    <div id="dealCardBody"></div>
   </section>
 </main>
 
@@ -791,6 +831,14 @@ background-image:radial-gradient(rgba(212,160,23,.10) 1.5px,transparent 1.7px);b
     <div><label data-i18n="pf_photo">الصورة الشخصية</label>
     <input type="file" id="pfPhotoFile" accept="image/*" onchange="pickAvatar(this)">
     <div class="mut" data-i18n="pf_photo_hint">تُصغَّر تلقائياً لمربع صغير (≤256px).</div></div></div>
+  <div id="pfCoverSec">
+    <label data-i18n="pf_cover">صورة الغلاف</label>
+    <div id="pfCoverPreview" style="height:74px;border-radius:12px;background:rgba(255,255,255,.05);background-size:cover;background-position:center;margin-bottom:6px"></div>
+    <input type="file" id="pfCoverFile" accept="image/*" onchange="pickCover(this)">
+    <div class="mut" data-i18n="pf_cover_hint">تُصغَّر تلقائياً (≤1024px عرضاً).</div>
+    <label data-i18n="pf_accent">لون التمييز</label>
+    <div class="accent-swatches" id="pfAccentSw"></div>
+  </div>
   <label data-i18n="f_name">الاسم</label><input id="pfName">
   <label data-i18n="f_niche">المجال / التخصص</label><input id="pfNiche">
   <div class="row"><div style="flex:1"><label data-i18n="f_city">المدينة</label><input id="pfCity"></div>
@@ -848,7 +896,7 @@ function hideErr(id){const e=document.getElementById(id);if(e)e.classList.remove
 /* ================= i18n — قاموس كامل لكل نصوص الواجهة ================= */
 let LANG=localStorage.getItem('deal_lang')||'ar';
 const DICT={
-ar:{loading:'جارٍ…',copied:'تم النسخ ✓',nav_market:'السوق',nav_services:'الخدمات',nav_campaigns:'الحملات',nav_opps:'فرص ليك',nav_bookings:'حجوزاتي',nav_dash:'لوحتي',nav_owner:'لوحة المالك',post_job_btn:'📣 انشر شغلانة',menu:'القائمة',main_menu:'القائمة الرئيسية',login_register:'دخول / تسجيل',hero_l1:'انتهى زمن اللف على الشغل…',hero_l2:'الشغل هو اللي بيدوّر عليك',hero_sub:'فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.',register_creator:'سجّل كصانع',browse_market:'تصفح السوق',install_app:'ثبّت Deal على موبايلك',hero_guest_note:'عندك محل أو براند؟ انشر شغلانتك في دقيقة — من غير تسجيل، والصناع هيتواصلوا معاك واتساب.',why1_t:'فرص بتيجي لك',why1_d:'طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.',why2_t:'سمعة موثقة بتكبر',why2_d:'تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.',why3_t:'قبض محمي بضمان Deal',why3_d:'دفع على مراحل، عمولة المنصة أولاً، وإثبات تنفيذ يحمي الطرفين.',search_ph:'ابحث باسم، مجال، مدينة…',search:'بحث',all_niches:'كل المجالات',all_cities:'كل المدن',all_countries:'كل الدول',guarantee_t:'ضمان Deal:',guarantee_d:'كل حجز هنا «حجز محمي بضمان Deal» — دفع مرحلي موثق، والدفعة الأخيرة محتجزة عند Deal لحد تأكيد الاستلام، وبديل موثّق من نفس مدينتك ومجالك لو المنفذ أخلّ. المعاملات P2P بين المحافظ الشخصية — Deal بينظّم ويوثّق ويحمي ومش بنك.',open_requests:'طلبات محلات مفتوحة',post_job_short:'📣 انشر شغلانة — بدون تسجيل',services_t:'خدمات متكاملة — بنفس حماية Deal',svc_ads:'إدارة إعلانات ممولة',svc_support:'حلول مشاكل الحسابات',campaigns_t:'حملات البراندات',new_campaign:'+ حملة جديدة',opps_t:'فرص ليك — مطابقة تلقائية لملفك',bookings_t:'حجوزاتي',footer:'Deal — منصة كل صناع المحتوى · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal',register:'تسجيل',login:'دخول',f_name:'الاسم',f_iam:'أنا…',role_creator:'صانع محتوى',role_provider:'مقدم خدمة',role_shop:'محل',role_brand:'براند',f_provcat:'فئة الخدمة',f_niche:'المجال / التخصص',niche_ph:'كوميديا، طبخ، مراجعات…',f_city:'المدينة',f_country:'الدولة',f_currency:'العملة',f_followers:'عدد المتابعين (للصناع)',f_price:'سعرك المعلن لفيديو/خدمة',f_links:'روابط حساباتك العلنية (للتوثيق)',f_contact:'رقم الهاتف أو الإيميل (هو وسيلة الدخول)',contact_ph:'01xxxxxxxxx أو you@mail.com',continue_btn:'متابعة',close:'إغلاق',guest_title:'انشر شغلانة — بدون تسجيل',g_biz:'اسم النشاط / المحل',g_phone:'رقم الواتساب (موبايل مصري)',g_niche:'نوع الإعلان / المجال',g_niche_ph:'مطاعم، ملابس، عقارات…',g_budget:'الميزانية التقريبية (جنيه)',g_details:'اوصف الشغلانة',g_details_ph:'محتاج فيديو إعلاني عن…',g_publish:'انشر الطلب',g_done_t:'اتنشر طلبك ✓',g_done_d:'الصناع هيشوفوه دلوقتي وهيتواصلوا معاك واتساب. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:',copy_link:'نسخ الرابط',camp_title:'حملة براند جديدة',c_title:'العنوان',c_brief:'البريف',c_budget:'الميزانية',c_publish:'نشر الحملة',req_title:'طلب محل جديد',req_niche:'المجال المطلوب',req_details:'تفاصيل',edit_profile:'تعديل الملف الشخصي',pf_photo:'الصورة الشخصية',pf_photo_hint:'تُصغَّر تلقائياً لمربع صغير (≤256px).',pf_phone:'رقم الهاتف (واتساب)',pf_bio:'نبذة عنك',save_changes:'حفظ التعديلات',shorts_title:'نماذج الشورتس',shorts_hint:'بحد أقصى 3 فيديوهات — تظهر مضمّنة شغالة داخل ملفك العام.',short_url:'رابط فيديو قصير (يوتيوب Shorts / فيسبوك / إنستجرام / تيك توك)',short_title:'عنوان النموذج (اختياري)',short_add:'+ أضف نموذجاً',notifications:'التنبيهات',support_title:'دعم Deal — رد تلقائي فوري',support_hint:'اختر سؤالاً جاهزاً أو اكتب سؤالك — الرد فوري من قاعدة الأسئلة الشائعة.',support_contact:'وسيلة تواصل (اختياري) — لو حابب الفريق يرجع لك',support_ph:'اكتب سؤالك هنا…',send:'إرسال',
+ar:{book_me_btn:'📩 احجزني عبر Deal',wall_t:'جدار المؤسسين',wall_d:'أول ١٠٠ صانع ومقدم خدمة سجّلوا على Deal من أي دولة — مقاعد مرقّمة بالأسبقية العالمية، والفئة تُغلق نهائياً عند اكتمال المئة.',wall_closed:'اكتملت فئة المؤسسين — أُغلقت نهائياً',wall_seat_free:'مقعد متاح',wall_taken_w:'مقعداً مشغولاً من ١٠٠',friends_t:'الأصدقاء',friend_add:'+ طلب صداقة',friend_pending_out:'طلب معلّق',friend_accept:'قبول الصداقة',friend_decline:'رفض',friend_cancel:'إلغاء الطلب',friend_unfriend:'إلغاء الصداقة',friend_incoming:'طلبات واردة',friend_outgoing:'طلبات أرسلتها',friend_none:'لا أصدقاء بعد — الصداقة المقبولة تفتح المراسلة بين الأعضاء.',msg_friends_only:'المراسلة للأصدقاء المقبولين فقط',thread_readonly:'هذه المحادثة للقراءة فقط — المراسلة متاحة بعد قبول الصداقة بينكما.',posts_t:'منشورات البروفايل',post_ph:'اكتب منشوراً على بروفايلك…',post_link_ph:'رابط عمل (اختياري) https://…',post_publish:'نشر',post_pin:'📌 تثبيت كعرضي',post_unpin:'إلغاء التثبيت',post_pinned:'📌 مثبّت — عرضي الدائم',post_edit:'تعديل',post_delete:'حذف',post_save:'حفظ',post_none:'لا منشورات بعد.',booklink_t:'رابط الحجز بتاعي',booklink_d:'حطه في بايو تيك توك وإنستجرام — العميل يفتحه يلاقي طلب حجز موجّه ليك مباشرة، بضمان Deal.',booklink_copy_bio:'نسخ نص البايو',booklink_qr:'امسح للحجز المباشر',dealcard_btn:'🎴 بطاقة الصفقة',dealcard_t:'صفقة موثقة عبر Deal ✅',dealcard_on:'اكتملت بتاريخ',dealcard_share:'مشاركة البطاقة',dealcard_not:'هذه البطاقة غير متاحة — لا تظهر إلا للصفقات المكتملة الموثقة على Deal.',dealcard_cta:'عاوز شغلك الجاي يبقى موثق كده؟ احجز بضمان Deal',verified_deals_w:'صفقات موثقة عبر Deal',pf_cover:'صورة الغلاف',pf_cover_hint:'تُصغَّر تلقائياً (≤1024px عرضاً).',pf_accent:'لون التمييز',accent_default:'افتراضي',loading:'جارٍ…',copied:'تم النسخ ✓',nav_market:'السوق',nav_services:'الخدمات',nav_campaigns:'الحملات',nav_opps:'فرص ليك',nav_bookings:'حجوزاتي',nav_dash:'لوحتي',nav_owner:'لوحة المالك',post_job_btn:'📣 انشر شغلانة',menu:'القائمة',main_menu:'القائمة الرئيسية',login_register:'دخول / تسجيل',hero_l1:'انتهى زمن اللف على الشغل…',hero_l2:'الشغل هو اللي بيدوّر عليك',hero_sub:'فرص من محلات وبراندات مدينتك توصلك لحد عندك — بحجز محمي وضمان Deal.',register_creator:'سجّل كصانع',browse_market:'تصفح السوق',install_app:'ثبّت Deal على موبايلك',hero_guest_note:'عندك محل أو براند؟ انشر شغلانتك في دقيقة — من غير تسجيل، والصناع هيتواصلوا معاك واتساب.',why1_t:'فرص بتيجي لك',why1_d:'طلبات وحملات مطابقة لمدينتك ومجالك — من غير ما تدوّر.',why2_t:'سمعة موثقة بتكبر',why2_d:'تقييمات ونسبة إتمام وشارات إنجاز بتتراكم في ملفك.',why3_t:'قبض محمي بضمان Deal',why3_d:'دفع على مراحل، عمولة المنصة أولاً، وإثبات تنفيذ يحمي الطرفين.',search_ph:'ابحث باسم، مجال، مدينة…',search:'بحث',all_niches:'كل المجالات',all_cities:'كل المدن',all_countries:'كل الدول',guarantee_t:'ضمان Deal:',guarantee_d:'كل حجز هنا «حجز محمي بضمان Deal» — دفع مرحلي موثق، والدفعة الأخيرة محتجزة عند Deal لحد تأكيد الاستلام، وبديل موثّق من نفس مدينتك ومجالك لو المنفذ أخلّ. المعاملات P2P بين المحافظ الشخصية — Deal بينظّم ويوثّق ويحمي ومش بنك.',open_requests:'طلبات محلات مفتوحة',post_job_short:'📣 انشر شغلانة — بدون تسجيل',services_t:'خدمات متكاملة — بنفس حماية Deal',svc_ads:'إدارة إعلانات ممولة',svc_support:'حلول مشاكل الحسابات',campaigns_t:'حملات البراندات',new_campaign:'+ حملة جديدة',opps_t:'فرص ليك — مطابقة تلقائية لملفك',bookings_t:'حجوزاتي',footer:'Deal — منصة كل صناع المحتوى · ختم Deal الرسمي 🛡️ حجز محمي بضمان Deal',register:'تسجيل',login:'دخول',f_name:'الاسم',f_iam:'أنا…',role_creator:'صانع محتوى',role_provider:'مقدم خدمة',role_shop:'محل',role_brand:'براند',f_provcat:'فئة الخدمة',f_niche:'المجال / التخصص',niche_ph:'كوميديا، طبخ، مراجعات…',f_city:'المدينة',f_country:'الدولة',f_currency:'العملة',f_followers:'عدد المتابعين (للصناع)',f_price:'سعرك المعلن لفيديو/خدمة',f_links:'روابط حساباتك العلنية (للتوثيق)',f_contact:'رقم الهاتف أو الإيميل (هو وسيلة الدخول)',contact_ph:'01xxxxxxxxx أو you@mail.com',continue_btn:'متابعة',close:'إغلاق',guest_title:'انشر شغلانة — بدون تسجيل',g_biz:'اسم النشاط / المحل',g_phone:'رقم الواتساب (موبايل مصري)',g_niche:'نوع الإعلان / المجال',g_niche_ph:'مطاعم، ملابس، عقارات…',g_budget:'الميزانية التقريبية (جنيه)',g_details:'اوصف الشغلانة',g_details_ph:'محتاج فيديو إعلاني عن…',g_publish:'انشر الطلب',g_done_t:'اتنشر طلبك ✓',g_done_d:'الصناع هيشوفوه دلوقتي وهيتواصلوا معاك واتساب. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:',copy_link:'نسخ الرابط',camp_title:'حملة براند جديدة',c_title:'العنوان',c_brief:'البريف',c_budget:'الميزانية',c_publish:'نشر الحملة',req_title:'طلب محل جديد',req_niche:'المجال المطلوب',req_details:'تفاصيل',edit_profile:'تعديل الملف الشخصي',pf_photo:'الصورة الشخصية',pf_photo_hint:'تُصغَّر تلقائياً لمربع صغير (≤256px).',pf_phone:'رقم الهاتف (واتساب)',pf_bio:'نبذة عنك',save_changes:'حفظ التعديلات',shorts_title:'نماذج الشورتس',shorts_hint:'بحد أقصى 3 فيديوهات — تظهر مضمّنة شغالة داخل ملفك العام.',short_url:'رابط فيديو قصير (يوتيوب Shorts / فيسبوك / إنستجرام / تيك توك)',short_title:'عنوان النموذج (اختياري)',short_add:'+ أضف نموذجاً',notifications:'التنبيهات',support_title:'دعم Deal — رد تلقائي فوري',support_hint:'اختر سؤالاً جاهزاً أو اكتب سؤالك — الرد فوري من قاعدة الأسئلة الشائعة.',support_contact:'وسيلة تواصل (اختياري) — لو حابب الفريق يرجع لك',support_ph:'اكتب سؤالك هنا…',send:'إرسال',
 followers_w:'متابع',completion_w:'إتمام',positive_w:'إيجابي',profile_btn:'الملف',book_btn:'احجز',founder_seal:'👑 مؤسس Deal',founder_only:'حساب المؤسس — عرض فقط',pioneer_w:'رائد المدينة',founder_member_w:'عضو مؤسس',empty_market:'السوق فاضي لسه — كن أول صانع يسجل.',guest_chip:'طلب عميل — بدون حساب',whatsapp:'💬 تواصل واتساب',wa_msg:'أهلاً، شفت طلبك على Deal وأقدر أنفذه',start_booking:'ابدأ حجز',view_opps:'شوف فرصك',shop_job_card:'+ عندك شغلانة؟',publish_request:'انشر طلب',no_providers:'لا يوجد مقدمو خدمة في هذه الفئة بعد.',no_campaigns:'لا حملات مفتوحة بعد.',apply_btn:'قدّم',applicants_btn:'المتقدمون',match_w:'مطابقة',kind_campaign:'حملة براند',kind_request:'طلب محل',no_opps:'لا فرص مطابقة لملفك الآن — حدّث مدينتك ومجالك وحدّك الأدنى للسعر من لوحتك.',no_bookings:'لا حجوزات بعد.',open_booking:'فتح الحجز',notify_talent:'📱 نبّه الصانع واتساب',wa_booking_msg:'جالك شغل جديد على Deal — حجز #',guaranteed_chip:'🛡️ حجز محمي بضمان Deal',client_w:'العميل',talent_w:'المنفذ',total_w:'الإجمالي',fee_w:'العمولة',first_w:'أولاً',net_two_w:'والصافي على دفعتين',
 stage_pending_agreement:'اتفاق الطرفين',stage_awaiting_fee:'عمولة Deal أولاً',stage_awaiting_deposit:'عربون الصانع',stage_in_progress:'التنفيذ',stage_proof_submitted:'إثبات التنفيذ',stage_awaiting_rest:'باقي القبض',stage_completed:'اكتمل القبض',stage_disputed:'نزاع مفتوح',stage_cancelled:'ملغي',
 step1:'١) اتفاق الطرفين',step2:'٢) عمولة Deal أولاً',step3:'٣) عربون المنفذ',step4:'٤) إثبات التنفيذ',step5:'٥) الباقي — يُحتجَز عند Deal',agreed_w:'✔ وافق',waiting_w:'بانتظار',agree_btn:'أوافق',show_fee:'إظهار حساب عمولات Deal',fee_ref_ph:'مرجع عملية التحويل',fee_confirm_btn:'سجلت التحويل — تأكيد تلقائي',fee_confirmed:'اتأكدت تلقائياً ✓',dep_ref_ph:'مرجع تحويل العربون للمنفذ',paid_btn:'سجلت التحويل',proof_ph:'رابط العمل المنشور علناً',proof_btn:'إرسال الإثبات (تتحقق منه المنصة)',proof_w:'الإثبات',proof_verified:'✔ تم التحقق وخُتم بوقته',receipt_t:'أكد الاستلام',receipt_d:'لو ما رديتش خلال ٢٤ ساعة من الإثبات، الاستلام بيتأكد تلقائياً حمايةً للمنفذ (وبيوصلك تنبيه عند ١٢ ساعة).',receipt_btn:'أكدت الاستلام',completed_t:'اكتمل القبض ✓',rv_pos:'إيجابي 👍',rv_neg:'سلبي 👎',rv_comment_ph:'تعليق (اختياري)',rv_send:'إرسال التقييم (مرة واحدة، بلا تعديل)',rv_done:'قيّمت هذا الحجز ✓',dispute_btn:'فتح نزاع',dispute_prompt:'سبب النزاع؟',alternatives_t:'ضمان Deal — بدائل موثقة من نفس المدينة والمجال:',done_t:'تم',payment_saved:'اتسجلت الدفعة',proof_done:'الإثبات اتختم ✓',review_saved:'اتسجل تقييمك',dispute_opened:'اتفتح النزاع — الإدارة هتراجعه',booking_opened:'اتفتح الحجز #',ref_required:'اكتب مرجع العملية',bk_w:'حجز',bk_status:'الحالة',
@@ -865,7 +913,7 @@ bdg_perfect:'إتمام مثالي',bdg_top_rated:'الأعلى تقييماً',
 bp_cond_perfect:'أكمل 10 صفقات بنسبة إتمام 100%',bp_cond_top_rated:'اجمع 10 تقييمات بإيجابية 95% فأكثر',bp_cond_fast:'سلّم إثبات التنفيذ قبل المهلة في آخر 5 صفقات مكتملة',bp_cond_rising:'أكمل 5 صفقات',bp_cond_ambassador:'5 صناع موثّقين سجّلوا من رابط ملفك',bp_cond_veteran:'أكمل 20 صفقة وعضوية 6 أشهر (180 يوم)',
 tb_home:'الرئيسية',trust_1:'🛡️ حجز محمي بضمان Deal',trust_2:'✔️ توثيق آلي فوري',trust_3:'💬 تواصل واتساب مباشر',stat_seats:'مقعد مؤسس لأوائل الصناع',stat_fee:'عمولة فقط — والباقي كله ليك',stat_hours:'ساعة تأكيد تلقائي يحمي قبضك',mock_live:'صفقة بتتم الآن',mock_guaranteed:'بضمان Deal 🛡️',mock_stage:'العربون اتدفع — التنفيذ شغال دلوقتي',mock_paid:'تم استلام العربون',mock_paid_s:'قبض موثّق خطوة بخطوة',mock_notif1:'طلب جديد وصلك',mock_notif1_s:'من عميل في مدينتك — من غير ما تدوّر',mock_earn:'أرباحك',mock_notif2:'تقييم جديد',mock_notif2_s:'سمعتك بتكبر مع كل صفقة',mock_book:'حجز محمي بضمان Deal',mock_book_s:'دفع على مراحل موثقة',mock_pay:'وصلِك العربون',mock_pay_s:'قبل ما تبدأ التنفيذ',mock_ver:'حساب موثّق',mock_ver_s:'شارة Deal الذهبية',marquee_items:'ضمان Deal على كل حجز ✦ دفع على مراحل موثقة ✦ عمولة ١٠٪ فقط ✦ توثيق حساب فوري ✦ إثبات تنفيذ قبل باقي القبض ✦ تقييمات موثقة بعد اكتمال القبض ✦ تأكيد تلقائي خلال ٢٤ ساعة ✦ دعم فوري داخل المنصة ✦ فرص بتيجي لحد عندك ✦ انشر طلبك كضيف من غير تسجيل ✦ ',how_t:'إزاي بتشتغل؟',how_sub:'ثلاث خطوات بسيطة — والشغل بيوصلك لحد عندك',tc_kicker:'مركز ثقة Deal',tc_title:'رحلة فلوسك — خطوة بخطوة',tc_sub:'مثال واحد ثابت على صفقة بـ٥٠٠ جنيه: من أول تحويل، لحد ما المقدم يقبض الباقي المحتجَز.',tc_example:'مثال صفقة: ٥٠٠ جنيه',tc_eq:'٥٠ عمولة + ٢٢٥ عربون + ٢٢٥ باقٍ محتجَز = ٥٠٠',tc_a50:'٥٠ جنيه',tc_a225:'٢٢٥ جنيه',tc_s1_t:'عمولة Deal أولاً',tc_s1_d:'العميل يحوّل ٥٠ جنيهاً (١٠٪) إلى Deal قبل بدء أي تنفيذ.',tc_s2_t:'العربون للمقدم مباشرة',tc_s2_d:'العميل يدفع ٢٢٥ جنيهاً عربوناً للمقدم مباشرة، فلا يبدأ الشغل من غير جدية موثقة.',tc_s3_a:'تنفيذ موثّق',tc_s3_t:'التنفيذ وإثباته',tc_s3_d:'المقدم ينفّذ الشغل ويرفع إثبات التنفيذ داخل الحجز بختم وقت من الخادم.',tc_s4_t:'الباقي يُحتجَز عند Deal',tc_s4_d:'العميل يحوّل الباقي ٢٢٥ جنيهاً إلى Deal، ويبقى محتجَزاً بأمان حتى يتأكد الاستلام.',tc_s5_a:'٢٤ ساعة',tc_s5_t:'تأكيد الاستلام',tc_s5_d:'العميل يؤكد الاستلام، أو يمر ٢٤ ساعة بعد تنبيه عند ١٢ ساعة فيتم التأكيد تلقائياً.',tc_s6_t:'الإفراج للمقدم',tc_s6_d:'Deal تُفرج عن ٢٢٥ جنيهاً المحتجَزة للمقدم، ويُسجَّل الإفراج بمرجع واضح للطرفين.',tc_p2p_t:'شفافية كاملة: فلوسك بين المحافظ مباشرة',tc_p2p:'المعاملات P2P — فلوسك بتتحرك بين المحافظ الشخصية مباشرة (فودافون كاش/إنستاباي)، وDeal بينظّم ويوثّق ويحمي ومش بنك',tc_g_t:'الضمانات المعلنة',tc_g_sub:'كل ضمان هنا مربوط بآلية شغالة فعلاً داخل المنصة — لا وعود معلّقة في الهواء.',tc_g1_t:'احتجاز الباقي عند Deal',tc_g1_d:'الباقي يبقى محتجَزاً عند Deal ولا يُفرَج عنه للمقدم إلا بعد تأكيد الاستلام أو التأكيد التلقائي.',tc_g2_t:'ضمان الاستبدال',tc_g2_d:'لو تعذّر على المقدم التنفيذ بعد العربون، ترشّح Deal بديلاً موثّقاً أو نجماً بنفس الشروط متى توفّر؛ وإن لم يناسبك البديل، يتحوّل الأمر إلى مراجعة المنصة عبر مسار النزاع لبحث رد العربون وفق الأدلة.',tc_g3_t:'تجميد فوري ومراجعة عادلة عند النزاع',tc_g3_d:'فتح النزاع يجمّد الباقي المحتجَز فوراً، وتجمع المنصة حزمة أدلة موقوتة من الطرفين قبل أي قرار.',tc_g4_t:'التقييم يُفتح فقط بعد اكتمال القبض',tc_g4_d:'لا تقييم قبل اكتمال القبض فعلياً؛ التقييم مرة واحدة، فتظل السمعة مبنية على صفقات منتهية بجد.',tc_g5_t:'أعضاء موثّقون بكود ملكية',tc_g5_d:'التوثيق يتم بكود ملكية يظهر في حساب العضو العلني، فتتأكد أن الحساب يخص صاحبه فعلاً.',tc_g6_t:'سجل موثّق لكل خطوة مالية لا يُعدَّل ولا يُحذف',tc_g6_d:'كل حركة مالية تُسجَّل في سجل يُضاف إليه فقط، بالفاعل والوقت والمرجع — تاريخ كامل لا يُمس.',tc_badges_t:'علامات الثقة في كل حجز',tc_b1:'احتجاز آمن',tc_b2:'توثيق ملكية',tc_b3:'حزمة أدلة',tc_b4:'تقييم بعد القبض',tc_b5:'سجل لا يُمس',tc_b6:'إفراج موثّق',seats_t:'مقاعد المؤسسين — أول ١٠٠ صانع',seats_d:'أول ١٠٠ صانع موثّق على Deal بياخدوا شارة «عضو مؤسس» الدائمة وأولوية الظهور في مدينتهم. المقاعد محدودة — احجز مكانك من دلوقتي.',seats_total:'برنامج المؤسسين: 100 مقعد فقط',seats_cta:'احجز مقعدك — سجّل كصانع',guest_banner:'بتتصفح كزائر — شوف صناع المحتوى ومقدمي الخدمات وملفاتهم، واطلب من أي حد فيهم من غير تسجيل.',guest_banner_join:'صانع أو مقدم خدمة؟ سجّل هنا',filter_all:'الكل',filter_creators:'صناع محتوى',filter_providers:'مقدمو خدمات',guest_order_btn:'اطلب من غير تسجيل',guest_target_chip:'طلب موجّه إلى',guest_target_clear:'جعله طلباً عاماً بدلاً من ذلك',guest_target_title:'اطلب مباشرة — بدون تسجيل',g_done_d_targeted:'طلبك وصل للصانع المستهدف مباشرة — هيشوفه في «فرص ليك» وهيحوّله لحجز بضمان Deal. احفظ رابط المتابعة ده — منه بتتابع الحجز وبتكمّل خطواتك (العمولة، تأكيد الاستلام، التقييم) من غير أي حساب:',auth_note:'التسجيل لصناع المحتوى ومقدمي الخدمة — عندك محل أو براند؟ اطلب كضيف من غير تسجيل، من زرار «انشر شغلانة» أو من ملف أي صانع.',targeted_chip:'🎯 موجّه ليك',provider_tag:'مقدم خدمة',svc_other:'خدمة أخرى',other_w:'أخرى',prov_custom_ph:'اكتب خدمتك كما تريد أن تظهر في ملفك',niche_custom_ph:'اكتب مجالك',
 star_chip:'⭐ نجم Deal',star_week_chip:'👑 نجم الأسبوع',star_pick:'⭐ ترشيح أول',star_nav:'نجم Deal',star_t:'باقة نجم Deal',star_sub:'الباقة اللي معمولة عشان تكبّر وتميّزك — لا مميزات عامة ولا حشو',star_per_m:'/ 30 يوم',star_b1_t:'شارة وإطار ذهبي',star_b1_d:'شارة «نجم Deal ⭐» على بطاقتك وملفك، وإطار ذهبي يميزك في السوق من أول نظرة.',star_b2_t:'أولوية ترتيب وترشيح أول',star_b2_d:'تتصدّر ترتيب السوق في فئتك، وتتقدّم في قوائم ترشيح العملاء والمتقدمين على الحملات وبدائل النزاعات.',star_b3_t:'نجم الأسبوع',star_b3_d:'دوران أسبوعي تلقائي وعادل بين المشتركين النشطين — أسبوعك بييجي واسمك يتصدّر قسم «نجم الأسبوع» مع بطاقة مشاركة باسمك.',star_b4_t:'وقود نمو شهري',star_b4_d:'ملخص إحصاءاتك الحقيقية (مشاهدات، طلبات، تحويل، أرباح) + أفكار محتوى رائجة لمجالك وخطوة نمو عملية — يتجدد كل شهر.',star_b5_t:'حضور ذهبي قدام العملاء',star_b5_d:'المشتركون بيتصدّروا ترشيحات المنصة للعملاء والبراندات في كل قائمة ترشيح.',star_b6_t:'أولوية دعم',star_b6_d:'رسائل دعمك بتتعلّم «أولوية» وبتتصدّر قائمة الفريق في الرد.',star_terms_t:'شروط الباقة الرسمية',star_terms:'• المحتوى: شارة وإطار «نجم Deal»، أولوية الترتيب والترشيح الأول، أهلية «نجم الأسبوع» وبطاقة المشاركة، وقود النمو الشهري، وأولوية الدعم.\n• المدة: 30 يوماً تبدأ من لحظة تأكيد المالك وصول التحويلة فعلياً — لا من لحظة إرسالك المرجع.\n• التفعيل: لا ميزة قبل تأكيد الاستلام؛ لو المرجع خاطئ بيترفض الاشتراك وبتقدر تشترك من جديد.\n• الاسترداد: لا استرداد بعد التفعيل، إلا إذا أخفقت Deal في تقديم ميزة معلنة من محتوى الباقة.\n• التجديد: يدوي بنفس الخطوات قبل الانتهاء أو بعده — مفيش خصم تلقائي أبداً.',star_accept:'قرأت الشروط الرسمية وأوافق عليها',star_pay_show:'إظهار رقم تحويل الباقة',star_pay_note:'حوّل المبلغ من محفظتك (فودافون كاش / إنستاباي) إلى الرقم ده، وبعدين اكتب مرجع التحويلة:',star_ref_ph:'مرجع تحويلة الاشتراك',star_subscribe_btn:'اشترك — أرسل المرجع للتحقق',star_pending_t:'اشتراكك قيد التحقق ⏳',star_pending_d:'استلمنا مرجع التحويلة. الباقة لا تتفعّل إلا بعد ما المالك يؤكد وصول الفلوس فعلياً — هتوصلك رسالة التفعيل فور التأكيد وبتبدأ الـ30 يوماً من ساعتها.',star_active_t:'أنت نجم Deal ⭐',star_days_left:'باقي على انتهاء اشتراكك',star_day_w:'يوم',star_expired_t:'انتهى اشتراكك في نجم Deal',star_expired_d:'انطفأت مزايا النجم — جدّد بنفس الخطوات وارجع للصدارة.',star_rejected_t:'آخر اشتراك اترفض',star_subscribed_t:'اتسجّل اشتراكك — قيد التحقق لحد تأكيد وصول الفلوس',star_login_cta:'التسجيل للصناع ومقدمي الخدمة — سجل دخولك بحسابك للاشتراك',star_fuel_t:'⛽ وقود نموّك الشهري',star_fuel_views:'مشاهدات ملفك',star_fuel_earn_m:'أرباح هذا الشهر',star_ideas_t:'أفكار محتوى رائجة لمجالك',star_step_t:'خطوة نموّك هذا الشهر',star_week_t:'نجم الأسبوع',star_week_d:'مشترك في «نجم Deal» بيتصدّر المنصة هذا الأسبوع — بالدوران العادل التلقائي بين المشتركين النشطين',star_card_btn:'🔗 بطاقة النجم للمشاركة',star_card_t:'نجم Deal هذا الأسبوع',star_card_share:'انسخ رابط البطاقة',star_card_not:'هذا العضو ليس نجم الأسبوع الحالي — النجم بيتبدّل كل أسبوع بالدوران العادل',star_goto_pkg:'صفحة باقة نجم Deal',star_dash_t:'باقة نجم Deal',star_dash_cta:'اشترك وميّز نفسك — شارة ذهبية وصدارة ترتيب ووقود نمو شهري',star_dash_active:'اشتراكك نشط ⭐',ow_star_t:'اشتراكات «نجم Deal»',ow_star_pending:'قيد التحقق',ow_star_active:'نشطة',ow_star_expired:'منتهية',ow_star_rejected:'مرفوضة',ow_star_revenue:'إيراد الباقة المؤكد',ow_star_confirm:'تأكيد الاستلام والتفعيل',ow_star_reject:'رفض',ow_star_empty:'لا اشتراكات بعد.',ow_star_ref:'المرجع',ow_star_terms_ok:'قبل الشروط',ow_star_state_pending:'قيد التحقق',ow_star_state_active:'نشط',ow_star_state_expired:'منتهٍ',ow_star_state_rejected:'مرفوض',ow_priority:'⭐ أولوية',star_only_note:'الباقة متاحة لصناع المحتوى ومقدمي الخدمة المسجلين',star_get:'⭐ الحصول على الباقة المميزة',star_cta_pending:'⏳ اشتراكك قيد التحقق — بانتظار تأكيد وصول التحويل',star_cta_active:'⭐ أنت مشترك في الباقة المميزة',star_pay_line:'حوّل من فودافون كاش أو إنستاباي ثم اكتب مرجع التحويلة',star_copy_num:'📋 نسخ الرقم',star_terms_show:'عرض الشروط',star_terms_hide:'إخفاء الشروط',star_confirm_btn:'تأكيد الاشتراك',star_err_terms:'لازم توافق على شروط الباقة أولاً',star_pay_amount_w:'المبلغ المطلوب تحويله',money_code:'كود المعاملة',money_exact:'حوّل المبلغ ده بالظبط',money_cents_note:'الكسور دي مرجعك المالي — ما تقرّبش الرقم، حوّل بنفس الكسور بالظبط عشان التحويلة تتعرف فوراً',rc_t:'📷 تأكيد فوري بصورة الإيصال',rc_d:'ارفع سكرين شوت التحويلة — هنقرأها ونأكد فوراً لو مطابقة تماماً (المبلغ بالكسور + الرقم + المرجع + التاريخ). لو القراءة مش واضحة املأ البيانات يدوياً وهتروح للمالك للمراجعة — مفيش تأكيد جزئي.',rc_choose:'اختر صورة الإيصال',rc_amount:'المبلغ كما في الإيصال',rc_recipient:'رقم المستلم كما في الإيصال',rc_ref:'مرجع التحويلة من الإيصال',rc_date:'تاريخ التحويلة',rc_btn:'⚡ تأكيد بالإيصال',rc_reading:'بنقرأ الإيصال…',rc_auto_ok:'⚡ اتأكدت تحويلتك تلقائياً من الإيصال — شكراً!',rc_review:'وصل الإيصال — هيتراجع يدوياً وهيتأكد قريب',rc_locked:'🔒 اتقفل رفع الإيصالات على المعاملة دي بعد محاولات كتير — هي عند المالك للمراجعة اليدوية',uv_t:'⭐ كبّر حسابك وعوّض غياب التوثيق',uv_d:'حسابك لسه مش موثّق — باقة «نجم Deal» بتديك شارة وإطاراً ذهبياً وأولوية ظهور وترشيحاً أول قدام العملاء ووقود نمو شهري، من أول يوم.',uv_note:'التوثيق مجاني وشارته لوحدها — الباقة مش بديل التوثيق، دي دفعة نمو إضافية جنبه.',ow_money_t:'💰 المعاملات المالية — المرجع الموحد',ow_money_search_ph:'وصلني مبلغ… اكتبه بالكسور كما وصلك (مثال 199.43)',ow_money_search:'بحث بالمبلغ',ow_money_confirm:'تأكيد الوصول',ow_money_reject:'رفض',ow_money_revoke:'إلغاء التأكيد',ow_money_revoke_freeze:'إلغاء + تجميد الدافع',ow_money_receipt:'🧾 الإيصال',ow_money_empty:'لا معاملات مالية بعد.',ow_money_fraud:'🚨 اشتباه احتيال',ow_money_state_open:'مفتوحة',ow_money_state_claimed:'بانتظار التأكيد',ow_money_state_auto_confirmed:'مؤكدة تلقائياً ⚡',ow_money_state_confirmed:'مؤكدة',ow_money_state_rejected:'مرفوضة',ow_money_state_expired:'منتهية',ow_money_state_revoked:'ملغاة',mk_star_subscription:'اشتراك نجم Deal',mk_booking_commission:'عمولة حجز',mk_booking_deposit:'عربون حجز',mk_booking_final:'دفعة أخيرة',ow_money_from:'من',ow_money_to:'إلى',ow_money_none_found:'لا معاملة بالمبلغ ده',cp_all:'📋 انسخ بيانات التحويل',cp_number:'نسخ الرقم',cp_amount:'نسخ المبلغ',ts_t:'🧭 إزاي تحوّل؟',ts_hide:'إخفاء الخطوات',ts_show:'عرض الخطوات',ts_open_eg:'افتح تطبيق محفظتك (فودافون كاش أو إنستاباي)',ts_open_local:'افتح وسيلة الدفع المحلية عندك: {m}',ts_choose:'اختر «تحويل الأموال»',ts_number:'اكتب الرقم ده',ts_number_alt:'اكتب رقم المستلم المتفق عليه بينكم',ts_amount:'اكتب المبلغ ده بالظبط',ts_cents_warn:'الكسور جزء من المرجع — ما تقرّبش الرقم',ts_confirm:'أكّد التحويلة واحتفظ بالإيصال أو المرجع',ts_back:'ارجع هنا: اكتب المرجع، أو ارفع صورة الإيصال للتأكيد الفوري',esc_awaiting_conf:'تحويلة الباقي اتسجلت — عند Deal دلوقتي للتحقق والاحتجاز. أول ما تتأكد بيتعلّم المبلغ «محتجَز» والحجز يكمل بعد تأكيد الاستلام.',esc_held_d:'الباقي محتجَز عند Deal بأمان 🔒 — بيُفرَج عنه للمنفذ أول ما الاستلام يتأكد.',esc_ready_d:'الباقي محتجَز وجاهز للإفراج ✅ — المالك بيحوّله للمنفذ من محفظته وبيسجّل المرجع هنا.',esc_released_d:'أُفرج عن الباقي للمنفذ من محفظة Deal 💸',esc_refunded_d:'اترد الباقي المحتجَز للعميل بقرار الإدارة — الحجز اتلغى.',esc_frozen_d:'المبلغ المحتجَز مجمّد بنزاع مفتوح 🧊 — لا إفراج ولا رد لحد قرار الإدارة.',esc_wait_client:'الاستلام اتأكد — الباقي بيتحوّل لـDeal للاحتجاز وبعدها بيُفرَج عنه ليك تلقائياً بعد قرار المالك.',esc_got_it:'وصلني ✓',esc_missing:'ماوصلش ⚠',esc_got_done:'أكدت وصول الإفراج ✓',esc_missing_done:'بلّغت إن الإفراج ماوصلش — الإدارة هتراجع التحويلة.',receipt_wait_d:'العميل قدامه ٢٤ ساعة من الإثبات لتأكيد الاستلام — صمته تأكيد تلقائي، وبعدها يُفرَج عن باقيك المحتجَز.',countdown_w:'الوقت المتبقي للتأكيد التلقائي',countdown_done:'انتهت المهلة',p2p_note:'المعاملات P2P — فلوسك بتتحرك بين المحافظ الشخصية مباشرة (فودافون كاش/إنستاباي)، وDeal بينظّم ويوثّق ويحمي ومش بنك. الدفعة دي بتتحوّل لرقم Deal وبتتحجز لحد تأكيد الاستلام.',evidence_btn:'📦 حزمة الأدلة',evidence_t:'حزمة أدلة الحجز',evidence_copy:'📋 نسخ الحزمة',evidence_dl:'⬇ تنزيل كملف',ow_escrow_t:'💰 مبالغ محتجزة عند Deal',ow_escrow_empty:'لا مبالغ محتجزة بعد.',ow_escrow_release:'إفراج للمنفذ',ow_escrow_refund:'رد للعميل',ow_escrow_release_t:'تسجيل إفراج الباقي',ow_escrow_release_d:'نفّذ تحويلة الباقي للمنفذ من محفظتك أولاً، وبعدين اكتب مرجع التحويلة هنا — الإفراج بيتسجل فوراً وبيوصل المنفذ إشعار بالمرجع.',ow_escrow_ref_ph:'مرجع تحويلة الإفراج (من محفظتك للمنفذ)',ow_escrow_confirm:'تأكيد الإفراج',ow_escrow_state_awaiting_transfer:'بانتظار تحويل العميل',ow_escrow_state_awaiting_confirmation:'بانتظار تأكيد التحويلة',ow_escrow_state_held:'محتجَز',ow_escrow_state_ready_release:'جاهز للإفراج',ow_escrow_state_released:'مُفرَج عنه',ow_escrow_state_refunded:'مردود للعميل',ow_escrow_state_frozen_dispute:'مجمّد بنزاع',ref_w:'المرجع',gm_t:'محادثة الحجز داخل المنصة',gm_ph_guest:'اكتب رسالتك لمقدم الخدمة…',gm_ph_talent:'اكتب ردك للعميل…',gm_empty:'لا رسائل بعد — ابدأ المحادثة.',gm_client:'عميل',gm_new:'جديد',gm_wa_btn:'نبّه واتساب',tasks_t:'مهام اليوم',tasks_avail:'متاح اليوم',tasks_cap:'سعتك اليومية (عدد مهام — 0 = بلا حد)',tasks_left:'باقي اليوم',tasks_unlimited:'سعة مفتوحة',tasks_empty:'لا مهام نشطة دلوقتي.',tasks_save:'حفظ إعدادات اليوم',tasks_saved:'اتحفظت إعدادات اليوم ✓',urgent_chip:'🔥 مستعجل — تنفيذ اليوم',urgent_label:'🔥 مستعجل — محتاج التنفيذ النهاردة',na_agree:'وافِق على الحجز',na_wait_client:'في انتظار موافقة العميل',na_wait_fee:'في انتظار تحويل العمولة',na_wait_deposit:'في انتظار العربون',na_submit_proof:'نفّذ وارفع إثبات التنفيذ',na_wait_receipt:'في انتظار تأكيد الاستلام',na_wait_rest:'في انتظار تحويل الباقي المحتجَز',na_disputed:'نزاع مفتوح — في انتظار المراجعة',na_wait_release:'الباقي محتجَز — في انتظار الإفراج',na_done:'مكتمل',guest_blocked_t:'قناة الضيف للعملاء من غير حسابات',guest_blocked_d:'أنت مسجل الدخول بحساب عضو — اطلب من داخل حسابك. قناة الضيف للعملاء من غير حسابات فقط.',avail_chip:'🟢 متاح اليوم'},
-en:{loading:'Loading…',copied:'Copied ✓',nav_market:'Market',nav_services:'Services',nav_campaigns:'Campaigns',nav_opps:'Opportunities',nav_bookings:'My bookings',nav_dash:'My dashboard',nav_owner:'Owner panel',post_job_btn:'📣 Post a job',menu:'Menu',main_menu:'Main menu',login_register:'Login / Register',hero_l1:'No more chasing work…',hero_l2:'Work comes looking for you',hero_sub:'Opportunities from shops and brands in your city, delivered to you — with a protected booking and the Deal Guarantee.',register_creator:'Register as a creator',browse_market:'Browse the market',install_app:'Install Deal on your phone',hero_guest_note:'Own a shop or a brand? Post your job in a minute — no registration, and creators will reach you on WhatsApp.',why1_t:'Opportunities come to you',why1_d:'Requests and campaigns matched to your city and niche — without searching.',why2_t:'A verified reputation that grows',why2_d:'Ratings, completion rate and achievement badges accumulate on your profile.',why3_t:'Protected payment with Deal Guarantee',why3_d:'Staged payments, the platform fee first, and delivery proof that protects both sides.',search_ph:'Search by name, niche, city…',search:'Search',all_niches:'All niches',all_cities:'All cities',all_countries:'All countries',guarantee_t:'Deal Guarantee:',guarantee_d:'Every booking here is a "Deal-Guaranteed booking" — documented staged payments, the final instalment held by Deal until receipt is confirmed, and a verified alternative from your city and niche if the creator defaults. Transactions are P2P between personal wallets — Deal organizes, documents and protects, and is not a bank.',open_requests:'Open shop requests',post_job_short:'📣 Post a job — no registration',services_t:'Integrated services — with the same Deal protection',svc_ads:'Sponsored ads management',svc_support:'Account problem solutions',campaigns_t:'Brand campaigns',new_campaign:'+ New campaign',opps_t:'Opportunities for you — auto-matched to your profile',bookings_t:'My bookings',footer:'Deal — the platform for all content creators · The official Deal seal 🛡️ Deal-Guaranteed booking',register:'Register',login:'Login',f_name:'Name',f_iam:'I am a…',role_creator:'Content creator',role_provider:'Service provider',role_shop:'Shop',role_brand:'Brand',f_provcat:'Service category',f_niche:'Niche / specialty',niche_ph:'Comedy, cooking, reviews…',f_city:'City',f_country:'Country',f_currency:'Currency',f_followers:'Follower count (for creators)',f_price:'Your listed price per video/service',f_links:'Your public account links (for verification)',f_contact:'Phone number or email (your login)',contact_ph:'01xxxxxxxxx or you@mail.com',continue_btn:'Continue',close:'Close',guest_title:'Post a job — no registration',g_biz:'Business / shop name',g_phone:'WhatsApp number (Egyptian mobile)',g_niche:'Ad type / niche',g_niche_ph:'Restaurants, clothes, real estate…',g_budget:'Approximate budget (EGP)',g_details:'Describe the job',g_details_ph:'I need an ad video about…',g_publish:'Publish request',g_done_t:'Your request is published ✓',g_done_d:'Creators can see it now and will contact you on WhatsApp. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',copy_link:'Copy link',camp_title:'New brand campaign',c_title:'Title',c_brief:'Brief',c_budget:'Budget',c_publish:'Publish campaign',req_title:'New shop request',req_niche:'Needed niche',req_details:'Details',edit_profile:'Edit profile',pf_photo:'Profile photo',pf_photo_hint:'Automatically cropped to a small square (≤256px).',pf_phone:'Phone number (WhatsApp)',pf_bio:'Bio',save_changes:'Save changes',shorts_title:'Shorts samples',shorts_hint:'Maximum 3 videos — shown as embedded playable videos on your public profile.',short_url:'Short video link (YouTube Shorts / Facebook / Instagram / TikTok)',short_title:'Sample title (optional)',short_add:'+ Add sample',notifications:'Notifications',support_title:'Deal Support — instant auto-replies',support_hint:'Pick a ready question or type yours — replies are instant from the FAQ base.',support_contact:'Contact (optional) — if you want the team to get back to you',support_ph:'Type your question here…',send:'Send',
+en:{book_me_btn:'📩 Book me on Deal',wall_t:'Founders Wall',wall_d:'The first 100 creators and providers who registered on Deal from any country — seats numbered by global registration order, and the class closes forever once all 100 are taken.',wall_closed:'The founding class is complete — closed forever',wall_seat_free:'Seat available',wall_taken_w:'seats taken of 100',friends_t:'Friends',friend_add:'+ Friend request',friend_pending_out:'Request pending',friend_accept:'Accept friendship',friend_decline:'Decline',friend_cancel:'Cancel request',friend_unfriend:'Unfriend',friend_incoming:'Incoming requests',friend_outgoing:'Requests you sent',friend_none:'No friends yet — an accepted friendship unlocks member messaging.',msg_friends_only:'Messaging is for accepted friends only',thread_readonly:'This conversation is read-only — messaging unlocks once you are friends.',posts_t:'Profile posts',post_ph:'Write a post on your profile…',post_link_ph:'Work link (optional) https://…',post_publish:'Post',post_pin:'📌 Pin as my offer',post_unpin:'Unpin',post_pinned:'📌 Pinned — my standing offer',post_edit:'Edit',post_delete:'Delete',post_save:'Save',post_none:'No posts yet.',booklink_t:'My booking link',booklink_d:'Put it in your TikTok and Instagram bio — clients open it and land on a booking request targeted directly at you, with the Deal Guarantee.',booklink_copy_bio:'Copy bio text',booklink_qr:'Scan for direct booking',dealcard_btn:'🎴 Deal card',dealcard_t:'Verified deal on Deal ✅',dealcard_on:'Completed on',dealcard_share:'Share card',dealcard_not:'This card is not available — it only exists for completed, verified deals on Deal.',dealcard_cta:'Want your next job documented like this? Book with the Deal Guarantee',verified_deals_w:'verified deals on Deal',pf_cover:'Cover photo',pf_cover_hint:'Auto-resized (≤1024px wide).',pf_accent:'Accent color',accent_default:'Default',loading:'Loading…',copied:'Copied ✓',nav_market:'Market',nav_services:'Services',nav_campaigns:'Campaigns',nav_opps:'Opportunities',nav_bookings:'My bookings',nav_dash:'My dashboard',nav_owner:'Owner panel',post_job_btn:'📣 Post a job',menu:'Menu',main_menu:'Main menu',login_register:'Login / Register',hero_l1:'No more chasing work…',hero_l2:'Work comes looking for you',hero_sub:'Opportunities from shops and brands in your city, delivered to you — with a protected booking and the Deal Guarantee.',register_creator:'Register as a creator',browse_market:'Browse the market',install_app:'Install Deal on your phone',hero_guest_note:'Own a shop or a brand? Post your job in a minute — no registration, and creators will reach you on WhatsApp.',why1_t:'Opportunities come to you',why1_d:'Requests and campaigns matched to your city and niche — without searching.',why2_t:'A verified reputation that grows',why2_d:'Ratings, completion rate and achievement badges accumulate on your profile.',why3_t:'Protected payment with Deal Guarantee',why3_d:'Staged payments, the platform fee first, and delivery proof that protects both sides.',search_ph:'Search by name, niche, city…',search:'Search',all_niches:'All niches',all_cities:'All cities',all_countries:'All countries',guarantee_t:'Deal Guarantee:',guarantee_d:'Every booking here is a "Deal-Guaranteed booking" — documented staged payments, the final instalment held by Deal until receipt is confirmed, and a verified alternative from your city and niche if the creator defaults. Transactions are P2P between personal wallets — Deal organizes, documents and protects, and is not a bank.',open_requests:'Open shop requests',post_job_short:'📣 Post a job — no registration',services_t:'Integrated services — with the same Deal protection',svc_ads:'Sponsored ads management',svc_support:'Account problem solutions',campaigns_t:'Brand campaigns',new_campaign:'+ New campaign',opps_t:'Opportunities for you — auto-matched to your profile',bookings_t:'My bookings',footer:'Deal — the platform for all content creators · The official Deal seal 🛡️ Deal-Guaranteed booking',register:'Register',login:'Login',f_name:'Name',f_iam:'I am a…',role_creator:'Content creator',role_provider:'Service provider',role_shop:'Shop',role_brand:'Brand',f_provcat:'Service category',f_niche:'Niche / specialty',niche_ph:'Comedy, cooking, reviews…',f_city:'City',f_country:'Country',f_currency:'Currency',f_followers:'Follower count (for creators)',f_price:'Your listed price per video/service',f_links:'Your public account links (for verification)',f_contact:'Phone number or email (your login)',contact_ph:'01xxxxxxxxx or you@mail.com',continue_btn:'Continue',close:'Close',guest_title:'Post a job — no registration',g_biz:'Business / shop name',g_phone:'WhatsApp number (Egyptian mobile)',g_niche:'Ad type / niche',g_niche_ph:'Restaurants, clothes, real estate…',g_budget:'Approximate budget (EGP)',g_details:'Describe the job',g_details_ph:'I need an ad video about…',g_publish:'Publish request',g_done_t:'Your request is published ✓',g_done_d:'Creators can see it now and will contact you on WhatsApp. Save this follow-up link — from it you track the booking and complete your steps (fee, receipt confirmation, rating) with no account:',copy_link:'Copy link',camp_title:'New brand campaign',c_title:'Title',c_brief:'Brief',c_budget:'Budget',c_publish:'Publish campaign',req_title:'New shop request',req_niche:'Needed niche',req_details:'Details',edit_profile:'Edit profile',pf_photo:'Profile photo',pf_photo_hint:'Automatically cropped to a small square (≤256px).',pf_phone:'Phone number (WhatsApp)',pf_bio:'Bio',save_changes:'Save changes',shorts_title:'Shorts samples',shorts_hint:'Maximum 3 videos — shown as embedded playable videos on your public profile.',short_url:'Short video link (YouTube Shorts / Facebook / Instagram / TikTok)',short_title:'Sample title (optional)',short_add:'+ Add sample',notifications:'Notifications',support_title:'Deal Support — instant auto-replies',support_hint:'Pick a ready question or type yours — replies are instant from the FAQ base.',support_contact:'Contact (optional) — if you want the team to get back to you',support_ph:'Type your question here…',send:'Send',
 followers_w:'followers',completion_w:'Completion',positive_w:'positive',profile_btn:'Profile',book_btn:'Book',founder_seal:'👑 Deal Founder',founder_only:'Founder account — display only',pioneer_w:'City Pioneer',founder_member_w:'Founding Member',empty_market:'The market is still empty — be the first creator to register.',guest_chip:'Guest client request — no account',whatsapp:'💬 WhatsApp',wa_msg:'Hi, I saw your request on Deal and I can do it',start_booking:'Start booking',view_opps:'See your opportunities',shop_job_card:'+ Have a job?',publish_request:'Publish request',no_providers:'No providers in this category yet.',no_campaigns:'No open campaigns yet.',apply_btn:'Apply',applicants_btn:'Applicants',match_w:'Match',kind_campaign:'Brand campaign',kind_request:'Shop request',no_opps:'No opportunities match your profile right now — update your city, niche and minimum price from your dashboard.',no_bookings:'No bookings yet.',open_booking:'Open booking',notify_talent:'📱 Notify creator on WhatsApp',wa_booking_msg:'You have new work on Deal — booking #',guaranteed_chip:'🛡️ Deal-Guaranteed booking',client_w:'Client',talent_w:'Creator',total_w:'Total',fee_w:'fee',first_w:'first',net_two_w:'and the net in two payments',
 stage_pending_agreement:'Agreement',stage_awaiting_fee:'Deal fee first',stage_awaiting_deposit:'Creator deposit',stage_in_progress:'In progress',stage_proof_submitted:'Proof of delivery',stage_awaiting_rest:'Remaining payment',stage_completed:'Fully paid',stage_disputed:'Dispute open',stage_cancelled:'Cancelled',
 step1:'1) Agreement',step2:'2) Deal fee first',step3:'3) Creator deposit',step4:'4) Proof of delivery',step5:'5) Final payment — held by Deal',agreed_w:'✔ Agreed',waiting_w:'Waiting',agree_btn:'I agree',show_fee:'Show Deal fee account',fee_ref_ph:'Transfer reference',fee_confirm_btn:'I transferred it — auto-confirm',fee_confirmed:'Auto-confirmed ✓',dep_ref_ph:'Deposit transfer reference to the creator',paid_btn:'I transferred it',proof_ph:'Publicly published work link',proof_btn:'Submit proof (the platform verifies it)',proof_w:'Proof',proof_verified:'✔ Verified and timestamped',receipt_t:'Confirm receipt',receipt_d:'If you do not respond within 24 hours of the proof, receipt is auto-confirmed to protect the creator (you get a warning at 12 hours).',receipt_btn:'I received it',completed_t:'Fully paid ✓',rv_pos:'Positive 👍',rv_neg:'Negative 👎',rv_comment_ph:'Comment (optional)',rv_send:'Submit rating (once, no edits)',rv_done:'You rated this booking ✓',dispute_btn:'Open dispute',dispute_prompt:'Dispute reason?',alternatives_t:'Deal Guarantee — verified alternatives from the same city and niche:',done_t:'Done',payment_saved:'Payment recorded',proof_done:'Proof timestamped ✓',review_saved:'Your rating was recorded',dispute_opened:'Dispute opened — admin will review it',booking_opened:'Booking opened #',ref_required:'Enter the transfer reference',bk_w:'Booking',bk_status:'Status',
@@ -921,6 +969,50 @@ function avatarHtml(u,big=false){
   return `<span class="avatar-fb${big?' big':''}">${esc((u.name||'?').trim().charAt(0)||'?')}</span>`}
 /* زر المتابعة: يظهر لكل صانع (والمؤسس استثناءً وحيداً مسموحاً على بطاقته) —
    للضيف يفتح الدخول، وللمسجل يبدّل الحالة في مكانه بلا إعادة تحميل الصفحة. */
+/* ===== الملف الاجتماعي: غلاف/لون/مقعد/صداقة ===== */
+function accentOf(u){ return (u && u.accent && TAX.accents) ? (TAX.accents[u.accent] || null) : null; }
+/* غلاف البطاقة/البروفايل: صورة العضو الشخصية أولاً، ثم لون تمييزه، ثم تدرّج
+   مجاله الافتراضي — بنفس ترتيب الأولوية في كل الأسطح. */
+function coverDiv(u,tall,extraStyle){
+  const cls='tcover'+(tall?' tall':'');
+  const ex=extraStyle?`;${extraStyle}`:'';
+  if(u&&u.cover) return `<div class="${cls} has-cover" style="background-image:url('${u.cover}')${ex}"></div>`;
+  const ac=accentOf(u);
+  if(ac) return `<div class="${cls}" style="background:linear-gradient(120deg,${ac},#0d1117)${ex}"></div>`;
+  const hue=nicheHue((u&&u.niche)||(u&&u.provider_category)||'');
+  return `<div class="${cls}" style="background:linear-gradient(120deg,hsl(${hue},62%,34%),hsl(${(hue+45)%360},68%,17%))${ex}"></div>`;
+}
+/* شارة مقعد المؤسس المرقّم — فئة الأعضاء المؤسسين فقط (صاحب المنصة بختمه المنفصل). */
+function seatChip(u){
+  if(!u||u.is_platform_founder||!u.founder_seat) return '';
+  return `<span class="chip seat-chip">👑 ${t('founder_member_w')} #${u.founder_seat}</span>`;
+}
+function memberChip(u){
+  return seatChip(u) || (u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:'');
+}
+/* زر الصداقة بحسب حالة العلاقة من الخادم (friend_state) — المؤسس خارجها تماماً. */
+function friendBtn(u){
+  if(!ME||ME.user.id===u.id||u.is_platform_founder) return '';
+  const st=u.friend_state;
+  if(!st||st==='friends'||st==='self') return '';
+  if(st==='pending_out') return `<button class="btn ghost sm" disabled>${t('friend_pending_out')}</button>`;
+  if(st==='pending_in') return `<button class="btn sm" onclick="friendAct(this,${u.id},'accept')">${t('friend_accept')}</button>`;
+  return `<button class="btn ghost sm" onclick="friendAct(this,${u.id},'request')">${t('friend_add')}</button>`;
+}
+let CUR_PROFILE_ID=null;
+function refreshSocialSurfaces(id){
+  if(CUR_PROFILE_ID) loadProfilePage(CUR_PROFILE_ID);
+  const dlg=document.getElementById('talentDlg'); if(dlg&&dlg.open&&id) openTalent(null,id);
+  const dash=$('#tab-dash'); if(dash&&!dash.classList.contains('hide')) loadDash();
+}
+async function friendAct(btn,id,act){
+  const path={request:'friend-request',accept:'friend-accept',decline:'friend-decline',cancel:'friend-cancel',unfriend:'unfriend'}[act];
+  if(!path) return;
+  await withBusy(btn,async()=>{
+    try{ await api(`/api/users/${id}/${path}`,{method:'POST',body:'{}'}); toast(t('done_t')); refreshSocialSurfaces(id); }
+    catch(e){ toast(errT(e.message)); }
+  });
+}
 function followBtn(u){
   if(ME&&ME.user.id===u.id) return '';
   const on=!!u.is_following;
@@ -939,9 +1031,11 @@ async function toggleFollow(btn,id){
     }catch(e){toast(errT(e.message))}
   });
 }
-/* زر المراسلة: للصناع العاديين فقط — المؤسس خارج المراسلة تماماً، ولا مراسلة للنفس. */
+/* زر المراسلة: للأصدقاء المقبولين فقط — المؤسس خارج المراسلة تماماً، ولا
+   مراسلة للنفس. من ليست صداقته مقبولة يظهر له زر الصداقة بدلاً منه. */
 function msgBtn(u){
   if(!ME||ME.user.id===u.id||u.is_platform_founder) return '';
+  if(u.friend_state && u.friend_state!=='friends') return '';
   return `<button class="btn ghost sm" onclick="openThread(this,${u.id})">${t('msg_btn')}</button>`;
 }
 /* لون غلاف البطاقة مشتق حتمياً من اسم المجال — كل مجال له هويته اللونية الثابتة. */
@@ -987,7 +1081,8 @@ const TAX_FALLBACK = {
     { "code": "SY", "ar": "سوريا", "en": "Syria", "dial": "963", "currency": "SYP", "curAr": "ليرة", "curEn": "SYP", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^9[0-9]{8}$" },
     { "code": "MR", "ar": "موريتانيا", "en": "Mauritania", "dial": "222", "currency": "MRU", "curAr": "أوقية", "curEn": "MRU", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[234][0-9]{7}$" }
   ],
-  "link_platforms": ["facebook.com", "instagram.com", "youtube.com", "tiktok.com", "x.com", "twitter.com", "snapchat.com"]
+  "link_platforms": ["facebook.com", "instagram.com", "youtube.com", "tiktok.com", "x.com", "twitter.com", "snapchat.com"],
+  "accents": { "gold": "#c9a227", "emerald": "#0e9f6e", "sapphire": "#2b5fd9", "ruby": "#c2255c", "violet": "#7048c9", "teal": "#1098ad", "copper": "#e8720c", "rose": "#d6336c" }
 };
 let TAX = TAX_FALLBACK;
 function svcLabel(key, custom){
@@ -1075,16 +1170,15 @@ function talentCard(u,i){
     <div class="row" style="margin-top:10px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span><div class="sp"></div>
     ${followBtn(u)}
     <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button></div></div>`;
-  const hue=nicheHue(u.niche||u.provider_category||'');
-  return `<div class="card tcard${u.is_star?' star-frame':''}" style="animation-delay:${Math.min((i||0)*60,360)}ms">
-  <div class="tcover" style="background:linear-gradient(120deg,hsl(${hue},62%,34%),hsl(${(hue+45)%360},68%,17%))"></div>
+  return `<div class="card tcard${u.is_star?' star-frame':''}${u.founder_seat?' seat-frame':''}${u.top_badge?' badge-frame':''}" style="animation-delay:${Math.min((i||0)*60,360)}ms${u.top_badge?`;--bf:${u.top_badge.color}`:''}">
+  ${coverDiv(u)}
   <div class="tbody">
   <div class="row"><span class="tava">${avatarHtml(u)}</span><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3></div>
-  <div class="row" style="margin:9px 0 0">${u.role==='provider'?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('provider_tag')}</span>`:''}<span class="chip">${esc(kindLabel(u))}</span><span class="chip">📍 ${esc(placeStr(u))}</span><span class="chip">${u.followers||0} ${t('followers_w')}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.featured?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('featured_chip')}</span>`:''}${u.is_star?`<span class="chip" style="border-color:var(--gold);color:var(--gold);background:rgba(212,160,23,.14);font-weight:800">${t('star_chip')}</span>`:''}${u.star_of_week?`<span class="chip" style="border-color:var(--gold);color:#161104;background:linear-gradient(90deg,#f3cd6b,var(--gold));font-weight:900">${t('star_week_chip')}</span>`:''}${u.available_today?`<span class="chip" style="border-color:#2f9e44;color:#2f9e44;font-weight:700">${t('avail_chip')}</span>`:''}</div>
+  <div class="row" style="margin:9px 0 0">${u.role==='provider'?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('provider_tag')}</span>`:''}<span class="chip">${esc(kindLabel(u))}</span><span class="chip">📍 ${esc(placeStr(u))}</span><span class="chip">${u.followers||0} ${t('followers_w')}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}${memberChip(u)}${u.featured?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('featured_chip')}</span>`:''}${u.is_star?`<span class="chip" style="border-color:var(--gold);color:var(--gold);background:rgba(212,160,23,.14);font-weight:800">${t('star_chip')}</span>`:''}${u.star_of_week?`<span class="chip" style="border-color:var(--gold);color:#161104;background:linear-gradient(90deg,#f3cd6b,var(--gold));font-weight:900">${t('star_week_chip')}</span>`:''}${u.available_today?`<span class="chip" style="border-color:#2f9e44;color:#2f9e44;font-weight:700">${t('avail_chip')}</span>`:''}</div>
   <div class="row" style="margin:7px 0"><span class="chip">${t('completion_w')} ${u.completion_rate}%</span>
-  <span class="chip">⭐ ${u.avg_stars??'—'} (${u.positive_pct??'—'}% ${t('positive_w')})</span>${badgeDots(u)}</div>
+  <span class="chip">⭐ ${u.avg_stars??'—'} (${u.positive_pct??'—'}% ${t('positive_w')})</span><span class="chip">✅ ${u.verified_deals??0} ${t('verified_deals_w')}</span>${badgeDots(u)}</div>
   <div class="row"><span class="price">${money(u.price, u.currency)}</span><div class="sp"></div>
-  ${followBtn(u)}${msgBtn(u)}
+  ${followBtn(u)}${friendBtn(u)}${msgBtn(u)}
   <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button>
   ${ME?`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_btn')}</button>`:guestOrderBtn(u)}</div></div></div>`}
 
@@ -1267,6 +1361,7 @@ async function openBooking(btn,id){
       <input id="rvC" placeholder="${t('rv_comment_ph')}"><button class="btn sm" onclick="review(this,${b.id})">${t('rv_send')}</button></div>`:`<div class="mut">${t('rv_done')}</div>`}</div>`;
     if(!['cancelled','disputed'].includes(b.status)&&!(b.status==='completed'&&b.escrow_status!=='ready_release')) h+=`<div class="row" style="margin-top:10px"><button class="btn ghost sm" onclick="dispute(this,${b.id})">${t('dispute_btn')}</button></div>`;
     if(b.escrow_status||b.status==='disputed'||b.status==='completed') h+=`<div class="row" style="margin-top:8px"><button class="btn ghost sm" onclick="showEvidence(this,${b.id})">${t('evidence_btn')}</button></div>`;
+    if(b.status==='completed') h+=`<div class="row" style="margin-top:8px"><button class="btn sm" onclick="location.hash='#/d/${b.id}'">${t('dealcard_btn')}</button></div>`;
     if(b.status==='disputed'&&b.alternatives&&b.alternatives.length) h+=`<div class="guarantee">${t('alternatives_t')} ${b.alternatives.map(a=>esc(a.name)).join('، ')}</div>`;
     if(isClient&&!['completed','cancelled'].includes(b.status)) h+=`<div class="row" style="margin-top:10px"><label class="row" style="align-items:center;gap:8px"><input type="checkbox" id="bUrgentToggle" ${b.urgent?'checked':''} onchange="bToggleUrgent(this,${b.id})" style="width:auto"><span>${t('urgent_label')}</span></label></div>`;
     if(b.is_guest) h+=`<div class="step" style="margin-top:10px"><b>${t('gm_t')}</b><div id="bChatLog" class="chatlog" style="margin-top:8px"></div>
@@ -1460,19 +1555,21 @@ async function openTalent(btn,id){
       <div class="row" style="margin-top:12px"><button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">${t('close')}</button></div>`;
       $('#talentDlg').showModal();return;
     }
-    $('#talentBody').innerHTML=`<div class="tcover tall" style="margin:-22px -22px 0;border-radius:20px 20px 0 0;background:linear-gradient(120deg,hsl(${nicheHue(u.niche||'')},62%,34%),hsl(${(nicheHue(u.niche||'')+45)%360},68%,17%))"></div>
+    $('#talentBody').innerHTML=`${coverDiv(u,true,'margin:-22px -22px 0;border-radius:20px 20px 0 0')}
     <div class="row" style="padding:0 2px"><span class="tava big">${avatarHtml(u,true)}</span><div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${u.role==='provider'?`${t('provider_tag')} · `:''}${esc(kindLabel(u))} · ${esc(placeStr(u))} · ${t('member_since')} ${new Date(u.member_since).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div></div></div>
-    <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${starChips(u)}</div>
+    <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${seatChip(u)}${starChips(u)}</div>
     <p>${esc(u.bio||'')}</p>
     ${shortsEmbeds(d.shorts)}
+    <div id="talentPosts" class="posts-host"></div>
     <h4>${t('badges_vault')}</h4>${d.badges.map(b=>`<div class="row"><span class="badge-ic" style="background:${b.earned?b.color:'#444'}">🏅</span><span>${b.name}</span><span class="mut">${b.earned?t('badge_earned'):b.progress}</span></div>`).join('')}
     <h4>${t('work_gallery')}</h4>${u.portfolio&&u.portfolio.length?u.portfolio.map(l=>`<div><a target="_blank" href="${esc(l)}">${esc(l)}</a></div>`).join(''):`<div class="mut">${t('no_work')}</div>`}
     <h4>${t('reviews_t')}</h4>${d.reviews.length?d.reviews.map(r=>`<div class="step">${r.sentiment==='positive'?'👍':'👎'} ⭐${r.stars} — ${esc(r.comment||'')} <span class="mut">(${esc(r.reviewer_name)})</span></div>`).join(''):`<div class="mut">${t('no_reviews')}</div>`}
     <div class="row" style="margin-top:12px">${ME&&ME.user.id===u.id?'':(ME?`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_for')} ${money(u.price, u.currency)}</button>`:guestOrderBtn(u))}
-    ${followBtn(u)}${msgBtn(u)}
+    ${followBtn(u)}${friendBtn(u)}${msgBtn(u)}
     <button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">${t('close')}</button></div>`;
     $('#talentDlg').showModal();
+    loadPostsInto(document.getElementById('talentPosts'), u.id);
   };
   if(btn) return withBusy(btn,work); return work();
 }
@@ -1562,7 +1659,33 @@ async function loadDash(){
     try{ st=await api('/api/star/me'); }catch(e){ /* بطاقة الباقة إضافية */ }
     starCard=starBannerEligible(u,st)?unverifiedStarBannerHtml():starCtaHtml(st);
   }
-  const socialRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x,'sm')}<div class="mut">${esc(x.niche||'')}${x.city?` · ${esc(x.city)}`:''}</div></span>${followBtn(x)}${msgBtn(x)}<button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
+  const socialRow=(x)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x,'sm')}<div class="mut">${esc(x.niche||'')}${x.city?` · ${esc(x.city)}`:''}</div></span>${followBtn(x)}${friendBtn(x)}${msgBtn(x)}<button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
+  /* بطاقة الأصدقاء: طلبات واردة بقبول/رفض، وقائمة أصدقاء بمراسلة وإلغاء صداقة،
+     وطلبات مرسلة بإلغاء — المؤسس خارج الصداقة تماماً فلا بطاقة له. */
+  let friendsCard='';
+  if(!u.is_platform_founder){
+    let fr={friends:[],incoming:[],outgoing:[],friends_count:0};
+    try{ const f=await api('/api/me/friends'); fr={friends:f.friends||[],incoming:f.incoming||[],outgoing:f.outgoing||[],friends_count:f.friends_count||0}; }catch(e){}
+    const frRow=(x,actions)=>`<div class="row" style="margin-bottom:6px">${avatarHtml(x)}<span style="flex:1">${esc(x.name)}${seal(x,'sm')}<div class="mut">${esc(x.niche||'')}${x.city?` · ${esc(x.city)}`:''}</div></span>${actions}<button class="btn ghost sm" onclick="openTalent(this,${x.id})">${t('profile_btn')}</button></div>`;
+    friendsCard=`<div class="card" id="dashFriends" style="margin-top:12px"><h3 style="margin-top:0">🤝 ${t('friends_t')} (${fr.friends_count})</h3>
+    ${fr.incoming.length?`<h4>${t('friend_incoming')}</h4>${fr.incoming.map(x=>frRow(x,`<button class="btn sm" onclick="friendAct(this,${x.id},'accept')">${t('friend_accept')}</button><button class="btn ghost sm" onclick="friendAct(this,${x.id},'decline')">${t('friend_decline')}</button>`)).join('')}`:''}
+    ${fr.friends.length?fr.friends.map(x=>frRow(x,`${msgBtn({id:x.id,is_platform_founder:0,friend_state:'friends'})}<button class="btn ghost sm" onclick="friendAct(this,${x.id},'unfriend')">${t('friend_unfriend')}</button>`)).join(''):`<div class="mut">${t('friend_none')}</div>`}
+    ${fr.outgoing.length?`<h4>${t('friend_outgoing')}</h4>${fr.outgoing.map(x=>frRow(x,`<button class="btn ghost sm" onclick="friendAct(this,${x.id},'cancel')">${t('friend_cancel')}</button>`)).join('')}`:''}
+    </div>`;
+  }
+  /* بطاقة رابط الحجز الشخصي + QR (اقتراح ١) — للصناع والمقدمين فقط، والمؤسس
+     مستثنى لأنه بلا حجز أصلاً. الـQR يُرسم محلياً بعد الإدراج. */
+  let bookCard='';
+  if(['creator','provider'].includes(u.role)&&!u.is_platform_founder){
+    BOOK_URL=location.origin+location.pathname+'#/u/'+u.id+'?book=1';
+    bookCard=`<div class="card" id="dashBookLink" style="margin-top:12px"><h3 style="margin-top:0">🔗 ${t('booklink_t')}</h3>
+    <div class="mut">${t('booklink_d')}</div>
+    <div class="row" style="margin-top:8px"><input readonly value="${BOOK_URL}" style="flex:1">
+    <button class="btn ghost sm" onclick="copyVal(this,BOOK_URL)">${t('copy_link')}</button>
+    <button class="btn ghost sm" onclick="copyVal(this,bioText())">${t('booklink_copy_bio')}</button></div>
+    <div style="text-align:center;margin-top:10px"><canvas id="bookQr" width="184" height="184" style="background:#fff;border-radius:12px"></canvas>
+    <div class="mut">${t('booklink_qr')}</div></div></div>`;
+  }
   $('#dashBody').innerHTML=`${ovStrip}${starCard}<div class="card dash-hero${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
     <div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}${u.is_platform_founder?'':` · <span class="price">${money(u.price, u.currency)}</span>`}</div>
@@ -1587,6 +1710,8 @@ async function loadDash(){
   </div>
   ${refsCard}
   ${badgesCard}
+  ${friendsCard}
+  ${bookCard}
   ${tasksCard}
   <div class="card" style="margin-top:12px"><h3>${t('verify_t')}</h3><div class="mut">${t('verify_status')}: ${me.verify_status}</div>
     ${me.verify_status!=='verified'?`<button class="btn sm" onclick="vReq(this)">${t('v_req')}</button>
@@ -1598,6 +1723,8 @@ async function loadDash(){
     <button class="btn sm" onclick="savePrefs(this)">${t('save_btn')}</button>
     <button class="btn ghost sm" onclick="showTab('opps')">${t('open_opps_btn')}</button></div>
   ${u.role==='shop'?`<div class="card" style="margin-top:12px"><h3>${t('shop_job')}</h3><button class="btn sm" onclick="document.getElementById('reqDlg').showModal()">${t('publish_shop_req')}</button></div>`:''}`;
+  const qc=document.getElementById('bookQr');
+  if(qc&&BOOK_URL){ try{ drawQr(qc,BOOK_URL); }catch(e){ /* رابط أطول من سعة QR — يبقى الرابط النصي وأزرار النسخ */ } }
 }
 async function vReq(btn){await withBusy(btn,async()=>{try{const r=await api('/api/verify/request',{method:'POST',body:'{}'});
   document.getElementById('vCode').innerHTML=`${t('code_is')}: <b>${r.code}</b> — ${r.instructions}`}catch(e){toast(errT(e.message))}})}
@@ -1616,6 +1743,13 @@ async function openProfile(btn){
     $('#pfPhone').value=u.phone||''; $('#pfBio').value=u.bio||'';
     PF_AVATAR=u.avatar||null; PF_AVATAR_DIRTY=false;
     $('#pfAvatarPreview').innerHTML=avatarHtml(u,true);
+    /* الغلاف ولون التمييز: المؤسس بهوية ثابتة فلا قسم لهما في محرره أصلاً. */
+    PF_COVER=u.cover||null; PF_ACCENT=u.accent||'';
+    const covSec=document.getElementById('pfCoverSec');
+    if(covSec) covSec.classList.toggle('hide',!!u.is_platform_founder);
+    const cpv=document.getElementById('pfCoverPreview');
+    if(cpv) cpv.style.backgroundImage=u.cover?`url('${u.cover}')`:'';
+    renderAccentSwatches();
     const canShorts = u.role==='creator' && !u.is_platform_founder;
     $('#shortsMgr').classList.toggle('hide',!canShorts);
     if(canShorts){ const d=await api('/api/me/portfolio'); renderShortsMgr(d.items); }
@@ -1644,6 +1778,8 @@ async function saveProfile(btn){
       const body={name:$('#pfName').value.trim(),niche:$('#pfNiche').value.trim(),city:$('#pfCity').value.trim(),
         followers:+$('#pfFollowers').value||0,price:+$('#pfPrice').value||0,phone:$('#pfPhone').value.trim(),bio:$('#pfBio').value};
       if(PF_AVATAR_DIRTY) body.avatar=PF_AVATAR||'';
+      /* الغلاف واللون يُرسلان دائماً للحسابات العادية (المؤسس لا يرى قسمهما). */
+      if(!ME.user.is_platform_founder){ body.cover=PF_COVER||''; body.accent=PF_ACCENT||''; }
       const r=await api('/api/me/profile',{method:'PATCH',body:JSON.stringify(body)});
       ME.user=r.user; renderAuth(); toast(t('pf_saved'));
       $('#profileDlg').close(); FILTERS_READY=false; loadDash(); loadMarket();
@@ -1883,7 +2019,7 @@ async function loadConversations(){
       ${c.unread?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${c.unread} ${t('msg_unread')}</span>`:''}</div></div>`).join('');
     }catch(e){ /* محادثات الضيوف إضافية */ }
     $('#convList').innerHTML=guestCards+(d.items.length?d.items.map(c=>`<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openThread(null,${c.user.id})">
-      <div class="row">${avatarHtml(c.user)}<div style="flex:1"><b>${esc(c.user.name)}</b>${seal(c.user,'sm')}
+      <div class="row">${avatarHtml(c.user)}<div style="flex:1"><b>${esc(c.user.name)}</b>${seal(c.user,'sm')}${c.can_message===false?` <span class="chip">${t('msg_friends_only')}</span>`:''}
       <div class="mut">${c.last.mine?'↩ ':''}${esc(c.last.body.slice(0,80))}</div></div>
       ${c.unread?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${c.unread} ${t('msg_unread')}</span>`:''}
       <span class="mut">${new Date(c.last.created_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</span></div></div>`).join('')
@@ -1901,7 +2037,13 @@ async function openThread(btn,id){
     $('#convList').classList.add('hide'); $('#threadView').classList.remove('hide');
     $('#threadName').textContent=d.user.name;
     $('#msgInput').placeholder=t('msg_ph');
-    $('#threadMsgs').innerHTML=d.items.length?d.items.map(m=>`<div class="msg ${m.mine?'me':'bot'}">${esc(m.body)}</div>`).join(''):`<div class="mut">${t('msg_no_thread')}</div>`;
+    /* قصر المراسلة على الأصدقاء: محادثة قديمة مع غير صديق تبقى مقروءة فقط،
+       مع تنبيه داخلها وزر طلب صداقة — والخادم يرفض الإرسال 403 أصلاً. */
+    const ro=d.can_message===false;
+    $('#msgInput').disabled=ro;
+    const sb=document.getElementById('msgSendBtn'); if(sb) sb.disabled=ro;
+    const notice=ro?`<div class="step" style="margin-bottom:8px">${t('thread_readonly')} <button class="btn sm" onclick="friendAct(this,${id},'request')">${t('friend_add')}</button></div>`:'';
+    $('#threadMsgs').innerHTML=notice+(d.items.length?d.items.map(m=>`<div class="msg ${m.mine?'me':'bot'}">${esc(m.body)}</div>`).join(''):`<div class="mut">${t('msg_no_thread')}</div>`);
     const log=$('#threadMsgs'); log.scrollTop=log.scrollHeight;
     msgCount();
   };
@@ -1922,6 +2064,9 @@ async function openGuestThread(btn,bookingId){
     $('#convList').classList.add('hide'); $('#threadView').classList.remove('hide');
     $('#threadName').textContent=(d.guest_name||t('gm_client'))+' · '+t('guest_chip');
     $('#msgInput').placeholder=t('gm_ph_talent');
+    /* محادثة الضيف ليست خاضعة لبوابة الصداقة — إعادة تفعيل الإدخال دائماً. */
+    $('#msgInput').disabled=false;
+    const gsb=document.getElementById('msgSendBtn'); if(gsb) gsb.disabled=false;
     renderGuestThread(d.items);
     msgCount();
   };
@@ -2156,6 +2301,7 @@ async function loadGuestPage(tok){
   h+=step(`${t('step5')} — ${b.rest} ${b.currency}`,b.escrow_status==='released'?'done':(escPayOpen(b,true)?'open':''),
     escBlockHtml(b,true,false,'g'));
   if(b.escrow_status||b.status==='disputed'||b.status==='completed')h+=`<div class="row" style="margin-top:8px"><button class="btn ghost sm" onclick="gShowEvidence(this)">${t('evidence_btn')}</button></div>`;
+  if(b.status==='completed')h+=`<div class="row" style="margin-top:8px"><button class="btn sm" onclick="location.hash='#/d/${b.id}'">${t('dealcard_btn')}</button></div>`;
   if(b.status==='completed')h+=`<div class="step done"><b>${t('completed_t')}</b>${!b.reviewed?`<div style="margin-top:7px"><div class="row"><select id="gRvS" style="max-width:170px"><option value="positive">${t('rv_pos')}</option><option value="negative">${t('rv_neg')}</option></select>
     <select id="gRvStars" style="max-width:110px"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
     <input id="gRvC" placeholder="${t('rv_comment_ph')}"><button class="btn sm" onclick="gReview(this)">${t('rv_send')}</button></div>`:`<div class="mut">${t('rv_done')}</div>`}</div>`;
@@ -2239,6 +2385,260 @@ async function copyProfileLink(btn,id){
     setTimeout(()=>{btn.innerHTML=old;btn.disabled=false},2200); }
   toast(t('copied'));
 }
+/* ===== منشورات البروفايل: عرض/نشر/تعديل/حذف/تثبيت/تفاعل =====
+   التفاعل للأعضاء المسجلين فقط (الزائر يقرأ)؛ الحذف والتعديل والتثبيت لصاحب
+   المنشور فقط، وكل ذلك محكوم خادمياً أيضاً. */
+function postCardHtml(p, ownerId){
+  const mine=!!(ME&&ME.user.id===ownerId);
+  const canReact=!!ME;
+  const rb=(kind,emoji)=>`<button class="react-btn ${p.my_reactions.includes(kind)?'on':''}" ${canReact?`onclick="reactPost(this,${p.id},'${kind}',${ownerId})"`:''} ${canReact?'':'disabled'}>${emoji} ${p.reactions[kind]||0}</button>`;
+  return `<div class="post-card ${p.pinned?'pinned':''}" id="post-${p.id}">
+    ${p.pinned?`<div style="margin-bottom:6px"><span class="chip seat-chip">${t('post_pinned')}</span></div>`:''}
+    <div style="white-space:pre-wrap">${esc(p.body)}</div>
+    ${p.link?`<div style="margin-top:5px"><a target="_blank" rel="noopener" href="${esc(p.link)}">${esc(p.link)}</a></div>`:''}
+    <div class="mut" style="margin-top:5px">${new Date(p.created_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div>
+    <div class="row" style="margin-top:7px">${rb('love','❤️')}${rb('clap','👏')}
+    ${mine?`<div class="sp"></div>
+      <button class="btn ghost sm" onclick="pinPost(this,${p.id},${ownerId},${p.pinned?0:1})">${p.pinned?t('post_unpin'):t('post_pin')}</button>
+      <button class="btn ghost sm" onclick="editPost(this,${p.id})">${t('post_edit')}</button>
+      <button class="btn ghost sm" onclick="deletePost(this,${p.id},${ownerId})">${t('post_delete')}</button>`:''}
+    </div>
+    <div class="post-edit hide" id="postEdit-${p.id}">
+      <textarea id="postBody-${p.id}" maxlength="1000">${esc(p.body)}</textarea>
+      <input id="postLink-${p.id}" value="${esc(p.link||'')}" placeholder="${t('post_link_ph')}">
+      <div class="row"><button class="btn sm" onclick="savePostEdit(this,${p.id},${ownerId})">${t('post_save')}</button></div>
+    </div>
+  </div>`;
+}
+async function loadPostsInto(el, userId, inCard){
+  if(!el) return;
+  el.dataset.uid=userId;
+  const mine=!!(ME&&ME.user.id===userId);
+  try{
+    const d=await api('/api/users/'+userId+'/posts');
+    el.innerHTML=`<div class="${inCard?'card':''}" ${inCard?'style="margin-top:12px"':''}><h4 style="margin-top:0">${t('posts_t')}</h4>
+    ${mine?`<div class="post-card"><textarea class="np-body" maxlength="1000" placeholder="${t('post_ph')}"></textarea>
+      <input class="np-link" placeholder="${t('post_link_ph')}">
+      <div class="err np-err"></div>
+      <div class="row"><button class="btn sm" onclick="publishPost(this,${userId})">${t('post_publish')}</button></div></div>`:''}
+    <div>${d.items.length?d.items.map(p=>postCardHtml(p,userId)).join(''):`<div class="mut">${t('post_none')}</div>`}</div></div>`;
+  }catch(e){ el.innerHTML=''; }
+}
+function refreshPosts(userId){ $$('.posts-host').forEach(h=>{ if(+h.dataset.uid===userId) loadPostsInto(h,userId,h.id==='profilePosts'); }); }
+async function publishPost(btn,userId){
+  const host=btn.closest('.posts-host'); const body=host?host.querySelector('.np-body'):null;
+  const link=host?host.querySelector('.np-link'):null; const err=host?host.querySelector('.np-err'):null;
+  if(err) err.classList.add('hide');
+  await withBusy(btn,async()=>{
+    try{ await api(`/api/users/${userId}/posts`,{method:'POST',body:JSON.stringify({body:body?body.value:'',link:link?link.value.trim():''})}); toast(t('done_t')); refreshPosts(userId); }
+    catch(e){ if(err){ err.textContent=errT(e.message); err.classList.remove('hide'); } else toast(errT(e.message)); }
+  });
+}
+async function reactPost(btn,postId,kind,ownerId){
+  if(!ME){ openAuth(); return; }
+  await withBusy(btn,async()=>{
+    try{ await api(`/api/posts/${postId}/react`,{method:'POST',body:JSON.stringify({kind})}); refreshPosts(ownerId); }
+    catch(e){ toast(errT(e.message)); }
+  });
+}
+async function pinPost(btn,postId,ownerId,pin){
+  await withBusy(btn,async()=>{
+    try{ await api(`/api/posts/${postId}/${pin?'pin':'unpin'}`,{method:'POST',body:'{}'}); toast(t('done_t')); refreshPosts(ownerId); }
+    catch(e){ toast(errT(e.message)); }
+  });
+}
+function editPost(btn,postId){ const e=document.getElementById('postEdit-'+postId); if(e) e.classList.toggle('hide'); }
+async function savePostEdit(btn,postId,ownerId){
+  await withBusy(btn,async()=>{
+    try{ await api(`/api/posts/${postId}`,{method:'PATCH',body:JSON.stringify({body:document.getElementById('postBody-'+postId).value,link:document.getElementById('postLink-'+postId).value.trim()})}); toast(t('done_t')); refreshPosts(ownerId); }
+    catch(e){ toast(errT(e.message)); }
+  });
+}
+async function deletePost(btn,postId,ownerId){
+  await withBusy(btn,async()=>{
+    try{ await api(`/api/posts/${postId}`,{method:'DELETE'}); toast(t('done_t')); refreshPosts(ownerId); }
+    catch(e){ toast(errT(e.message)); }
+  });
+}
+
+/* ===== جدار المؤسسين: المقاعد ١–١٠٠ العامة ===== */
+async function toggleWall(btn){
+  const box=document.getElementById('wallBox'); if(!box) return;
+  if(!box.classList.contains('hide')){ box.classList.add('hide'); return; }
+  box.classList.remove('hide');
+  await withBusy(btn,async()=>{
+    try{
+      const d=await api('/api/founders-wall');
+      document.getElementById('wallProgress').textContent=`👑 ${d.taken} ${t('wall_taken_w')}`;
+      document.getElementById('wallClosed').classList.toggle('hide',!d.closed);
+      document.getElementById('wallGrid').innerHTML=d.seats.map(s=>{
+        if(!s.taken) return `<div class="wall-cell free"><div class="n">#${s.seat}</div><div class="who">${t('wall_seat_free')}</div></div>`;
+        const ctry=(TAX.countries||[]).find(c=>c.code===s.country);
+        return `<div class="wall-cell"><div class="n">#${s.seat}</div><div class="who">${esc(s.name)}${s.verified?' ✔️':''}</div><div class="meta">${esc([s.city,ctry?(LANG==='ar'?ctry.ar:ctry.en):''].filter(Boolean).join(' · '))}</div><div class="meta">${esc(s.role==='provider'?svcLabel(s.provider_category,s.provider_custom):(s.niche||''))}</div></div>`;
+      }).join('');
+    }catch(e){ box.classList.add('hide'); toast(errT(e.message)); }
+  });
+}
+
+/* ===== بطاقة «صفقة موثقة عبر Deal» — صفحة مشاركة عامة #/d/<id> ===== */
+async function loadDealCardPage(id){
+  CUR_PROFILE_ID=null;
+  showTab('dealcard');
+  const body=$('#dealCardBody');
+  try{
+    const d=await api('/api/deals/'+id);
+    const tl=d.talent;
+    body.innerHTML=`<div class="deal-card-view">
+      <div class="big-seal">🛡️</div>
+      <h2>${t('dealcard_t')}</h2>
+      <div style="font-size:19px;font-weight:800;margin-top:10px">${esc(tl.name)}${tl.verified?' ✔️':''}${tl.founder_seat?` · 👑 #${tl.founder_seat}`:''}</div>
+      <div style="opacity:.85">${esc(tl.role==='provider'?svcLabel(tl.provider_category,tl.provider_custom):(tl.niche||''))}${tl.city?` · ${esc(tl.city)}`:''}${tl.country_name?` · ${esc(tl.country_name)}`:''}</div>
+      <div style="margin-top:12px;opacity:.9">${esc(d.client_first_name||'')}</div>
+      <div class="mut" style="margin-top:8px">${t('dealcard_on')} ${new Date(d.completed_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div>
+      <div class="row" style="justify-content:center;margin-top:16px"><button class="btn" onclick="shareDealCard(${d.booking_id})">${t('dealcard_share')}</button>
+      <button class="btn ghost" onclick="location.hash=''">${t('back_home')}</button></div>
+      <div style="margin-top:14px;font-size:13.5px;opacity:.8">${t('dealcard_cta')}</div>
+    </div>`;
+  }catch(e){
+    body.innerHTML=`<div class="deal-card-view"><div class="big-seal">🛡️</div><h2>${t('dealcard_t')}</h2><p style="opacity:.85">${t('dealcard_not')}</p><div class="row" style="justify-content:center;margin-top:14px"><button class="btn" onclick="location.hash=''">${t('back_home')}</button></div></div>`;
+  }
+}
+async function shareDealCard(id){
+  const url=location.origin+location.pathname+'#/d/'+id;
+  if(navigator.share){ try{ await navigator.share({title:'Deal',text:t('dealcard_t'),url}); return; }catch(e){} }
+  await copyTextValue(url); toast(t('copied'));
+}
+function showDealCardRoute(id){ loadDealCardPage(id); }
+
+/* ===== رابط الحجز الشخصي + QR مولّد عميلاً (بلا أي خدمة خارجية) ===== */
+let BOOK_URL='';
+async function copyVal(btn,val){ await copyTextValue(val); toast(t('copied')); }
+function bioText(){ return (LANG==='ar'?'احجز إعلانك عندي عبر Deal 👇\n':'Book your ad with me on Deal 👇\n')+BOOK_URL; }
+/* مشفّر QR مبسّط ذاتي: وضع بايت، تصحيح M، إصدارات ١–٧، قناع ثابت (قناع صالح
+   قياسياً)، معلومات الصيغة والإصدار محسوبة بـBCH. كافٍ لروابط الحجز القصيرة. */
+const QR_GF_EXP=new Uint8Array(512), QR_GF_LOG=new Uint8Array(256);
+(function(){ let x=1; for(let i=0;i<255;i++){ QR_GF_EXP[i]=x; QR_GF_LOG[x]=i; x<<=1; if(x&0x100) x^=0x11d; } for(let i=255;i<512;i++) QR_GF_EXP[i]=QR_GF_EXP[i-255]; })();
+function qrGfMul(a,b){ return (a&&b)?QR_GF_EXP[QR_GF_LOG[a]+QR_GF_LOG[b]]:0; }
+function qrRsGen(ec){ let g=[1]; for(let i=0;i<ec;i++){ const ng=new Array(g.length+1).fill(0); for(let j=0;j<g.length;j++){ ng[j]^=qrGfMul(g[j],QR_GF_EXP[i]); ng[j+1]^=g[j]; } g=ng; } return g; }
+function qrRsRem(data,ec){ const g=qrRsGen(ec); const rem=new Array(ec).fill(0); for(const b of data){ const f=b^rem.shift(); rem.push(0); for(let i=0;i<ec;i++) rem[i]^=qrGfMul(g[i+1],f); } return rem; }
+function qrFormatBits(mask){
+  const data=(0<<3)|mask; // بتّا مستوى التصحيح M هما 00
+  let d=data<<10;
+  const gen=0x537;
+  for(;;){ let deg=-1; for(let i=30;i>=0;i--) if((d>>i)&1){ deg=i; break; } if(deg<10) break; d^=gen<<(deg-10); }
+  return (((data<<10)|d) ^ 0x5412) & 0x7fff;
+}
+function qrVersionBits(v){
+  let rem=v;
+  for(let i=0;i<12;i++) rem=(rem<<1)^(((rem>>11)&1)?0x1f25:0);
+  return ((v<<12)|rem)&0x3ffff;
+}
+function qrEncode(text){
+  const bytes=[...new TextEncoder().encode(text)];
+  /* جدول كتل المستوى M للإصدارات ١–٧ (مواصفة QR): بايتات تصحيح لكل كتلة +
+     أطوال كتل البيانات — الإصدارات ٤+ متعددة الكتل وتتطلب تشابكاً (interleave). */
+  const QRB=[[10,[16]],[16,[28]],[26,[44]],[18,[32,32]],[24,[43,43]],[16,[27,27,27,27]],[18,[31,31,31,31]]];
+  let ver=0;
+  for(let i=0;i<QRB.length;i++){ const dc=QRB[i][1].reduce((a,b)=>a+b,0); if(bytes.length<=dc-2){ ver=i+1; break; } }
+  if(!ver) throw new Error('qr too long');
+  const [ecPerBlock,blockLens]=QRB[ver-1];
+  const dataCw=blockLens.reduce((a,b)=>a+b,0);
+  const bits=[];
+  const push=(val,len)=>{ for(let i=len-1;i>=0;i--) bits.push((val>>i)&1); };
+  push(0b0100,4); push(bytes.length,8);
+  bytes.forEach(b=>push(b,8));
+  const capBits=dataCw*8;
+  if(bits.length<capBits) push(0,Math.min(4,capBits-bits.length)); // وحدات الإنهاء
+  while(bits.length%8) bits.push(0);
+  const dataBytes=[];
+  for(let i=0;i<bits.length;i+=8){ let b=0; for(let j=0;j<8;j++) b=(b<<1)|bits[i+j]; dataBytes.push(b); }
+  const pads=[0xec,0x11]; let pi=0;
+  while(dataBytes.length<dataCw) dataBytes.push(pads[pi++%2]);
+  /* تقسيم لكتل + تصحيح لكل كتلة + تشابك البيانات ثم التصحيح عمودياً. */
+  const blocks=[]; let off=0;
+  for(const dc of blockLens){ const chunk=dataBytes.slice(off,off+dc); off+=dc; blocks.push({data:chunk,ecc:qrRsRem(chunk,ecPerBlock)}); }
+  const all=[];
+  const maxD=Math.max(...blockLens);
+  for(let i=0;i<maxD;i++) for(const b of blocks) if(i<b.data.length) all.push(b.data[i]);
+  for(let i=0;i<ecPerBlock;i++) for(const b of blocks) all.push(b.ecc[i]);
+  const size=17+4*ver;
+  const m=Array.from({length:size},()=>new Array(size).fill(null));
+  const set=(x,y,v)=>{ if(x>=0&&x<size&&y>=0&&y<size) m[y][x]=v; };
+  const finder=(fx,fy)=>{ for(let dy=-1;dy<8;dy++) for(let dx=-1;dx<8;dx++){ const x=fx+dx,y=fy+dy; if(x<0||x>=size||y<0||y>=size) continue; const d=(dx>=0&&dx<=6&&(dy===0||dy===6))||(dy>=0&&dy<=6&&(dx===0||dx===6))||(dx>=2&&dx<=4&&dy>=2&&dy<=4); m[y][x]=d?1:0; } };
+  finder(0,0); finder(size-7,0); finder(0,size-7);
+  for(let i=8;i<size-8;i++){ m[6][i]=(i%2===0)?1:0; m[i][6]=(i%2===0)?1:0; }
+  const APOS={2:[6,18],3:[6,22],4:[6,26],5:[6,30],6:[6,34],7:[6,22,38]}[ver];
+  if(APOS) for(const cy of APOS) for(const cx of APOS){ if((cx<9&&cy<9)||(cx>size-10&&cy<9)||(cx<9&&cy>size-10)) continue; for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){ const d=Math.max(Math.abs(dx),Math.abs(dy)); m[cy+dy][cx+dx]=(d!==1)?1:0; } }
+  m[size-8][8]=1; // الوحدة الداكنة
+  const reserve=(x,y)=>{ if(m[y]&&m[y][x]===null) m[y][x]=-1; };
+  for(let i=0;i<9;i++){ reserve(i,8); reserve(8,i); }
+  for(let i=0;i<8;i++){ reserve(size-1-i,8); reserve(8,size-1-i); }
+  if(ver>=7){ for(let i=0;i<6;i++) for(let j=0;j<3;j++){ reserve(i,size-11+j); reserve(size-11+j,i); } }
+  let bi=0; const totalBits=all.length*8;
+  const bitAt=(k)=>{ const byte=all[k>>3]; return (byte>>(7-(k&7)))&1; };
+  let upward=true;
+  for(let cx=size-1;cx>0;cx-=2){
+    if(cx===6) cx=5;
+    for(let i=0;i<size;i++){
+      const cy=upward?size-1-i:i;
+      for(const dx of [0,-1]){
+        const x=cx+dx;
+        if(m[cy][x]===null){ // الخلايا المحجوزة (-1) للصيغة/الإصدار — لا بيانات فوقها
+          let v=0;
+          if(bi<totalBits){ v=bitAt(bi); bi++; }
+          if(((x+cy)%2)===0) v^=1; // القناع 0: (r+c) زوجي
+          m[cy][x]=v;
+        }
+      }
+    }
+    upward=!upward;
+  }
+  const fmt=qrFormatBits(0);
+  const placeFmt=(pos,val)=>{ const [x,y]=pos; if(m[y]&&m[y][x]===-1) m[y][x]=val; };
+  for(let i=0;i<15;i++){
+    const bit=(fmt>>i)&1;
+    if(i<6) placeFmt([i,8],bit); else if(i===6) placeFmt([7,8],bit); else if(i===7) placeFmt([8,8],bit); else placeFmt([8,14-i],bit);
+    if(i<8) placeFmt([size-1-i,8],bit); else placeFmt([8,size-15+i],bit);
+  }
+  if(ver>=7){
+    const vb=qrVersionBits(ver);
+    for(let i=0;i<18;i++){ const bit=(vb>>i)&1; const a=i%3,b=(i/3)|0; if(m[size-11+b]&&m[size-11+b][a]===-1) m[size-11+b][a]=bit; if(m[a]&&m[a][size-11+b]===-1) m[a][size-11+b]=bit; }
+  }
+  for(let y=0;y<size;y++) for(let x=0;x<size;x++) if(m[y][x]===-1) m[y][x]=0;
+  return m;
+}
+function drawQr(canvas,text){
+  const m=qrEncode(text); const size=m.length; const quiet=2;
+  const cell=Math.max(2,Math.floor(canvas.width/(size+quiet*2)));
+  const off=Math.floor((canvas.width-cell*(size+quiet*2))/2)+quiet*cell;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#111111';
+  for(let y=0;y<size;y++) for(let x=0;x<size;x++) if(m[y][x]) ctx.fillRect(off+x*cell,off+y*cell,cell,cell);
+}
+
+/* ===== غلاف ولون التمييز في محرر الملف ===== */
+let PF_COVER=null, PF_ACCENT=null;
+function pickCover(input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  const img=new Image();
+  img.onload=()=>{
+    const scale=Math.min(1,1024/img.width);
+    const c=document.createElement('canvas'); c.width=Math.round(img.width*scale); c.height=Math.round(img.height*scale);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    PF_COVER=c.toDataURL('image/jpeg',0.82);
+    const pv=document.getElementById('pfCoverPreview'); if(pv) pv.style.backgroundImage=`url('${PF_COVER}')`;
+    URL.revokeObjectURL(img.src);
+  };
+  img.src=URL.createObjectURL(f);
+}
+function renderAccentSwatches(){
+  const box=document.getElementById('pfAccentSw'); if(!box) return;
+  const acc=(TAX&&TAX.accents)||{};
+  box.innerHTML=`<button type="button" class="accent-sw none ${!PF_ACCENT?'on':''}" onclick="PF_ACCENT='';renderAccentSwatches()">${t('accent_default')}</button>`+
+    Object.entries(acc).map(([k,v])=>`<button type="button" class="accent-sw ${PF_ACCENT===k?'on':''}" style="background:${v}" title="${k}" onclick="PF_ACCENT='${k}';renderAccentSwatches()"></button>`).join('');
+}
+
 function profilePageHtml(d){
   const u=d.user;
   const mine=!!(ME&&ME.user.id===u.id);
@@ -2260,18 +2660,19 @@ function profilePageHtml(d){
     <div style="margin-top:12px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('founder_only')}</span></div>
     <div class="row" style="margin-top:12px;justify-content:center">${followBtn(u)}${editBtn}${ownerBtn}${copyBtn}</div></div>${backRow}`;
   }
-  return `${(mine&&!u.verified&&starCtaEligible(u))?'<div id="uvBannerSlot"></div>':''}<div class="card tcard${u.is_star?' star-frame':''}">
-    <div class="tcover tall" style="background:linear-gradient(120deg,hsl(${nicheHue(u.niche||'')},62%,34%),hsl(${(nicheHue(u.niche||'')+45)%360},68%,17%))"></div>
+  return `${(mine&&!u.verified&&starCtaEligible(u))?'<div id="uvBannerSlot"></div>':''}<div class="card tcard${u.is_star?' star-frame':''}${u.founder_seat?' seat-frame':''}${u.top_badge?' badge-frame':''}"${u.top_badge?` style="--bf:${u.top_badge.color}"`:''}>
+    ${coverDiv(u,true)}
     <div class="tbody">
     <div class="row"><span class="tava big">${avatarHtml(u,true)}</span><div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${u.role==='provider'?`${t('provider_tag')} · `:''}${esc(kindLabel(u))} · ${esc(placeStr(u))} · ${t('member_since')} ${new Date(u.member_since).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div></div>
     <div class="sp"></div>${editBtn}${copyBtn}</div>
-    <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${u.featured?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('featured_chip')}</span>`:''}${starChips(u)}</div>
+    <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">✅ ${u.verified_deals??d.stats.completed_deals} ${t('verified_deals_w')}</span><span class="chip">${t('completion_w')} ${d.stats.completion_rate}%</span><span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${seatChip(u)}${u.featured?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('featured_chip')}</span>`:''}${starChips(u)}</div>
     ${u.bio?`<p>${esc(u.bio)}</p>`:''}
-    <div class="row" style="margin-top:10px">${mine?'':(ME?`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_for')} ${money(u.price, u.currency)}</button>`:guestOrderBtn(u))}
-    ${followBtn(u)}${msgBtn(u)}</div>
+    <div class="row" style="margin-top:10px">${mine?'':(ME?`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_for')} ${money(u.price, u.currency)}</button>`:`<button class="btn" style="font-size:16px;padding:12px 22px" onclick="openGuest(${u.id},decodeURIComponent('${encodeURIComponent(u.name).replace(/'/g,'%27')}'))">${t('book_me_btn')}</button>`)}
+    ${followBtn(u)}${friendBtn(u)}${msgBtn(u)}</div>
     </div>
   </div>
+  <div class="posts-host" id="profilePosts"></div>
   <div class="card" style="margin-top:12px">
     ${shortsEmbeds(d.shorts)}
     <h4>${t('badges_vault')}</h4>${d.badges.map(b=>`<div class="row"><span class="badge-ic" style="background:${b.earned?b.color:'#444'}">🏅</span><span>${b.name}</span><span class="mut">${b.earned?t('badge_earned'):b.progress}</span></div>`).join('')}
@@ -2280,12 +2681,18 @@ function profilePageHtml(d){
   </div>${backRow}`;
 }
 async function loadProfilePage(id){
+  CUR_PROFILE_ID=id;
   const body=$('#profileBody'); if(!body) return;
   body.innerHTML=`<div class="mut">${t('loading')}</div>`;
   try{
     const d=await api('/api/talent/'+id);
     document.title='Deal — '+d.user.name;
     body.innerHTML=profilePageHtml(d);
+    const ph=document.getElementById('profilePosts');
+    if(ph) loadPostsInto(ph, id, true);
+    /* نية الحجز من رابط الحجز الشخصي (?book=1): الزائر يفتح طلب الضيف الموجّه
+       لهذا العضو مباشرة — المؤسس مستثنى (لا حجز عليه أصلاً). */
+    if(!ME && /[?&]book=1/.test(location.hash) && !d.user.is_platform_founder) openGuest(d.user.id, d.user.name);
     /* بانر الباقة في ملف العضو نفسه: يُملأ غير متزامناً بحالة الاشتراك الحالية،
        ويظهر لصاحب الملف غير الموثّق غير المشترك فقط (منظوره هو). */
     const uvSlot=$('#uvBannerSlot');
@@ -2323,6 +2730,8 @@ function routeHash(){captureRef();
     window.scrollTo(0,0);loadGuestPage(m[1]);return true}
   const sc=location.hash.match(/^#\/s\/(\d+)/);
   if(sc){ showStarCardRoute(+sc[1]); return true; }
+  const dc=location.hash.match(/^#\/d\/(\d+)/);
+  if(dc){ showDealCardRoute(+dc[1]); return true; }
   const u=location.hash.match(/^#\/u\/(\d+)/);
   if(u){ showProfileRoute(+u[1]); return true; }
   return false}

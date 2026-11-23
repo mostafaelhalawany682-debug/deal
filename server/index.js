@@ -1780,6 +1780,11 @@ app.post('/api/me/verify-email/start', auth, async (req, res) => {
   const bodyEmail = String((req.body || {}).email || '').trim().toLowerCase();
   if (bodyEmail && !u.recovery_email && !(u.contact && u.contact.includes('@'))) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(bodyEmail)) return res.status(400).json({ error: 'إيميل غير صحيح' });
+    /* مسار «أضف إيميلك وأكّده» لحسابات الهاتف (إصلاح حي ٢-١): الإيميل
+       المُدخَل يصير قناة تأكيد واسترجاع لهذا الحساب، فلا يُقبل إن كان
+       وسيلة تواصل أو إيميل استرجاع لحساب آخر — نفس قاعدة /api/me/recovery-email. */
+    const dup = await db.prepare('SELECT id FROM users WHERE (contact=? OR recovery_email=?) AND id<>?').get(bodyEmail, bodyEmail, u.id);
+    if (dup) return res.status(409).json({ error: 'الإيميل ده مربوط بحساب آخر', code: 'EMAIL_TAKEN' });
     await db.prepare('UPDATE users SET recovery_email=? WHERE id=?').run(bodyEmail, u.id);
     u = await getUser(u.id);
   }

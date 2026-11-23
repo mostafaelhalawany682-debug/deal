@@ -2588,6 +2588,12 @@ async function bookingView(b, viewer) {
   view.agreement = agreementOf(b);
   const finOb = await finalObligation(b.id);
   view.final_obligation_status = finOb ? finOb.status : null; // حالة التزام الباقي لعرض زرار «وصلني»/التسليم في الواجهة
+  /* ملخص التزام العمولة الآمن للطرف غير الدافع (إصلاح حي ٣): خطوة العمولة
+     عند المنفّذ تُعرض بقراءة فقط من حمولة الحجز نفسها — حالة الالتزام
+     ومهلته فقط. الكود ورقم التحويل والمبلغ بالبصمة بيانات الدافع حصراً
+     (feeInfo للعميل وحده) ولا تخرج في هذا الملخص إطلاقاً. */
+  const feeOb = await db.prepare(`SELECT status, expires_at FROM money_obligations WHERE kind='booking_commission' AND booking_id=? ORDER BY id DESC LIMIT 1`).get(b.id);
+  view.fee_obligation = feeOb ? { status: feeOb.status, expires_at: feeOb.expires_at || 0 } : null;
   // رقم هاتف الضيف لا يظهر لأي صانع/مقدم خدمة — التواصل داخل المنصة فقط؛ المالك المؤسس وحده يراه
   if (!(viewer && viewer.is_platform_founder)) delete view.guest_phone;
   return {

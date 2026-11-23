@@ -11,6 +11,7 @@ const express = require('express');
 const { db, pool, init, normalizeContact } = require('./db');
 const mailer = require('./mailer');
 const aiSupport = require('./ai');
+const webauthn = require('./webauthn');
 
 const PORT = process.env.PORT || 3000;
 const COMMISSION_RATE = 0.10;
@@ -72,7 +73,8 @@ app.use('/api', async (req, res, next) => {
    مسارات API لغير المالك ترجع 503 MAINTENANCE فترسم الواجهة شاشة صيانة
    واحدة موسومة. استثناءات مقصودة: /api/health (فحص الحياة)، /api/config
    (سطح الإعداد العام نفسه — منه تعرف الواجهة الحالة)، ومسارات /api/auth/*
-   كلها (لازم المالك يقدر يسجّل دخوله)، وخطّافات الاختبار. المؤسس يتجاوز
+   كلها ومراسم دخول البصمة /api/passkeys/login/* (تدفقات دخول — لازم
+   المالك يقدر يسجّل دخوله)، وخطّافات الاختبار. المؤسس يتجاوز
    بالكامل: جلسته تعمل طبيعياً وهو وحده من يفعّل/يوقف من لوحته. */
 async function maintenanceEnabled() {
   try { return (await getSetting('maintenance_mode')) === '1'; } catch (e) { return false; }
@@ -80,7 +82,7 @@ async function maintenanceEnabled() {
 app.use('/api', async (req, res, next) => {
   // originalUrl: المسار الكامل دائماً (req.path داخل وسيط مُركَّب على /api يُجرَّد من البادئة).
   const p = String(req.originalUrl || req.url || '').split('?')[0];
-  if (p === '/api/health' || p === '/api/config' || p.startsWith('/api/auth/') || p.includes('/_test/')) return next();
+  if (p === '/api/health' || p === '/api/config' || p.startsWith('/api/auth/') || p.startsWith('/api/passkeys/login/') || p.includes('/_test/')) return next();
   let on = false;
   try { on = await maintenanceEnabled(); } catch (e) { on = false; }
   if (!on) return next();
@@ -1630,6 +1632,159 @@ app.post('/api/me/sessions/revoke-others', auth, async (req, res) => {
   const r = await db.prepare('DELETE FROM sessions WHERE user_id=? AND token<>?').run(req.user.id, req.sessionToken);
   if (r.changes) await notifySecurity(req.user.id, 'تم إنهاء كل جلسات حسابك على الأجهزة الأخرى');
   res.json({ ok: true, revoked: r.changes });
+});
+
+/* ---------------- البصمة (Passkey / WebAuthn) — اعتماد اختياري إضافي ----------------
+   قرار المالك (2026-11-22): بصمة دخول اختيارية؛ كلمة السر تبقى الاعتماد
+   الأساسي وتدفقات دخولها واسترجاعها كما هي حرفياً احتياطياً دائماً.
+   التسجيل من الإعدادات داخل جلسة كاملة (auth) فيُربط الاعتماد بحساب
+   موثّق أصلاً؛ الدخول بمراسم اكتشافية (discoverable) بلا اسم أولاً —
+   الاعتماد نفسه يحدّد الحساب. الجلسة الصادرة هي جلسة makeSession نفسها
+   بنفس قواعد النطاق (حساب بلا كلمة سر يهبط في نطاق التعيين كما في دخول
+   كلمة السر حرفياً). أي فشل في أي مراسم يرجع رداً عاماً واحداً ثابت
+   الشكل (PASSKEY_FAILED) بلا أي تلميح لسبب الفشل، والسبب المحدد يُسجَّل
+   خادمياً في error_log عبر logServerError. البصمة لا تغادر جهاز
+   المستخدم أبداً — المحفوظ خادمياً هو المفتاح العام COSE فقط. */
+const PK_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const PK_FAIL_ERROR = 'تعذّر إتمام البصمة — جرّب تاني أو استخدم كلمة السر';
+async function pkIssueChallenge(kind, userId) {
+  const ceremonyId = rnd(16);
+  const challenge = webauthn.b64url(crypto.randomBytes(32));
+  await db.prepare('DELETE FROM webauthn_challenges WHERE expires_at<?').run(now());
+  await db.prepare('INSERT INTO webauthn_challenges (ceremony_id,challenge,kind,user_id,expires_at,created_at) VALUES (?,?,?,?,?,?)')
+    .run(ceremonyId, challenge, kind, userId || null, now() + PK_CHALLENGE_TTL_MS, now());
+  return { ceremonyId, challenge };
+}
+/* استهلاك التحدي بقراءة واحدة: الصف يُحذف عند أول استخدام (ناجحاً كان
+   أو فاشلاً) فلا إعادة تشغيل لأي مراسم بنفس التحدي أبداً. */
+async function pkTakeChallenge(ceremonyId, kind) {
+  if (!ceremonyId || typeof ceremonyId !== 'string') return null;
+  const row = await db.prepare('SELECT * FROM webauthn_challenges WHERE ceremony_id=?').get(ceremonyId);
+  if (!row) return null;
+  await db.prepare('DELETE FROM webauthn_challenges WHERE ceremony_id=?').run(ceremonyId);
+  if (row.kind !== kind || row.expires_at < now()) return null;
+  return row;
+}
+function pkFail(req, res, status, reason) {
+  logServerError(req, new Error(`passkey ceremony failed: ${reason}`));
+  return res.status(status).json({ error: PK_FAIL_ERROR, code: 'PASSKEY_FAILED' });
+}
+
+app.post('/api/passkeys/register/options', auth, async (req, res) => {
+  const { ceremonyId, challenge } = await pkIssueChallenge('register', req.user.id);
+  const existing = await db.prepare('SELECT credential_id, transports FROM passkeys WHERE user_id=?').all(req.user.id);
+  res.json({
+    ceremony_id: ceremonyId,
+    publicKey: {
+      challenge,
+      rp: { name: webauthn.RP_NAME, id: webauthn.RP_ID },
+      user: {
+        id: webauthn.b64url(Buffer.from(String(req.user.id), 'utf8')),
+        name: req.user.contact,
+        displayName: req.user.name,
+      },
+      pubKeyCredParams: [
+        { type: 'public-key', alg: -7 },   // ES256 — المطلوب
+        { type: 'public-key', alg: -257 }, // RS256 — مدعوم عبر JWK
+      ],
+      authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+      excludeCredentials: existing.map((p) => ({ type: 'public-key', id: p.credential_id, ...(p.transports ? { transports: String(p.transports).split(',').filter(Boolean) } : {}) })),
+      timeout: 60000,
+      attestation: 'none',
+    },
+  });
+});
+
+app.post('/api/passkeys/register/verify', auth, async (req, res) => {
+  const body = req.body || {};
+  const row = await pkTakeChallenge(body.ceremony_id, 'register');
+  if (!row || row.user_id !== req.user.id) return pkFail(req, res, 400, 'register challenge missing/expired or user mismatch');
+  let cred;
+  try {
+    const resp = body.response || {};
+    cred = webauthn.verifyRegistration({
+      attestationObject: webauthn.b64urlToBuf(resp.attestationObject),
+      clientDataJSON: webauthn.b64urlToBuf(resp.clientDataJSON),
+    }, row.challenge);
+  } catch (e) { return pkFail(req, res, 400, `register verify: ${e.message}`); }
+  const credentialId = webauthn.b64url(cred.credentialId);
+  if (body.id && String(body.id) !== credentialId) return pkFail(req, res, 400, 'register credential id mismatch');
+  const dup = await db.prepare('SELECT id FROM passkeys WHERE credential_id=?').get(credentialId);
+  if (dup) return pkFail(req, res, 400, 'register credential already exists');
+  const transports = Array.isArray((body.response || {}).transports)
+    ? body.response.transports.map((x) => String(x).slice(0, 24)).filter(Boolean).join(',').slice(0, 120) : '';
+  const label = String(body.label || '').trim().slice(0, 60);
+  const info = await db.prepare('INSERT INTO passkeys (user_id,credential_id,public_key,sign_count,transports,label,created_at,last_used_at) VALUES (?,?,?,?,?,?,?,0)')
+    .run(req.user.id, credentialId, webauthn.b64url(cred.coseKeyBytes), cred.signCount, transports, label, now());
+  await notifySecurity(req.user.id, 'تمت إضافة بصمة دخول جديدة لحسابك — لو مش انت، احذفها من إعدادات الأمان فوراً');
+  res.json({ ok: true, id: info.lastInsertRowid });
+});
+
+app.get('/api/passkeys', auth, async (req, res) => {
+  const rows = await db.prepare('SELECT id,label,created_at,last_used_at FROM passkeys WHERE user_id=? ORDER BY id').all(req.user.id);
+  res.json({ items: rows });
+});
+
+app.delete('/api/passkeys/:id', auth, async (req, res) => {
+  const row = await db.prepare('SELECT * FROM passkeys WHERE id=? AND user_id=?').get(+req.params.id || 0, req.user.id);
+  if (!row) return res.status(404).json({ error: 'غير موجود' });
+  await db.prepare('DELETE FROM passkeys WHERE id=?').run(row.id);
+  await notifySecurity(req.user.id, 'تم حذف بصمة دخول من حسابك');
+  res.json({ ok: true });
+});
+
+app.post('/api/passkeys/login/options', async (req, res) => {
+  const tKey = `pklogin:${clientIp(req)}`;
+  if ((await throttleLockedMs(tKey)) > 0) return res.status(429).json({ error: 'محاولات كثيرة — استنى شوية وحاول تاني' });
+  const { ceremonyId, challenge } = await pkIssueChallenge('login', null);
+  res.json({
+    ceremony_id: ceremonyId,
+    publicKey: {
+      challenge,
+      rpId: webauthn.RP_ID,
+      userVerification: 'required',
+      timeout: 60000,
+    },
+  });
+});
+
+app.post('/api/passkeys/login/verify', async (req, res) => {
+  const body = req.body || {};
+  const tKey = `pklogin:${clientIp(req)}`;
+  if ((await throttleLockedMs(tKey)) > 0) return res.status(429).json({ error: 'محاولات كثيرة — استنى شوية وحاول تاني' });
+  const fail = async (reason) => { await throttleFail(tKey); return pkFail(req, res, 401, reason); };
+  const row = await pkTakeChallenge(body.ceremony_id, 'login');
+  if (!row) return fail('login challenge missing/expired');
+  const credentialId = String(body.id || '');
+  const credRow = credentialId && await db.prepare('SELECT * FROM passkeys WHERE credential_id=?').get(credentialId);
+  if (!credRow) return fail('login credential unknown');
+  const user = await getUser(credRow.user_id);
+  if (!user || user.banned || user.deleted_at) return fail('login account unavailable');
+  const resp = body.response || {};
+  if (resp.userHandle) {
+    try {
+      if (webauthn.b64urlToBuf(resp.userHandle).toString('utf8') !== String(user.id)) return fail('login user handle mismatch');
+    } catch (e) { return fail('login user handle undecodable'); }
+  }
+  let verified;
+  try {
+    verified = webauthn.verifyAssertion({
+      authenticatorData: webauthn.b64urlToBuf(resp.authenticatorData),
+      clientDataJSON: webauthn.b64urlToBuf(resp.clientDataJSON),
+      signature: webauthn.b64urlToBuf(resp.signature),
+    }, webauthn.b64urlToBuf(credRow.public_key), row.challenge);
+  } catch (e) { return fail(`login verify: ${e.message}`); }
+  if (!webauthn.signCountAcceptable(+credRow.sign_count || 0, verified.signCount)) {
+    return fail(`login sign count regression (stored ${credRow.sign_count}, got ${verified.signCount})`);
+  }
+  await db.prepare('UPDATE passkeys SET sign_count=?, last_used_at=? WHERE id=?').run(verified.signCount, now(), credRow.id);
+  await throttleClear(tKey);
+  await recordUserFingerprint(user.id, req);
+  await notifyIfNewDevice(user.id, req);
+  /* نفس جلسة دخول كلمة السر ونفس قاعدة النطاق حرفياً: حساب بلا كلمة سر
+     يهبط في نطاق التعيين المقيد حتى يعيّنها. */
+  const needsPw = !user.password_hash;
+  res.json({ token: await makeSession(user.id, req, needsPw ? 'setup' : 'full'), user: await publicUser(user), needs_password: needsPw, session_scope: needsPw ? 'setup' : 'full' });
 });
 
 /* ---------------- نسيت كلمة السر (تدفق التطبيقات الكبرى) ----------------

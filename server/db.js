@@ -1065,6 +1065,38 @@ ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS managed INTEGER DEFAULT 0;
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS template_key TEXT DEFAULT '';
 `;
 
+/* ترحيلات جولة «المراجعة الشاملة» (قرارات المستخدم 2026-11-23 —
+   TESTING-AUDIT.md):
+   • عمود country_name للمستخدم: اسم الدولة النصي لحسابات المسار الدولي
+     العام (country='OTHER') — فارغ لكل حسابات الدول الـ١٩.
+   • ترحيل دمج المهارات المعتمد: مقدمو «المونتاج» (editing) ينتقلون إلى
+     «إنتاج ومونتاج الفيديو» (videoproduction)، ومقدمو «إدارة حسابات
+     سوشيال» (accounts) إلى «تسويق وإدارة حسابات» (marketing) — في
+     تصنيف المستخدم وتقدّم/شارات الأكاديمية معاً، بلا فقد أي تقدّم
+     (عند التعارض يبقى الصف المدمج الأقدم ويُحذف المكرر).
+   كل عبارة idempotent كسائر ترحيلات هذا الملف. */
+const AUDIT_MIGRATIONS_SQL = `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS country_name TEXT DEFAULT '';
+UPDATE users SET provider_category='videoproduction' WHERE provider_category='editing';
+UPDATE users SET provider_category='marketing' WHERE provider_category='accounts';
+INSERT INTO academy_progress (user_id,track_key,lesson_key,done_at)
+  SELECT user_id,'svc_videoproduction',lesson_key,done_at FROM academy_progress WHERE track_key='svc_editing'
+  ON CONFLICT (user_id,track_key,lesson_key) DO NOTHING;
+DELETE FROM academy_progress WHERE track_key='svc_editing';
+INSERT INTO academy_progress (user_id,track_key,lesson_key,done_at)
+  SELECT user_id,'svc_marketing',lesson_key,done_at FROM academy_progress WHERE track_key='svc_accounts'
+  ON CONFLICT (user_id,track_key,lesson_key) DO NOTHING;
+DELETE FROM academy_progress WHERE track_key='svc_accounts';
+INSERT INTO academy_badges (user_id,track_key,earned_at)
+  SELECT user_id,'svc_videoproduction',earned_at FROM academy_badges WHERE track_key='svc_editing'
+  ON CONFLICT (user_id,track_key) DO NOTHING;
+DELETE FROM academy_badges WHERE track_key='svc_editing';
+INSERT INTO academy_badges (user_id,track_key,earned_at)
+  SELECT user_id,'svc_marketing',earned_at FROM academy_badges WHERE track_key='svc_accounts'
+  ON CONFLICT (user_id,track_key) DO NOTHING;
+DELETE FROM academy_badges WHERE track_key='svc_accounts';
+`;
+
 let readyPromise = null;
 function init() {
   if (!readyPromise) {
@@ -1079,6 +1111,7 @@ function init() {
       await pool.query(DETERRENCE_MIGRATIONS_SQL);
       await pool.query(FEATURES_MIGRATIONS_SQL);
       await pool.query(EXPANSION_MIGRATIONS_SQL);
+      await pool.query(AUDIT_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {

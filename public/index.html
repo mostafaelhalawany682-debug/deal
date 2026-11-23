@@ -997,7 +997,7 @@ html,body{overflow-x:clip}
 <nav class="tabbar hide" id="tabbar">
   <button data-tbtab="home" class="on" onclick="showTab('market');window.scrollTo({top:0,behavior:'smooth'})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg><span data-i18n="tb_home">الرئيسية</span></button>
   <button data-tbtab="wallet" onclick="tbWallet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2"/><path d="M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14" r="1.3" fill="currentColor" stroke="none"/></svg><span data-i18n="tb_wallet">المحفظة</span></button>
-  <button data-tbtab="messages" onclick="showTab('messages')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.6A8.5 8.5 0 1 1 21 11.5z"/></svg><span data-i18n="nav_messages">الرسائل</span><b class="tb-badge hide" id="tbMsgBadge">0</b></button>
+  <button data-tbtab="messages" onclick="tbMessages()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.6A8.5 8.5 0 1 1 21 11.5z"/></svg><span data-i18n="nav_messages">الرسائل</span><b class="tb-badge hide" id="tbMsgBadge">0</b></button>
   <button data-tbtab="creators" onclick="showTab('market');tbAfter('creators')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 4.5 4h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12v9h14v-9"/><path d="M9 21v-5h6v5"/></svg><span data-i18n="tb_creators">المنشئون</span></button>
   <button data-tbtab="account" onclick="tbAccount()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg><span data-i18n="tb_account">الحساب</span></button>
 </nav>
@@ -1324,7 +1324,7 @@ auth_reg_t:'تسجيل حساب جديد',auth_login_t:'تسجيل الدخول'
 gp_request:'طلبك على Deal',gp_published:'منشور — الصناع بيشوفوه، والتواصل داخل Deal من صفحة متابعة الطلب',gp_booked:'اتحجز — بيتحول لحجز',gp_booking:'حجزك على Deal',gp_invalid:'رابط متابعة غير صحيح.',gp_working:'المنفذ شغال على التنفيذ…',
 m_support:'الدعم',m_language:'اللغة',m_profile:'ملفي الشخصي',notif_empty:'لا تنبيهات بعد.',notif_login:'سجل دخولك لعرض الإشعارات',applied_t:'قدمت ✓',camp_published:'اتنشرت الحملة',req_published:'اتنشر الطلب',no_applicants:'لا متقدمين بعد',price_prompt:'سعر الخدمة للعميل؟',guest_booked_suffix:' — العميل هيكمّل خطواته من رابط متابعته',install_hint:'من قائمة المتصفح ⋮ اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»',short_added:'اتضاف النموذج ✓',short_deleted:'اتحذف النموذج',delete_w:'حذف',
 follow_btn:'متابعة',following_btn:'أتابع ✓',followed_t:'بقيت تتابع',unfollowed_t:'ألغيت المتابعة',deal_followers:'متابِع على Deal',social_t:'المتابعة على Deal',my_followers:'متابِعيني',my_following:'من أتابعهم',no_followers_yet:'لا متابِعين بعد.',no_following_yet:'لا تتابع أحداً بعد — تابع صناعاً من السوق.',msg_btn:'مراسلة',nav_messages:'الرسائل',messages_t:'رسائلي',msg_ph:'اكتب رسالتك…',msg_empty:'لا محادثات بعد.',msg_no_thread:'لا رسائل بعد — ابدأ المحادثة.',msg_unread:'غير مقروءة',back_btn:'رجوع',open_msgs:'فتح الرسائل',
-copy_profile_link:'🔗 انسخ رابط ملفي',featured_chip:'⭐ صانع مميز',profile_locked_t:'هذا الملف غير متاح للزوار',profile_locked_d:'الملف ده مش موجود أو لم يعد متاحاً — تصفح السوق لاكتشاف صناع ومقدمي خدمة آخرين.',ov_tagline:'شغلك وقبضك ورسايلك وفرصك — كله في مكان واحد',ov_opps:'فرص مطابقة جديدة',ov_bookings:'حجوزات جارية',ov_msgs:'رسائل غير مقروءة',ov_followers:'متابِعون على Deal',ov_refs:'إحالات موثقة',referrals_t:'دعواتي — سجّلوا من رابطي',ref_total:'إجمالي المسجلين من رابطي',ref_verified:'موثّقون',ref_progress:'تقدمك نحو شارة «سفير Deal»',ref_empty:'لا دعوات بعد — شارك رابط ملفك وخلي الصناع يسجلوا من خلالك.',ref_state_verified:'موثّق ✓',ref_state_pending:'بانتظار التوثيق',ref_featured_active:'ظهورك المميز في السوق نشط الآن ⭐',ref_share_hint:'كل صانع يسجل من رابطك ويتوثّق بيقرّبك من شارة السفير وبيفعّل ظهورك المميز.',
+copy_profile_link:'🔗 انسخ رابط ملفي',featured_chip:'⭐ صانع مميز',profile_locked_t:'هذا الملف غير متاح للزوار',profile_locked_d:'الملف ده مش موجود أو لم يعد متاحاً — تصفح السوق لاكتشاف صناع ومقدمي خدمة آخرين.',profile_load_err_t:'تعذّر تحميل الملف',profile_load_err_d:'حصلت مشكلة مؤقتة في الاتصال — ده لا يعني أن الملف غير متاح. جرّب تاني.',retry_btn:'إعادة المحاولة',fee_client_step_note:'دي خطوة العميل — يدفع عمولة Deal للمنصة مباشرة قبل بدء التنفيذ، ومفيش أي دفع منك في الخطوة دي.',fee_show_status:'عرض الحالة',fee_wait_client:'بانتظار دفع العميل للعمولة',fee_claimed_w:'العميل بلّغ بالتحويل — قيد التأكيد',fee_after_agree:'تبدأ خطوة العمولة بعد اتفاق الطرفين على الشروط',fee_status_t:'حالة العمولة',ov_tagline:'شغلك وقبضك ورسايلك وفرصك — كله في مكان واحد',ov_opps:'فرص مطابقة جديدة',ov_bookings:'حجوزات جارية',ov_msgs:'رسائل غير مقروءة',ov_followers:'متابِعون على Deal',ov_refs:'إحالات موثقة',referrals_t:'دعواتي — سجّلوا من رابطي',ref_total:'إجمالي المسجلين من رابطي',ref_verified:'موثّقون',ref_progress:'تقدمك نحو شارة «سفير Deal»',ref_empty:'لا دعوات بعد — شارك رابط ملفك وخلي الصناع يسجلوا من خلالك.',ref_state_verified:'موثّق ✓',ref_state_pending:'بانتظار التوثيق',ref_featured_active:'ظهورك المميز في السوق نشط الآن ⭐',ref_share_hint:'كل صانع يسجل من رابطك ويتوثّق بيقرّبك من شارة السفير وبيفعّل ظهورك المميز.',
 founder_ribbon:'المؤسس',bp_title:'شاراتي وتقدّمي',bp_closest:'أقرب شارة',bp_done_w:'أنجزت',bp_of_w:'من',bp_left_w:'باقي لك',bp_rate_now:'نسبتك الحالية',bp_pos_now:'إيجابيتك الحالية',bp_age_now:'عضويتك الآن',bp_day_w:'يوم',
 bdg_perfect:'إتمام مثالي',bdg_top_rated:'الأعلى تقييماً',bdg_fast:'تنفيذ سريع',bdg_rising:'صانع صاعد',bdg_ambassador:'سفير Deal',bdg_veteran:'مخضرم',
 bp_cond_perfect:'أكمل 10 صفقات بنسبة إتمام 100%',bp_cond_top_rated:'اجمع 10 تقييمات بإيجابية 95% فأكثر',bp_cond_fast:'سلّم إثبات التنفيذ قبل المهلة في آخر 5 صفقات مكتملة',bp_cond_rising:'أكمل 5 صفقات',bp_cond_ambassador:'5 صناع موثّقين سجّلوا من رابط ملفك',bp_cond_veteran:'أكمل 20 صفقة وعضوية 6 أشهر (180 يوم)',
@@ -1341,7 +1341,7 @@ auth_reg_t:'Create a new account',auth_login_t:'Login',welcome_t:'Welcome to Dea
 gp_request:'Your request on Deal',gp_published:'Published — creators can see it, and communication happens inside Deal',gp_booked:'Booked — converting to a booking',gp_booking:'Your booking on Deal',gp_invalid:'Invalid follow-up link.',gp_working:'The creator is working on delivery…',
 m_support:'Support',m_language:'Language',m_profile:'My profile',notif_empty:'No notifications yet.',notif_login:'Log in to view your notifications',applied_t:'Applied ✓',camp_published:'Campaign published',req_published:'Request published',no_applicants:'No applicants yet',price_prompt:'Price for the client?',guest_booked_suffix:' — the client will complete their steps from their follow-up link',install_hint:'From the browser menu ⋮ choose "Install app" or "Add to Home screen"',short_added:'Sample added ✓',short_deleted:'Sample deleted',delete_w:'Delete',
 follow_btn:'Follow',following_btn:'Following ✓',followed_t:'You are now following',unfollowed_t:'Unfollowed',deal_followers:'Deal followers',social_t:'Following on Deal',my_followers:'My followers',my_following:'People I follow',no_followers_yet:'No followers yet.',no_following_yet:'You are not following anyone yet — follow creators from the market.',msg_btn:'Message',nav_messages:'Messages',messages_t:'My messages',msg_ph:'Type your message…',msg_empty:'No conversations yet.',msg_no_thread:'No messages yet — start the conversation.',msg_unread:'unread',back_btn:'Back',open_msgs:'Open messages',
-copy_profile_link:'🔗 Copy my profile link',featured_chip:'⭐ Featured creator',profile_locked_t:'This profile is not available to guests',profile_locked_d:'This profile does not exist or is no longer available — browse the market to discover other creators and providers.',ov_tagline:'Your work, payments, messages and opportunities — all in one place',ov_opps:'New matching opportunities',ov_bookings:'Active bookings',ov_msgs:'Unread messages',ov_followers:'Deal followers',ov_refs:'Verified referrals',referrals_t:'My invites — registered via my link',ref_total:'Total registered via my link',ref_verified:'Verified',ref_progress:'Your progress toward the "Deal Ambassador" badge',ref_empty:'No invites yet — share your profile link so creators register through you.',ref_state_verified:'Verified ✓',ref_state_pending:'Awaiting verification',ref_featured_active:'Your featured placement in the market is active ⭐',ref_share_hint:'Every creator who registers via your link and gets verified brings you closer to the Ambassador badge and activates your featured placement.',
+copy_profile_link:'🔗 Copy my profile link',featured_chip:'⭐ Featured creator',profile_locked_t:'This profile is not available to guests',profile_locked_d:'This profile does not exist or is no longer available — browse the market to discover other creators and providers.',profile_load_err_t:'Could not load this profile',profile_load_err_d:'A temporary connection problem occurred — this does not mean the profile is unavailable. Please retry.',retry_btn:'Retry',fee_client_step_note:'This is the client step — the client pays the Deal commission to the platform directly before execution starts, and there is no payment from you in this step.',fee_show_status:'Show status',fee_wait_client:'Waiting for the client to pay the commission',fee_claimed_w:'The client reported the transfer — being confirmed',fee_after_agree:'The commission step starts once both parties accept the terms',fee_status_t:'Commission status',ov_tagline:'Your work, payments, messages and opportunities — all in one place',ov_opps:'New matching opportunities',ov_bookings:'Active bookings',ov_msgs:'Unread messages',ov_followers:'Deal followers',ov_refs:'Verified referrals',referrals_t:'My invites — registered via my link',ref_total:'Total registered via my link',ref_verified:'Verified',ref_progress:'Your progress toward the "Deal Ambassador" badge',ref_empty:'No invites yet — share your profile link so creators register through you.',ref_state_verified:'Verified ✓',ref_state_pending:'Awaiting verification',ref_featured_active:'Your featured placement in the market is active ⭐',ref_share_hint:'Every creator who registers via your link and gets verified brings you closer to the Ambassador badge and activates your featured placement.',
 founder_ribbon:'FOUNDER',bp_title:'My badges & progress',bp_closest:'Closest badge',bp_done_w:'You completed',bp_of_w:'of',bp_left_w:'left for you',bp_rate_now:'Your current rate',bp_pos_now:'Your current positivity',bp_age_now:'Your membership so far',bp_day_w:'days',
 bdg_perfect:'Perfect Completion',bdg_top_rated:'Top Rated',bdg_fast:'Fast Delivery',bdg_rising:'Rising Creator',bdg_ambassador:'Deal Ambassador',bdg_veteran:'Veteran',
 bp_cond_perfect:'Complete 10 deals with a 100% completion rate',bp_cond_top_rated:'Collect 10 ratings with 95%+ positivity',bp_cond_fast:'Submit delivery proof before the deadline in your last 5 completed deals',bp_cond_rising:'Complete 5 deals',bp_cond_ambassador:'5 verified creators registered via your profile link',bp_cond_veteran:'Complete 20 deals and 6 months of membership (180 days)',
@@ -1869,6 +1869,23 @@ function termsBoxHtml(b,mode){
     return `<div class="step" style="border-color:var(--gold);margin-top:8px"><b>⚖️ ${t('terms_t')}</b><div class="mut" style="margin:4px 0">${t('terms_gate_d')}</div><div class="row" style="margin:4px 0"><span class="chip">${t('client_w')} ${b.terms.client_accepted?t('agreed_w'):t('waiting_w')}</span><span class="chip">${t('talent_w')} ${b.terms.talent_accepted?t('agreed_w'):t('waiting_w')}</span></div>${b.terms.mine_accepted?`<span class="chip" style="border-color:var(--em);color:var(--em)">${t('terms_mine_ok')}</span> <span class="mut">${t('terms_wait_other')}</span>`:`<button class="btn sm" onclick="openTermsDlg(this,'${dlgArg}',${dlgId})">${t('terms_view')}</button> <button class="btn sm" onclick="acceptTermsDirect(this,'${dlgArg}',${dlgId})">${t('terms_direct')}</button>`}</div>`;
   return `<div class="row" style="margin-top:6px"><span class="chip" style="border-color:var(--em);color:var(--em)">${t('terms_both_ok')}</span><button class="btn ghost sm" onclick="openTermsDlg(this,'view',${dlgId})">${t('terms_view')}</button></div>`;
 }
+/* خطوة «عمولة Deal أولاً» عند المنفّذ (إصلاح حي ٣): ليست خطوته — تُعرض
+   قابلة للتوسع بقراءة فقط من حمولة الحجز نفسها (fee_obligation الآمنة من
+   الخادم: حالة + مهلة فقط): أنها خطوة العميل، ومبلغها، وحالتها وعدّاد
+   مهلتها الحي — وبلا أي عنصر دفع (لا «حوّلت» ولا خانة مرجع ولا «انسخ
+   بيانات التحويل»؛ بيانات التحويل للدافع وحده من feeInfo). */
+function toggleStepBody(head){ const wrap=head&&head.parentElement; const bd=wrap&&wrap.querySelector('[data-stepbody]'); if(bd) bd.classList.toggle('hide'); }
+function feeStepTalentHtml(b){
+  let inner=`<div class="mut">${t('fee_client_step_note')}</div>`;
+  if(b.fee_status==='confirmed') inner+=`<div class="mut" style="margin-top:6px">${t('fee_confirmed')}</div>`;
+  else if(b.status==='awaiting_fee'){
+    const ob=b.fee_obligation;
+    const stTxt=ob&&ob.status==='claimed'?t('fee_claimed_w'):t('fee_wait_client');
+    inner+=`<div class="row" style="margin-top:6px"><span class="chip"><b>${b.fee} ${b.currency}</b></span><span class="chip">${t('fee_status_t')}: ${stTxt}</span>${ob&&ob.status==='open'&&ob.expires_at?`<span class="mut">⏳ ${t('countdown_w')}: <b data-cd="${ob.expires_at}">—</b></span>`:''}</div>`;
+  }
+  else if(b.status==='pending_agreement') inner+=`<div class="mut" style="margin-top:6px">${t('fee_after_agree')}</div>`;
+  return `<div class="step ${b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'?'open':'')}"><div class="row" data-stephead style="cursor:pointer;align-items:center" onclick="toggleStepBody(this)"><b>${t('step2')} — ${b.fee} ${b.currency}</b><span class="sp"></span><span class="mut">${t('fee_show_status')} ▾</span></div><div class="hide" data-stepbody style="margin-top:6px">${inner}</div></div>`;
+}
 async function openBooking(btn,id){
   const work=async()=>{
     const {booking:b}=await api('/api/bookings/'+id);
@@ -1882,11 +1899,15 @@ async function openBooking(btn,id){
     h+=step(t('step1'),b.status!=='pending_agreement'?'done':(isClient||isTalent?'open':''),
       b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">${t('client_w')} ${b.agreed_client?t('agreed_w'):t('waiting_w')}</span><span class="chip">${t('talent_w')} ${b.agreed_talent?t('agreed_w'):t('waiting_w')}</span>
       ${((isClient&&!b.agreed_client)||(isTalent&&!b.agreed_talent))?`<button class="btn sm" onclick="act(this,${b.id},'agree')">${t('agree_btn')}</button>`:''}</div>`:'');
+    if(isTalent&&!isClient){
+      h+=feeStepTalentHtml(b); /* منظر المنفّذ: توسّع بقراءة فقط (إصلاح حي ٣) */
+    } else {
     h+=step(`${t('step2')} — ${b.fee} ${b.currency}`, b.fee_status==='confirmed'?'done':(b.status==='awaiting_fee'&&isClient&&termsBothOf(b)?'open':''),
       b.status==='awaiting_fee'&&isClient&&!termsBothOf(b)?`<div class="mut" style="margin-top:6px">🔒 ${t('terms_gate_d')}</div>`
       :b.status==='awaiting_fee'&&isClient?`<div style="margin-top:6px"><button class="btn ghost sm" onclick="feeInfo(this,${b.id})">${t('show_fee')}</button> <span id="feeInfo"></span><div id="feeObligation"></div>
       <input id="feeRef" placeholder="${t('fee_ref_ph')}"><button class="btn" style="width:100%;font-size:16.5px;padding:12px;margin-top:6px" onclick="pay(this,${b.id},'fee','feeRef')">${t('fee_confirm_btn')}</button></div>`
       :(b.fee_status==='confirmed'?`<div class="mut">${t('fee_confirmed')}</div>`:''));
+    }
     h+=step(`${t('step3')} — ${b.deposit_split?b.dep1:b.deposit} ${b.currency}`, ['in_progress','proof_submitted','awaiting_rest','completed','awaiting_deposit2'].includes(b.status)?'done':(b.status==='awaiting_deposit'&&isClient?'open':''),
       b.status==='awaiting_deposit'&&isClient?`<div id="depObligation"></div><input id="depRef" placeholder="${t('dep_ref_ph')}"><button class="btn" style="width:100%;font-size:16.5px;padding:12px;margin-top:6px" onclick="pay(this,${b.id},'deposit','depRef')">${t('paid_btn')}</button>`:'');
     if(b.deposit_split){
@@ -2983,8 +3004,13 @@ function renderAuth(){
      مؤسساً) لا يُدعى لتسجيل يقوده لرفض تكرار خادمي (قسم ٥/٦). */
   const hrB=$('#heroRegBtn'); if(hrB) hrB.classList.toggle('hide',!!ME);
   const scB=$('#seatsCtaBtn'); if(scB) scB.classList.toggle('hide',!!ME);
-  const tbEl=$('#tabbar'); if(tbEl) tbEl.classList.toggle('hide',!ME);
-  document.documentElement.classList.toggle('has-tabbar',!!ME);
+  /* الشريط السفلي للجميع (إصلاح حي ٣): كان يُخفى بلا جلسة فلم يجد الزائر
+     أي تبويب أصلاً — مداخل EC (تبويب «الحساب» يفتح الدخول) كانت بلا سطح.
+     الآن الشريط ظاهر دائماً بخمس تبويبات: الرئيسية/المنشئون تنقّل طبيعي
+     للزائر، والمحفظة/الرسائل/الحساب تفتح له حوار الدخول (حراس tbWallet/
+     tbMessages/openMyProfile)، وللعضو كل شيء كما هو. */
+  const tbEl=$('#tabbar'); if(tbEl) tbEl.classList.remove('hide');
+  document.documentElement.classList.add('has-tabbar');
   const gbEl=$('#guestBanner'); if(gbEl) gbEl.classList.toggle('hide',!!ME);
   if(ME){
     $('#authArea').innerHTML=`<span class="row" style="gap:7px">${avatarHtml(ME.user)}<span class="mut">${esc(ME.user.name)}</span></span> <button class="btn ghost sm" onclick="logout()">${t('logout')}</button>`;
@@ -3349,9 +3375,11 @@ function tbAfter(key){
   if(key==='creators'){ const g=$('#marketGrid'); if(g&&g.scrollIntoView) g.scrollIntoView({behavior:'smooth',block:'start'}); }
 }
 function tbWallet(){
+  if(!ME){ openAuth(); return; } /* زائر: المحفظة بلا حساب — حوار الدخول (إصلاح حي ٣) */
   showTab('dash'); TB_ACTIVE='wallet'; syncTabbar();
   setTimeout(()=>{ const el=document.querySelector('#dashBody .kpi')||document.querySelector('#dashBody'); if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'start'}); },420);
 }
+function tbMessages(){ if(!ME){ openAuth(); return; } showTab('messages'); }
 function tbAccount(){ openMyProfile(); TB_ACTIVE='account'; syncTabbar(); }
 /* مؤثرات الهيرو: parallax خفيف للطبقات العائمة (فأرة/لمس)، عدّادات تصعد عند
    الظهور، وكشف متدرج للأقسام — كلها transform/opacity ومحروسة القدرات. */
@@ -3901,12 +3929,20 @@ function profilePageHtml(d){
     <h4>${t('reviews_t')}</h4>${d.reviews.length?d.reviews.map(r=>`<div class="step">${r.sentiment==='positive'?'👍':'👎'} ⭐${r.stars} — ${esc(r.comment||'')} <span class="mut">(${esc(r.reviewer_name)})</span></div>`).join(''):`<div class="mut">${t('no_reviews')}</div>`}
   </div>${backRow}`;
 }
+/* حارس تسلسل تحميلات الملف (إصلاح حي ٣): تحميل أقدم يحسم متأخراً (رمز قديم
+   يُنظَّف في الإقلاع ثم يُعاد التوجيه بلا رمز) كان يرسم بطاقة «غير متاح»
+   أو ملفاً متقادماً فوق التحميل الأحدث — الوميض الذي رآه التحقق الحي عند
+   فتح ملف المؤسس كزائر. كل استدعاء يأخذ رقماً، ولا يرسم إلا الأحدث. */
+let PROFILE_SEQ=0;
 async function loadProfilePage(id){
   CUR_PROFILE_ID=id;
+  const seq=++PROFILE_SEQ;
   const body=$('#profileBody'); if(!body) return;
-  body.innerHTML=`<div class="mut">${t('loading')}</div>`;
+  /* حالة تحميل محايدة موسومة حتى حسم الجلب — لا بطاقة حالة قبل الحسم */
+  body.innerHTML=`<div class="card profile-loading" aria-busy="true" style="text-align:center"><div class="mut">⏳ ${t('loading')}</div></div>`;
   try{
     const d=await api('/api/talent/'+id);
+    if(seq!==PROFILE_SEQ) return; /* تحميل أحدث يملك السطح الآن */
     document.title='Deal — '+d.user.name;
     body.innerHTML=profilePageHtml(d);
     const ph=document.getElementById('profilePosts');
@@ -3914,6 +3950,7 @@ async function loadProfilePage(id){
     /* نية الحجز من رابط الحجز الشخصي (?book=1): الزائر يفتح طلب الضيف الموجّه
        لهذا العضو مباشرة — المؤسس مستثنى (لا حجز عليه أصلاً). */
     if(!ME && /[?&]book=1/.test(location.hash) && !d.user.is_platform_founder) openGuest(d.user.id, d.user.name);
+    if(seq!==PROFILE_SEQ) return; /* لا لمسات متأخرة (بانر) على سطح أحدث */
     /* بانر الباقة في ملف العضو نفسه: يُملأ غير متزامناً بحالة الاشتراك الحالية،
        ويظهر لصاحب الملف غير الموثّق غير المشترك فقط (منظوره هو). */
     const uvSlot=$('#uvBannerSlot');
@@ -3921,13 +3958,21 @@ async function loadProfilePage(id){
       try{ const st=await api('/api/star/me'); if(starBannerEligible(ME.user,st)) uvSlot.innerHTML=unverifiedStarBannerHtml(); }catch(e){}
     }
   }catch(e){
-    /* ملف غير موجود فعلاً (أو حُذف) يرد 404 من الخادم — هنا تظهر رسالة
-       واضحة وبلا أي بيان من بيانات أي حساب. (ملف المؤسس مفتوح للجميع
-       بقرار المالك فلا يصل إلى هذا المسار أصلاً.) */
-    body.innerHTML=`<div class="card" style="text-align:center"><h3>${t('profile_locked_t')}</h3>
-    <div class="mut">${t('profile_locked_d')}</div>
-    <div class="row" style="justify-content:center;margin-top:12px"><button class="btn sm" onclick="openAuth()">${t('login_register')}</button>
-    <button class="btn ghost sm" onclick="showTab('market')">${t('browse_market')}</button></div></div>`;
+    if(seq!==PROFILE_SEQ) return; /* خطأ تحميل متقادم لا يرسم فوق الأحدث */
+    /* بطاقة «غير متاح» عند 404 حقيقي فقط (ملف غير موجود أو حُذف — وبلا أي
+       بيان من بيانات أي حساب). أي خطأ آخر (401 من رمز قديم/شبكة/خادم)
+       حالة تعذّر محايدة بزر إعادة — لا ادعاء أن الملف غير متاح. */
+    if(e&&e.status===404){
+      body.innerHTML=`<div class="card" style="text-align:center"><h3>${t('profile_locked_t')}</h3>
+      <div class="mut">${t('profile_locked_d')}</div>
+      <div class="row" style="justify-content:center;margin-top:12px"><button class="btn sm" onclick="openAuth()">${t('login_register')}</button>
+      <button class="btn ghost sm" onclick="showTab('market')">${t('browse_market')}</button></div></div>`;
+    } else {
+      body.innerHTML=`<div class="card" style="text-align:center"><h3>${t('profile_load_err_t')}</h3>
+      <div class="mut">${t('profile_load_err_d')}</div>
+      <div class="row" style="justify-content:center;margin-top:12px"><button class="btn sm" onclick="loadProfilePage(${id})">${t('retry_btn')}</button>
+      <button class="btn ghost sm" onclick="showTab('market')">${t('browse_market')}</button></div></div>`;
+    }
   }
 }
 /* خانة «ملفي الشخصي»: تفتح ملف العضو العام كما يراه الأعضاء الآخرون بالضبط
@@ -4600,6 +4645,7 @@ async function xReportSend(type,id,reason){ const dlg=document.getElementById('x
 /* ---- الملف العام: باقات + فيديوهات يومية + أسئلة + شارات التوسعة ---- */
 async function loadProfileExtras(id){
   const body=$('#profileBody'); if(!body) return;
+  if(CUR_PROFILE_ID!==+id) return; /* إضافات ملف لم يعد هو المعروض (إصلاح حي ٣) */
   let old=$('#profileExtras'); xSafeRemove(old);
   const host=document.createElement('div'); host.id='profileExtras'; body.appendChild(host);
   try{

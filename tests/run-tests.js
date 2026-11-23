@@ -29,7 +29,16 @@ function check(name, cond, extra = '') {
   else { failed++; failures.push(name); console.log(`  ✗ ${passed + failed}. ${name} ${extra}`); }
 }
 
+let autoDevSeq = 0;
 async function api(method, p, { token, body } = {}) {
+  /* جولة التصميم: حدّ طلبات الضيف صار ببصمة (جهاز + IP) لا برقم هاتف. المحاكاة
+     هنا تعطي كل سيناريو ضيف جهازاً مستقلاً تلقائياً (device_id فريد لكل طلب)
+     حتى لا تتصادم السيناريوهات على بصمة واحدة — إلا حين يمرّر الاختبار نفسه
+     device_id صريحاً (اختبار حدّ الإغراق) فتُحترم قيمته كما هي. العميل الحقيقي
+     يرسل معرّف جهاز واحداً ثابتاً من متصفحه. */
+  if (method === 'POST' && p === '/api/guest-requests' && body && body.device_id === undefined) {
+    body = { ...body, device_id: 'suite-auto-' + (++autoDevSeq) };
+  }
   const r = await fetch(BASE + p, {
     method,
     headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
@@ -279,9 +288,11 @@ async function main() {
     const guestReqId = r.body.id, guestToken = r.body.token;
     check('طلب ضيف يُنشأ بلا أي حساب ويعيد رمز متابعة طويلاً ورابطاً', r.status === 200 && !!guestReqId && typeof guestToken === 'string' && guestToken.length >= 32 && r.body.follow === `/#/g/${guestToken}`);
 
+    r = await api('POST', '/api/guest-requests', { body: { business_name: 'ضيف بلا هاتف', city: 'Cairo', niche: 'Tech', budget: 100, details: 'طلب بلا أي هاتف' } });
+    check('طلب ضيف بلا أي هاتف يُنشأ بنجاح (حقل الهاتف أُزيل نهائياً من القناة)', r.status === 200 && !!r.body.token);
     r = await api('POST', '/api/guest-requests', { body: { business_name: 'س', phone: '12345', city: 'Cairo', niche: 'Tech', budget: 100, details: 'س' } });
-    check('طلب ضيف برقم غير مصري مرفوض 400', r.status === 400);
-    r = await api('POST', '/api/guest-requests', { body: { business_name: 'س', phone: '01012345679', niche: 'Tech', budget: 100, details: 'س' } });
+    check('حقل phone مرسل في الجسم يُتجاهل تماماً — لا يرفض الطلب ولا يُخزَّن', r.status === 200 && !!r.body.id);
+    r = await api('POST', '/api/guest-requests', { body: { business_name: 'س', niche: 'Tech', budget: 100, details: 'س' } });
     check('طلب ضيف بلا مدينة مرفوض 400', r.status === 400);
 
     r = await api('GET', '/api/requests');
@@ -355,14 +366,16 @@ async function main() {
     r = await api('GET', '/api/my/stats', { token: tokA });
     check('أرباح الصانع من حجز الضيف وصلته (450 حجز أول + 90 عربون حجز ثانٍ + 540 ضيف = 1080)', r.body.earnings_total === 1080, `earnings=${r.body.earnings_total}`);
 
-    const FLOOD_PHONE = '01098765432';
+    const FLOOD_DEV = 'flood-device-1';
     let floodOk = 0;
     for (let i = 0; i < 3; i++) {
-      const fr = await api('POST', '/api/guest-requests', { body: { business_name: 'إغراق', phone: FLOOD_PHONE, city: 'Cairo', niche: 'Food', budget: 100, details: 'طلب' } });
+      const fr = await api('POST', '/api/guest-requests', { body: { business_name: 'إغراق', device_id: FLOOD_DEV, city: 'Cairo', niche: 'Food', budget: 100, details: 'طلب' } });
       if (fr.status === 200) floodOk++;
     }
-    r = await api('POST', '/api/guest-requests', { body: { business_name: 'إغراق', phone: FLOOD_PHONE, city: 'Cairo', niche: 'Food', budget: 100, details: 'طلب' } });
-    check('حد الإغراق: 3 طلبات مفتوحة لنفس الرقم ثم الرفض 429', floodOk === 3 && r.status === 429, `ok=${floodOk} last=${r.status}`);
+    r = await api('POST', '/api/guest-requests', { body: { business_name: 'إغراق', device_id: FLOOD_DEV, city: 'Cairo', niche: 'Food', budget: 100, details: 'طلب' } });
+    check('حد الإغراق بالبصمة: 3 طلبات مفتوحة لنفس بصمة الجهاز ثم الرفض 429', floodOk === 3 && r.status === 429, `ok=${floodOk} last=${r.status}`);
+    r = await api('POST', '/api/guest-requests', { body: { business_name: 'ضيف آخر', device_id: 'another-device-9', city: 'Cairo', niche: 'Food', budget: 100, details: 'طلب' } });
+    check('بصمة جهاز مختلفة لا تتأثر بحدّ جهاز آخر (تُقبل فوراً)', r.status === 200 && !!r.body.id);
 
     /* ===== ثبات البيانات: الدليل مرتين = قيم متطابقة (إصلاح أ.7) ===== */
     const dirSnap = (items) => JSON.stringify(items.map((i) => [i.id, i.completion_rate, i.completed_deals, i.price, i.verified]));
@@ -912,8 +925,8 @@ async function main() {
     const saGuestPub = r.body.items.find((x) => x.id === saGuestId);
     check('رقم الضيف السعودي لا يظهر للزائر العام إطلاقاً',
       !!saGuestPub && !('guest_phone' in saGuestPub) && !JSON.stringify(r.body).includes('+966512987654'));
-    r = await api('POST', '/api/guest-requests', { body: { business_name: 'س', phone: '01012345678', country: 'SA', city: 'Riyadh', niche: 'Tech', budget: 100, details: 'س' } });
-    check('ضيف برقم مصري تحت دولة السعودية مرفوض 400 (تحقق سلبي)', r.status === 400);
+    r = await api('POST', '/api/guest-requests', { body: { business_name: 'ضيف سعودي بلا هاتف', country: 'SA', city: 'Riyadh', niche: 'Tech', budget: 100, details: 'طلب' } });
+    check('طلب ضيف سعودي بلا أي هاتف يُنشأ بنجاح — لا تحقق هواتف في قناة الضيف إطلاقاً', r.status === 200 && !!r.body.id);
 
     // --- التوثيق وروابط X/سناب شات بنفس منطق القبول ---
     r = await api('POST', '/api/verify/request', { token: saudiTok });
@@ -1746,29 +1759,47 @@ async function main() {
       check('حارس واجهة: الشريط المتحرك وقسم «إزاي بتشتغل» وبطاقة مقاعد المؤسسين موجودة بحركاتها ومفاتيحها',
         uiHtml.includes('marquee') && uiHtml.includes('@keyframes mqMove') && uiHtml.includes('how-card') && uiHtml.includes('how-num')
         && uiHtml.includes('seats-card') && uiHtml.includes('marquee_items') && uiHtml.includes('seats-dots'));
-      check('حارس واجهة: شريط التنقل السفلي موجود بأزراره (٤ تبويبات + قائمة) وshowTab يزامن حالته النشطة عبر syncTabbar',
-        uiHtml.includes('id="tabbar"') && (uiHtml.match(/data-tbtab="/g) || []).length === 4
+      check('حارس واجهة: شريط التنقل السفلي موجود بأزراره (٥ تبويبات موسومة بترتيب صورة ٣) وshowTab يزامن حالته النشطة عبر syncTabbar',
+        uiHtml.includes('id="tabbar"') && (uiHtml.match(/data-tbtab="/g) || []).length === 5
         && uiHtml.includes('id="tbMsgBadge"') && fnSrc('showTab').includes('syncTabbar'));
-      /* ربط زر «السوق» السفلي: يُستخرج هدفه من وسم الزر الحقيقي (الموسوم
-         data-i18n="nav_market") ويُقارن بهدف زر «السوق» العلوي — انحدار رُصد
-         حياً: كان الزر السفلي يستدعي showTab('campaigns') فيفتح حملات
-         البراندات بدل سوق الصناع. الهدف المستخرج يُحقن في سائق الـVM أدناه
-         لفحص وظيفي ينفّذ النداء نفسه. */
+      /* ربط تبويب «المنشئون» السفلي (حامل data-i18n="tb_creators" في الترتيب
+         الجديد): هدفه هو سوق/دليل الصناع نفسه — showTab('market') كما الزر
+         العلوي «السوق» — لا حملات البراندات (انحدار تاريخي موثّق). مفتاح
+         التبويب صار 'creators' بقرار الترتيب الجديد، والهدف المستخرج يُحقن
+         في سائق الـVM أدناه لفحص وظيفي ينفّذ النداء نفسه. */
       const tbBlock = (uiHtml.match(/<nav class="tabbar[^>]*>([\s\S]*?)<\/nav>/) || [])[1] || '';
-      const tbMarketChunk = tbBlock.split('<button').slice(1).find((c) => c.includes('data-i18n="nav_market"')) || '';
+      const tbMarketChunk = tbBlock.split('<button').slice(1).find((c) => c.includes('data-i18n="tb_creators"')) || '';
       const tbMarketArg = (tbMarketChunk.match(/showTab\('([^']+)'\)/) || [])[1] || null;
       const tbMarketKey = (tbMarketChunk.match(/data-tbtab="([^"]+)"/) || [])[1] || null;
       const navBlock = (uiHtml.match(/<nav id="nav">([\s\S]*?)<\/nav>/) || [])[1] || '';
       const navMarketChunk = navBlock.split('<button').slice(1).find((c) => c.includes('data-i18n="nav_market"')) || '';
       const navMarketArg = (navMarketChunk.match(/data-tab="([^"]+)"/) || [])[1] || null;
-      check('حارس واجهة: زر «السوق» في الشريط السفلي مربوط بنفس هدف الزر العلوي بالضبط (showTab(\'market\') + مفتاح market) — لا حملات البراندات',
-        tbMarketArg === 'market' && tbMarketKey === 'market' && navMarketArg === 'market' && !tbMarketChunk.includes('campaigns'),
+      check('حارس واجهة: تبويب «المنشئون» في الشريط السفلي مربوط بنفس هدف زر «السوق» العلوي بالضبط (showTab(\'market\')) — لا حملات البراندات',
+        tbMarketArg === 'market' && tbMarketKey === 'creators' && navMarketArg === 'market' && !tbMarketChunk.includes('campaigns'),
         `bottom=${tbMarketArg}/${tbMarketKey} top=${navMarketArg}`);
+      /* ===== جولة «داكن سينمائي» (TESTING-DESIGN-CINEMATIC.md): حراس بنيوية ===== */
+      const tbOrder = ['tb_home', 'tb_wallet', 'nav_messages', 'tb_creators', 'tb_account'].map((k) => tbBlock.indexOf(`data-i18n="${k}"`));
+      check('حارس تصميم: ترتيب تبويبات الشريط السفلي بالضبط (الرئيسية، المحفظة، الرسائل، المنشئون، الحساب) في DOM = من اليمين لليسار في RTL',
+        tbOrder.every((v, i) => v >= 0 && (i === 0 || v > tbOrder[i - 1])), JSON.stringify(tbOrder));
+      check('حارس تصميم: عنوان الهيرو الرسمي بقرار المستخدم في الواجهة والقاموسين + درع الهيرو + زر CTA ذهبي واحد',
+        uiHtml.includes('اكتشف أفضل المبدعين وتعاون الآن') && uiHtml.includes('Discover the best creators. Collaborate now.')
+        && uiHtml.includes('hero-emblem') && uiHtml.includes('hero_title') && uiHtml.includes('hero-cta')
+        && (uiHtml.match(/hero_title:/g) || []).length >= 2 && (uiHtml.match(/hero_cta:/g) || []).length >= 2);
+      check('حارس تصميم: نموذج الضيف بلا حقل هاتف نهائياً (لا gPhone ولا gPhoneLbl) وشاشة النجاح تجعل حفظ الرابط خطوة كبيرة',
+        !uiHtml.includes('gPhone') && uiHtml.includes('save-link-card') && uiHtml.includes('g_save_step')
+        && (uiHtml.match(/g_save_step:/g) || []).length >= 2 && fnSrc('doGuestRequest').includes('device_id') && !fnSrc('doGuestRequest').includes('phone'));
+      const tcSrc = fnSrc('talentCard');
+      const tcOrder = ['coverDiv(u)', 'tava', 't-spec', 't-meta', 'vchip', 'money(u.price, u.currency)'].map((m) => tcSrc.indexOf(m));
+      check('حارس تصميم: ترتيب عناصر بطاقة الصانع كالمرجع (غلاف ← صورة ← تخصص ← سطر متابعين/مشاريع ← شريحة موثّق ← سعر)',
+        tcOrder.every((v, i) => v >= 0 && (i === 0 || v > tcOrder[i - 1])), JSON.stringify(tcOrder));
+      check('حارس تصميم: إخفاء المقاعد التلقائي مربوط (seatsVerifiedFull + heroSeatStat + loadSeatsState عند التهيئة) وترويسة ملف القائمة موجودة',
+        uiHtml.includes('function seatsVerifiedFull') && uiHtml.includes('id="heroSeatStat"') && uiHtml.includes('loadSeatsState()')
+        && uiHtml.includes('id="menuProfile"') && uiHtml.includes('id="menuAva"') && uiHtml.includes('goldband'));
       check('حارس واجهة: بطاقات الصناع بترويسة غلاف مشتقة من المجال (nicheHue + tcard/tcover) وهيدر اللوحة dash-hero وبلاطات KPI ملوّنة',
         uiHtml.includes('nicheHue') && uiHtml.includes('tcover') && uiHtml.includes('tcard')
         && uiHtml.includes('dash-hero') && uiHtml.includes('card g1'));
-      check('حارس واجهة: نسخة كاش PWA رُفعت إلى deal-v2 حتى تلتقط الأجهزة التصميم الجديد فوراً',
-        fs.readFileSync(path.join(pubDir, 'sw.js'), 'utf8').includes("const CACHE = 'deal-v2'"));
+      check('حارس واجهة: نسخة كاش PWA رُفعت إلى deal-v3 حتى تلتقط الأجهزة التصميم السينمائي الجديد فوراً',
+        fs.readFileSync(path.join(pubDir, 'sw.js'), 'utf8').includes("const CACHE = 'deal-v3'"));
       /* ===== جولة الإبداع الثانية + وصول الضيوف + التصنيف الموحّد (TESTING-BOLD-REDESIGN.md) ===== */
       const mqVals = [...uiHtml.matchAll(/marquee_items:'([^']*)'/g)].map((m) => m[1]);
       const mqBlock = (uiHtml.match(/<div class="marquee">([\s\S]*?)<\/div><\/div>/) || [])[1] || '';
@@ -2068,6 +2099,14 @@ async function main() {
   await doGuestRequest({ disabled: false, innerHTML: 'انشر الطلب' });
   const gPost = fetchLog.filter((f) => f.method === 'POST' && f.url.endsWith('/api/guest-requests')).pop();
   out.guestTargetPosted = !!gPost && JSON.parse(gPost.body).target_talent_id === 42;
+  out.guestBodyNoPhone = !!gPost && !('phone' in JSON.parse(gPost.body)) && typeof JSON.parse(gPost.body).device_id === 'string' && JSON.parse(gPost.body).device_id.length > 0;
+  // --- قرار إخفاء المقاعد عند اكتمال الموثّقة (جولة التصميم): دالة صافية على
+  //     حمولات اصطناعية — ١٠٠ موثّقة = إغلاق، وأي نقص أو غياب توثيق = مفتوح ---
+  const mkSeats = (taken, verified) => ({ seats: Array.from({ length: 100 }, (_, i) => ({ seat: i + 1, taken: i < taken, verified: i < verified })) });
+  out.seatsFullAt100Verified = seatsVerifiedFull(mkSeats(100, 100)) === true;
+  out.seatsOpenAt99Verified = seatsVerifiedFull(mkSeats(100, 99)) === false;
+  out.seatsOpenWhenTakenUnverified = seatsVerifiedFull(mkSeats(100, 40)) === false;
+  out.seatsNullSafe = seatsVerifiedFull(null) === false && seatsVerifiedFull({}) === false;
   await new Promise((r2) => setTimeout(r2, 80));
   openGuest();
   out.guestTargetCleared = GUEST_TARGET === null;
@@ -2369,6 +2408,11 @@ async function main() {
       check('حارس واجهة وظيفي: طلب الضيف الموجّه — openGuest(id) يثبّت الهدف ظاهراً والإرسال يحمل target_talent_id والفتح العام يصفّيه',
         !!uiRes && uiRes.guestTargetSet === true && uiRes.guestTargetPosted === true && uiRes.guestTargetCleared === true,
         JSON.stringify(uiRes));
+      check('حارس واجهة وظيفي (تصميم): جسم طلب الضيف بلا حقل phone نهائياً ويحمل device_id لبصمة حدّ الطلبات',
+        !!uiRes && uiRes.guestBodyNoPhone === true, JSON.stringify(uiRes));
+      check('حارس واجهة وظيفي (تصميم): قرار إخفاء المقاعد — ١٠٠ موثّقة تُغلق، و٩٩ أو مشغولة بلا توثيق تبقى مفتوحة، ومدخلات فارغة آمنة',
+        !!uiRes && uiRes.seatsFullAt100Verified === true && uiRes.seatsOpenAt99Verified === true
+        && uiRes.seatsOpenWhenTakenUnverified === true && uiRes.seatsNullSafe === true, JSON.stringify(uiRes));
       check('حارس واجهة وظيفي: نموذج الضيف معطّل أثناء جلسة عضو — النموذج مخفي وتنبيه القناة ظاهر والإرسال لا يصل الخادم',
         !!uiRes && uiRes.guestBlockedForMember === true && uiRes.guestBlockedNoPost === true,
         JSON.stringify(uiRes));
@@ -2502,22 +2546,21 @@ async function main() {
         && serverSrc.includes('/api/money/verify-receipt') && serverSrc.includes('money_obligations'));
     }
 
-    /* ===== جولة «تواصل ومهام»: محادثة ضيف↔مقدم + مهام اليوم + حصر قناة الضيف ===== */
-    // عضو مسجل برقم هاتف (تمهيد لاختبارات حصر القناة بكل الصيغ)
+    /* ===== جولة «تواصل ومهام»: محادثة ضيف↔مقدم + مهام اليوم + قناة الضيف ===== */
+    // عضو مسجل برقم هاتف (تمهيد: إثبات أن قناة الضيف لم تعد تفحص الأرقام أصلاً)
     r = await api('POST', '/api/auth/register', { body: { name: 'Phone Member', role: 'creator', niche: 'Tech', city: 'Cairo', contact: '01011122233', price: 300 } });
     const phoneMember = r.body.user;
-    check('تسجيل عضو برقم هاتف مصري يعمل (تمهيد لاختبارات حصر قناة الضيف)', r.status === 200 && !!phoneMember, JSON.stringify(r.body));
+    check('تسجيل عضو برقم هاتف مصري يعمل (تمهيد لاختبارات قناة الضيف بلا هاتف)', r.status === 200 && !!phoneMember, JSON.stringify(r.body));
 
-    // --- (ج) حصر قناة الضيف: رقم عضو بأي صيغة مرفوض ---
-    const memberErr = (x) => x.status === 400 && /مسجل كعضو/.test(x.body.error || '');
-    for (const [label, ph] of [['الصيغة المحلية', '01011122233'], ['الدولية +', '+201011122233'], ['الدولية 00', '00201011122233'], ['الوطنية المجردة', '1011122233']]) {
-      r = await api('POST', '/api/guest-requests', { body: { business_name: 'محل', phone: ph, city: 'Cairo', niche: 'Tech', budget: 100, details: 'طلب' } });
-      check(`طلب ضيف برقم عضو مسجل (${label}) مرفوض 400 برسالة «مسجل كعضو»`, memberErr(r), JSON.stringify(r.body));
-    }
+    // --- (ج) قناة الضيف بعد إزالة حقل الهاتف (جولة التصميم): لا فحص أرقام ---
+    // قرار المستخدم: «طالما المحادثة داخل التطبيق مالوش لازمة رقم الموبايل» —
+    // فحص «رقم مسجل كعضو» سقط مع الحقل؛ أي phone في الجسم يُتجاهل ولا يُخزَّن.
+    r = await api('POST', '/api/guest-requests', { body: { business_name: 'محل', phone: '01011122233', city: 'Cairo', niche: 'Tech', budget: 100, details: 'طلب' } });
+    check('طلب ضيف يحمل رقم عضو مسجل في جسمه يُقبل — لا فحص أرقام في قناة الضيف بعد إزالة الحقل', r.status === 200 && !!r.body.id, JSON.stringify(r.body));
     r = await api('POST', '/api/guest-requests', { body: { business_name: 'محل', phone: '01077788899', city: 'Cairo', niche: 'Food', budget: 100, details: 'طلب' } });
-    check('طلب ضيف برقم هاتف ملف عضو (عمود phone لا contact) مرفوض أيضاً', memberErr(r), JSON.stringify(r.body));
+    check('طلب ضيف برقم هاتف ملف عضو يُقبل أيضاً لنفس السبب (الحقل مُزال)', r.status === 200 && !!r.body.id, JSON.stringify(r.body));
     r = await api('POST', '/api/guest-requests', { body: { business_name: 'محل', phone: '0512345678', country: 'SA', city: 'Riyadh', niche: 'Tech', budget: 100, details: 'طلب' } });
-    check('طلب ضيف سعودي برقم عضو سعودي بصيغته المحلية مرفوض — التطبيع بكل صيغ الدولة', memberErr(r), JSON.stringify(r.body));
+    check('طلب ضيف سعودي برقم عضو سعودي يُقبل — لا تطبيع ولا فحص هواتف إطلاقاً', r.status === 200 && !!r.body.id, JSON.stringify(r.body));
     r = await api('POST', '/api/guest-requests', { token: tokA, body: { business_name: 'محل', phone: '01033344455', city: 'Cairo', niche: 'Tech', budget: 100, details: 'طلب' } });
     check('طلب ضيف أثناء جلسة عضو قائمة مرفوض 403 (القناة للعملاء بلا حسابات فقط)', r.status === 403 && /مسجل الدخول/.test(r.body.error || ''), JSON.stringify(r.body));
     r = await api('POST', '/api/guest-requests', { body: { business_name: 'محل حر', phone: '01033344455', city: 'Cairo', niche: 'Tech', budget: 100, details: 'طلب' } });
@@ -2626,10 +2669,11 @@ async function main() {
     // --- حراس بنيوية للجولة ---
     const srvSrcCT = fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8');
     const htmlSrcCT = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-    check('حارس بنيوي: الخادم فيه مسارات محادثة الضيف وحصر القناة ومهام اليوم وعلم المستعجل',
+    check('حارس بنيوي: الخادم فيه مسارات محادثة الضيف وبصمة قناة الضيف (فحص أرقام الأعضاء أُزيل مع حقل الهاتف بقرار جولة التصميم) ومهام اليوم وعلم المستعجل',
       srvSrcCT.includes('/api/guest/:token/messages') && srvSrcCT.includes('/api/guest-conversations')
-      && srvSrcCT.includes('/api/bookings/:id/guest-messages') && srvSrcCT.includes('guestNumberIsMember')
-      && srvSrcCT.includes('GUEST_MEMBER_NUMBER_ERR') && srvSrcCT.includes('/api/me/availability')
+      && srvSrcCT.includes('/api/bookings/:id/guest-messages') && srvSrcCT.includes('guestFingerprint')
+      && srvSrcCT.includes('guest_fp') && !srvSrcCT.includes('guestNumberIsMember')
+      && srvSrcCT.includes('/api/me/availability')
       && srvSrcCT.includes('/api/me/tasks') && srvSrcCT.includes('/api/bookings/:id/urgent'));
     check('حارس بنيوي: الواجهة فيها محادثة الضيف ومهام اليوم وتعطيل نموذج الضيف للمسجلين وعلم المستعجل',
       htmlSrcCT.includes('guestBlocked') && htmlSrcCT.includes('gUrgent') && htmlSrcCT.includes('/api/guest-conversations')
@@ -2870,6 +2914,8 @@ async function main() {
     r = await api('GET', '/api/founders-wall');
     check('جدار المؤسسين: عند الاكتمال taken=100 وclosed=true ولا مقعد شاغر',
       r.status === 200 && r.body.taken === 100 && r.body.closed === true && r.body.seats.every((s) => s.taken));
+    check('جدار المؤسسين: كل مقعد يحمل علم verified (مدخل قرار إخفاء خانة المقاعد الموثّقة في الواجهة) — والاكتمال هنا تسجيلاً لا توثيقاً فلا إخفاء بعد',
+      r.body.seats.every((s) => typeof s.verified === 'boolean') && r.body.seats.filter((s) => s.taken && s.verified).length < 100);
 
     /* --- قاموسا اللغتين لكل نصوص الجولة --- */
     const socKeys = ['book_me_btn', 'wall_t', 'friends_t', 'friend_add', 'msg_friends_only', 'thread_readonly', 'posts_t', 'post_publish', 'booklink_t', 'dealcard_t', 'verified_deals_w', 'pf_cover', 'pf_accent'];

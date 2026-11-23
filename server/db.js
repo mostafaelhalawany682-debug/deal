@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS shop_requests (
   is_guest INTEGER DEFAULT 0,
   guest_name TEXT DEFAULT '',
   guest_phone TEXT DEFAULT '',
+  guest_fp TEXT DEFAULT '',
   guest_token TEXT DEFAULT '',
   urgent INTEGER DEFAULT 0,
   created_at BIGINT NOT NULL
@@ -395,6 +396,7 @@ ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'EG';
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS is_guest INTEGER DEFAULT 0;
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_name TEXT DEFAULT '';
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_phone TEXT DEFAULT '';
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_fp TEXT DEFAULT '';
 ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS guest_token TEXT DEFAULT '';
 ALTER TABLE shop_requests ALTER COLUMN shop_user_id DROP NOT NULL;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_name TEXT DEFAULT '';

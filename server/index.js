@@ -2065,45 +2065,33 @@ app.get('/api/opportunities', auth, async (req, res) => {
    العميل (محل/براند) ينشر طلبه كضيف: بلا حساب وبلا كلمة سر. هويته في المتابعة
    هي رمز وصول عشوائي طويل (token) يُحفظ على الطلب ثم على الحجز عند التحويل،
    وخطواته في الحجز تتم من صفحة الرمز بنفس آلة الحالات المشتركة أعلاه. */
-const GUEST_OPEN_LIMIT = 3; // أقصى طلبات ضيف مفتوحة لنفس الرقم — حد خفيف ضد الإغراق
-// تحقق/تطبيع هاتف الضيف يتم عبر normalizePhoneForCountry بقاعدة دولة الضيف
-// (مصر بصيغتها المحلية القائمة، وغيرها دولياً) — انظر قسم الدول أعلاه.
-
-/* رسالتا حصر قناة الضيف (قرار المالك): القناة للعملاء من غير حسابات فقط —
-   لا عضو مسجّل يستخدمها برقمه، ولا تعمل أصلاً أثناء جلسة عضو قائمة. */
-const GUEST_MEMBER_NUMBER_ERR = 'الرقم ده مسجل كعضو — ادخل بحسابك واطلب من جوه · This number is registered as a member — log in and order from your account';
+const GUEST_OPEN_LIMIT = 3; // أقصى طلبات ضيف مفتوحة لنفس البصمة — حد خفيف ضد الإغراق
+/* جولة التصميم السينمائي (قرار المستخدم): حقل هاتف الضيف أُزيل نهائياً من
+   النموذج — فالمحادثة والمتابعة داخل المنصة أصلاً، ولا لزوم لرقم الموبايل.
+   الخادم لا يطلب هاتفاً ولا يتحقق منه ولا يفحص «رقم عضو» في هذه القناة؛ أي
+   حقل phone مرسل يُتجاهل ولا يُخزَّن (عمود guest_phone يبقى للصفوف القديمة
+   فقط ويُكتب '' للجديد). حدّ الطلبات المفتوحة انتقل لبصمة جهاز/متصفح + IP:
+   بصمة = SHA-256(IP + معرّف جهاز يرسله العميل + وكيل المستخدم) — لا تُعرَض
+   ولا تُشارَك، ووظيفتها حدّ الإغراق فقط. مفتاح الضيف الوحيد هو رمز المتابعة. */
 const GUEST_SESSION_ERR = 'أنت مسجل الدخول بحساب عضو — قناة الضيف للعملاء من غير حسابات فقط، اطلب من داخل حسابك · You are logged in as a member — the guest channel is for clients without accounts; please order from your account';
-/* هل الرقم (بأي صيغة كتابة في أي دولة مدعومة) يخص عضواً مسجلاً؟ المقارنة
-   بالقيم القانونية المخزّنة في contact وphone معاً بعد تطبيع المدخل بقاعدة
-   كل دولة — فلا يفلت عضو بصيغة بديلة (+/00/محلي/وطني مجرد) لنفس الرقم. */
-async function guestNumberIsMember(rawPhone) {
-  const candidates = new Set();
-  for (const c of COUNTRIES) {
-    const n = normalizePhoneForCountry(rawPhone, c.code);
-    if (n) candidates.add(n);
-  }
-  if (!candidates.size) return false;
-  const list = [...candidates];
-  const ph = list.map(() => '?').join(',');
-  const hit = await db.prepare(`SELECT id FROM users WHERE contact IN (${ph}) OR phone IN (${ph}) LIMIT 1`).get(...list, ...list);
-  return !!hit;
+function guestFingerprint(req) {
+  const device = String((req.body || {}).device_id || '').slice(0, 80);
+  const ip = (req.ip || (req.connection && req.connection.remoteAddress) || '');
+  const ua = String(req.headers['user-agent'] || '').slice(0, 200);
+  return crypto.createHash('sha256').update(`${ip}|${device}|${ua}`).digest('hex');
 }
 
 app.post('/api/guest-requests', async (req, res) => {
-  const { business_name, phone, city, niche, budget, details = '', title, target_talent_id } = req.body || {};
+  const { business_name, city, niche, budget, details = '', title, target_talent_id } = req.body || {};
   // جلسة عضو قائمة = القناة مغلقة لهذا الطلب أصلاً (الرفض على الخادم، والواجهة
   // تعطّل النموذج للمسجلين أيضاً) — التصفح العام وحده يبقى مفتوحاً للجميع.
   if (await optionalViewer(req)) return res.status(403).json({ error: GUEST_SESSION_ERR });
   if (!business_name || !String(business_name).trim()) return res.status(400).json({ error: 'اسم النشاط مطلوب' });
-  // دولة العميل الضيف (افتراضي مصر): الرقم يُتحقق ويُطبَّع بقاعدة دولته،
-  // ويُحفظ بصيغته القانونية (مصر محلياً، وغيرها دولياً كاملاً +dial) فتظهر
-  // للصناع بصيغته الدولية، وعملة الطلب تُشتق من الدولة.
+  // دولة العميل الضيف (افتراضي مصر): عملة الطلب تُشتق من الدولة. لا هاتف في
+  // هذه القناة إطلاقاً (أُزيل الحقل بقرار المستخدم) — التواصل والمتابعة من
+  // صفحة الرمز داخل المنصة فقط.
   const guestCountry = countryOf((req.body || {}).country || 'EG');
   if (!guestCountry) return res.status(400).json({ error: 'دولة غير مدعومة حالياً' });
-  const ph = normalizePhoneForCountry(phone, guestCountry.code);
-  if (!ph) return res.status(400).json({ error: phoneErrorFor(guestCountry) });
-  // رقم عضو مسجل (بكل صيغ دولته) لا يدخل قناة الضيف — صاحبه يطلب من حسابه.
-  if (await guestNumberIsMember(phone)) return res.status(400).json({ error: GUEST_MEMBER_NUMBER_ERR });
   if (!city || !String(city).trim()) return res.status(400).json({ error: 'المدينة مطلوبة' });
   if (!niche || !String(niche).trim()) return res.status(400).json({ error: 'نوع الإعلان / المجال مطلوب' });
   if (budget == null || budget === '' || !isFinite(+budget) || +budget < 0) return res.status(400).json({ error: 'ميزانية تقريبية صحيحة مطلوبة' });
@@ -2120,12 +2108,13 @@ app.post('/api/guest-requests', async (req, res) => {
     }
     if (target.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل طلبات' });
   }
-  const openCount = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE is_guest=1 AND guest_phone=? AND status='open'`).get(ph)).c;
-  if (openCount >= GUEST_OPEN_LIMIT) return res.status(429).json({ error: 'عندك طلبات مفتوحة كتير بنفس الرقم — استنى لما طلب يتقفل الأول' });
+  const fp = guestFingerprint(req);
+  const openCount = (await db.prepare(`SELECT COUNT(*) c FROM shop_requests WHERE is_guest=1 AND guest_fp=? AND status='open'`).get(fp)).c;
+  if (openCount >= GUEST_OPEN_LIMIT) return res.status(429).json({ error: 'عندك طلبات مفتوحة كتير — استنى لما طلب يتقفل الأول · Too many open requests — please wait until one of them closes' });
   const token = rnd(24);
   const urgent = (req.body || {}).urgent ? 1 : 0;
-  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_token,target_talent_id,country,urgent,created_at) VALUES (NULL,?,?,?,?,?,?,'open',1,?,?,?,?,?,?,?)`)
-    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, guestCountry.currency, details, String(business_name).trim(), ph, token, targetId, guestCountry.code, urgent, now());
+  const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_fp,guest_token,target_talent_id,country,urgent,created_at) VALUES (NULL,?,?,?,?,?,?,'open',1,?,?,?,?,?,?,?,?)`)
+    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, guestCountry.currency, details, String(business_name).trim(), '', fp, token, targetId, guestCountry.code, urgent, now());
   if (targetId) {
     await notify(targetId, 'guest_targeted',
       `🎯 طلب موجّه ليك مباشرة من عميل «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget}${urgent ? ' · 🔥 مستعجل — تنفيذ اليوم' : ''} — افتح «فرص ليك» لتحويله لحجز بضمان Deal`,

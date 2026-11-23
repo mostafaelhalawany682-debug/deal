@@ -385,6 +385,11 @@ function agreementFromBody(body) {
   if (dv !== undefined && dv !== null && dv !== '') {
     deliveryAt = typeof dv === 'number' ? dv : Date.parse(String(dv));
     if (!Number.isFinite(deliveryAt) || deliveryAt <= 0) return { error: 'ميعاد التسليم المتفق عليه غير صالح' };
+    /* نطاق الميعاد (٤-د): من بداية اليوم الحالي حتى سنة من الآن. قُبل حياً
+       تاريخ بسنة ٦ أرقام (202612) فلا بد من حدّين صريحين — والميعاد يبقى
+       دليلاً موثقاً بلا عدّاد منصة كما هو مقرر. */
+    const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+    if (deliveryAt < dayStart.getTime() || deliveryAt > Date.now() + 366 * 24 * 3600 * 1000) return { error: 'ميعاد التسليم المتفق عليه خارج النطاق المسموح (من اليوم وحتى سنة من الآن)' };
   }
   return { revisions, deliveryAt };
 }
@@ -875,8 +880,8 @@ async function publicUser(u, viewerId = null) {
     country_name: founder ? '' : (u.country_name || ''),
     currency: u.currency, followers: u.followers,
     price: founder ? null : u.price,
-    bio: founder ? '' : u.bio,
-    avatar: founder ? '' : (u.avatar || ''),
+    bio: u.bio,
+    avatar: u.avatar || '',
     is_platform_founder: founder,
     is_founder_member: !!u.is_founder_member,
     // مقعد المؤسس المرقّم (١–٥٠ بالأسبقية العالمية): المؤسس صاحب المنصة بلا
@@ -2176,7 +2181,20 @@ app.get('/api/deals/:bookingId', async (req, res) => {
 });
 
 /* ---------------- المراسلة الداخلية 1:1 (حسابات مسجلة فقط) ----------------
-   المؤسس خارج المراسلة تماماً من الطرفين: لا رسائل إليه ولا منه عبر هذا المسار. */
+   القاعدة العامة: عضو↔عضو للأصدقاء المقبولين فقط. امتياز المؤسس الموثّق
+   (قرار المالك — «تواصل المؤسس الصادر»): المؤسس يبدأ التواصل مع أي عضو
+   مسجل بلا شرط صداقة ويرسل/يستقبل في محادثاته، والعضو يرد فقط داخل
+   محادثة بدأها المؤسس — بدء محادثة جديدة منه إلى المؤسس مرفوض. */
+async function founderStartedThread(founderId, memberId) {
+  const r = await db.prepare('SELECT 1 FROM messages WHERE sender_id=? AND recipient_id=? LIMIT 1').get(founderId, memberId);
+  return !!r;
+}
+async function canMessagePair(me, other) {
+  if (!me || !other || me.id === other.id) return false;
+  if (me.is_platform_founder) return true;
+  if (other.is_platform_founder) return founderStartedThread(other.id, me.id);
+  return areFriends(me.id, other.id);
+}
 const MSG_MAX = 1000;
 /* رسائل ضيف غير مقروءة لحجوزات هذا المنفذ (محادثات عميل↔مقدم داخل المنصة). */
 async function guestUnreadForTalent(userId) {
@@ -2197,12 +2215,14 @@ app.get('/api/messages', auth, async (req, res) => {
   let unread_total = 0;
   for (const c of convs.values()) {
     unread_total += c.unread;
+    const otherU = await getUser(c.other_id);
     items.push({
-      user: socialSummary(await getUser(c.other_id)),
+      user: socialSummary(otherU),
       last: { body: c.last.body, created_at: c.last.created_at, mine: c.last.sender_id === me },
       unread: c.unread,
-      // محادثة مع غير صديق = للقراءة فقط (تظهر في القائمة بحالتها الصادقة).
-      can_message: await areFriends(me, c.other_id),
+      // محادثة لا تسمح قاعدة المراسلة بالإرسال فيها = للقراءة فقط (تظهر
+      // في القائمة بحالتها الصادقة): غير صديق، أو عضو أمام مؤسس لم يبدأ.
+      can_message: await canMessagePair(req.user, otherU),
     });
   }
   res.json({ items, unread_total, guest_unread_total: await guestUnreadForTalent(me) });
@@ -2219,7 +2239,7 @@ app.get('/api/messages/:userId', auth, async (req, res) => {
   res.json({
     user: socialSummary(other),
     friend_state: fstate,
-    can_message: fstate === 'friends',
+    can_message: await canMessagePair(req.user, other),
     items: rows.map(m => ({ id: m.id, body: m.body, created_at: m.created_at, mine: m.sender_id === req.user.id, is_read: !!m.is_read })),
   });
 });
@@ -2227,13 +2247,18 @@ app.post('/api/messages/:userId', auth, async (req, res) => {
   const other = await getUser(+req.params.userId);
   if (!other) return res.status(404).json({ error: 'غير موجود' });
   if (other.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك مراسلة نفسك' });
-  if (other.is_platform_founder || req.user.is_platform_founder) {
-    return res.status(400).json({ error: 'حساب المؤسس خارج المراسلة — عرضه ومتابعته فقط' });
-  }
   if (other.banned || other.frozen) return res.status(400).json({ error: 'هذا الحساب غير متاح للمراسلة حالياً' });
-  /* بوابة الصداقة (قرار المالك): المراسلة عضو↔عضو للأصدقاء المقبولين فقط.
-     المحادثات القائمة مع غير أصدقاء تبقى قابلة للقراءة، والإرسال وحده يُرفض. */
-  if (!(await areFriends(req.user.id, other.id))) {
+  /* بوابة المراسلة (قرار المالك): عضو↔عضو للأصدقاء المقبولين فقط (المحادثات
+     القائمة مع غير أصدقاء تبقى قابلة للقراءة، والإرسال وحده يُرفض). واستثناء
+     المؤسس الموثّق: المؤسس يبدأ التواصل مع أي عضو بلا شرط صداقة، والعضو
+     يرد فقط داخل محادثة بدأها المؤسس — بدء محادثة جديدة منه إليه مرفوض. */
+  if (req.user.is_platform_founder) {
+    // امتياز المؤسس: بدء التواصل ومتابعته مع أي عضو مسجل.
+  } else if (other.is_platform_founder) {
+    if (!(await founderStartedThread(other.id, req.user.id))) {
+      return res.status(400).json({ error: 'لا يمكنك بدء محادثة مع المؤسس — المؤسس هو من يبدأ التواصل، وتقدر ترد داخل أي محادثة بدأها معك' });
+    }
+  } else if (!(await areFriends(req.user.id, other.id))) {
     return res.status(403).json({ error: 'المراسلة متاحة للأصدقاء المقبولين فقط — أرسل طلب صداقة أولاً · Messaging is for accepted friends only — send a friend request first' });
   }
   const body = String((req.body || {}).body || '').trim();
@@ -2419,10 +2444,10 @@ app.get('/api/talent/:id', async (req, res) => {
   if (!u) return res.status(404).json({ error: 'غير موجود' });
   const viewer = await optionalViewer(req);
   const viewerId = viewer ? viewer.id : null;
-  // ملف المؤسس: للصناع/المقدمين المسجلين وللمؤسس نفسه فقط — غيرهم كأنه غير موجود.
-  if (u.is_platform_founder && viewerId !== u.id && !canSeeFounder(viewer)) {
-    return res.status(404).json({ error: 'غير موجود' });
-  }
+  // ملف المؤسس مفتوح للجميع (قرار المالك — «فتح ملف المؤسس»): أي زائر أو
+  // عضو يراه بحمولة publicUser العامة نفسها (مجردة من المدينة/الدولة/
+  // العملة، وبلا سعر/شورتس/تواصل للمؤسس)، والمتابعة للمسجلين كالمعتاد.
+  // الحجز عليه وبدء المراسلة إليه يبقيان مرفوضين في مساراتهما كما هما.
   if (viewerId !== u.id) await db.prepare('INSERT INTO profile_views (talent_id,viewer_id,created_at) VALUES (?,?,?)').run(u.id, viewerId, now());
   const reviews = await db.prepare(`SELECT r.*, COALESCE(u2.name, 'عميل') reviewer_name FROM reviews r LEFT JOIN users u2 ON u2.id=r.reviewer_id WHERE r.reviewee_id=? ORDER BY r.created_at DESC LIMIT 10`).all(u.id);
   res.json({
@@ -3474,20 +3499,52 @@ app.get('/api/bookings/:id', auth, async (req, res) => {
 
 /* إجراءات طرف العميل في آلة حالات الحجز — مشتركة بين العميل المسجل وعميل الضيف
    (صفحة الرمز) حتى لا تتكرر آلة الحالات. كل دالة تعيد {error} أو {booking}. */
-async function applyAgree(b, side) {
-  if (b.status !== 'pending_agreement') return { error: 'الحجز تجاوز مرحلة الاتفاق' };
-  if (side === 'client') {
-    await db.prepare('UPDATE bookings SET agreed_client=1 WHERE id=?').run(b.id);
-  }
-  else await db.prepare('UPDATE bookings SET agreed_talent=1 WHERE id=?').run(b.id);
+/* التزام العمولة يُنشأ خادمياً لحظة اكتمال القبولين (٤-ب): لا يعتمد على
+   فتح أي طرف لخطوة العمولة — عدّاد المهلة (٣ ساعات) يبدأ من لحظة الانتقال
+   نفسه، وأي fee-info لاحق يجد الالتزام نفسه (getOrCreate يدير التكرار). */
+async function ensureCommissionObligation(b) {
+  if (!b || b.status !== 'awaiting_fee' || b.fee_status === 'confirmed') return null;
+  return await getOrCreateObligation({
+    kind: 'booking_commission', booking_id: b.id, user_id: b.talent_id,
+    base_amount: bookingLegAmounts(b).fee, currency: b.currency,
+    payer_user_id: b.client_id || null, guest_token: b.guest_token || '', payee: 'owner',
+  });
+}
+/* انتقال ما بعد اكتمال القبولين — مسار واحد مشترك بين كل قنوات القبول. */
+async function advanceAfterAgreement(b) {
   let nb = await getBooking(b.id);
-  if (nb.agreed_client && nb.agreed_talent) {
+  if (nb.agreed_client && nb.agreed_talent && nb.status === 'pending_agreement') {
     await db.prepare(`UPDATE bookings SET status='awaiting_fee' WHERE id=?`).run(b.id);
+    await ensureCommissionObligation(await getBooking(b.id));
     await notify(nb.client_id, 'booking', `حجز #${b.id}: اتفق الطرفان — خطوة العمولة أولاً`, `booking:${b.id}`);
     await notify(nb.talent_id, 'booking', `حجز #${b.id}: اتفق الطرفان — في انتظار تأكيد عمولة Deal`, `booking:${b.id}`);
     nb = await getBooking(b.id);
   }
-  return { booking: nb };
+  return nb;
+}
+/* قبول واحد موحّد (٤-أ — السبب الجذري في TESTING-ENTRY-CLARITY.md): كان
+   لمسار «أوافق على الحجز» (applyAgree: أعمدة agreed_*) ومسار «أوافق على
+   الشروط» (acceptTerms: جدول booking_terms_acceptances) حقيقتان منفصلتان
+   لا تكتب إحداهما في الأخرى، فاكتمل الاتفاق في القاعدة وبقي مربع الشروط
+   وبوابة الدفع مقفلين في الواجهة. الآن فعل القبول الواحد من أي مسار
+   يُسجَّل في المسارين معاً: قبول الشروط المُصدَّر (دليل قانوني) + علم
+   الاتفاق، والانتقال وإنشاء التزام العمولة من الدالة المشتركة. */
+async function applyAgree(b, side, actor = {}) {
+  if (b.status !== 'pending_agreement') return { error: 'الحجز تجاوز مرحلة الاتفاق' };
+  await acceptTerms(b, side, actor.userId ?? null, actor.guestToken || '');
+  if (side === 'client') await db.prepare('UPDATE bookings SET agreed_client=1 WHERE id=?').run(b.id);
+  else await db.prepare('UPDATE bookings SET agreed_talent=1 WHERE id=?').run(b.id);
+  return { booking: await advanceAfterAgreement(b) };
+}
+/* قبول الشروط من زر/حوار الشروط يكمل جانب الاتفاق نفسه (نفس التوحيد). */
+async function acceptTermsAndAgree(b, side, actor = {}) {
+  const st = await acceptTerms(b, side, actor.userId ?? null, actor.guestToken || '');
+  if (b.status === 'pending_agreement') {
+    if (side === 'client') await db.prepare('UPDATE bookings SET agreed_client=1 WHERE id=?').run(b.id);
+    else await db.prepare('UPDATE bookings SET agreed_talent=1 WHERE id=?').run(b.id);
+    await advanceAfterAgreement(b);
+  }
+  return st;
 }
 
 async function applyClientPayment(b, kind, ref, payer = null) {
@@ -3580,7 +3637,7 @@ app.post('/api/bookings/:id/agree', auth, async (req, res) => {
   if (!b) return res.status(404).json({ error: 'غير موجود' });
   const side = req.user.id === b.client_id ? 'client' : req.user.id === b.talent_id ? 'talent' : null;
   if (!side) return res.status(403).json({ error: 'لست طرفاً في الحجز' });
-  const r = await applyAgree(b, side);
+  const r = await applyAgree(b, side, { userId: req.user.id });
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ booking: await bookingView(r.booking, req.user) });
 });
@@ -3606,7 +3663,7 @@ app.post('/api/bookings/:id/terms-accept', auth, async (req, res) => {
   if (!b) return res.status(404).json({ error: 'غير موجود' });
   const side = req.user.id === b.client_id ? 'client' : req.user.id === b.talent_id ? 'talent' : null;
   if (!side) return res.status(403).json({ error: 'لست طرفاً في الحجز' });
-  const st = await acceptTerms(b, side, req.user.id, '');
+  const st = await acceptTermsAndAgree(b, side, { userId: req.user.id });
   res.json({ terms: st, booking: await bookingView(await getBooking(b.id), req.user) });
 });
 /* وثيقة «شروط المعاملات» الحالية بنصها الكامل (للحوار والروابط الدائمة). */
@@ -4119,7 +4176,7 @@ app.get('/api/guest/:token/obligation', async (req, res) => {
 app.post('/api/guest/:token/agree', async (req, res) => {
   const b = await guestBookingByToken(req.params.token);
   if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
-  const r = await applyAgree(b, 'client');
+  const r = await applyAgree(b, 'client', { guestToken: req.params.token });
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ booking: await guestBookingView(r.booking) });
 });
@@ -4127,7 +4184,7 @@ app.post('/api/guest/:token/agree', async (req, res) => {
 app.post('/api/guest/:token/terms-accept', async (req, res) => {
   const b = await guestBookingByToken(req.params.token);
   if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
-  const st = await acceptTerms(b, 'client', null, req.params.token);
+  const st = await acceptTermsAndAgree(b, 'client', { guestToken: req.params.token });
   res.json({ terms: st, booking: await guestBookingView(await getBooking(b.id)) });
 });
 
@@ -4855,6 +4912,15 @@ app.get('/api/star/fuel', auth, async (req, res) => {
 /* لوحة المالك — سجل الباقة الرسمي: كل اشتراك بخط حالاته الزمني + عدّادات + إيراد.
    الإيراد = مجموع مبالغ الاشتراكات المؤكدة فقط (نشطة + منتهية) — «قيد التحقق»
    والمر rejected لا تُحتسب إيراداً لأن الفلوس لم تُؤكَّد. */
+/* إحصاء نماذج الأعمال من منظور المالك (وضع المؤسس — قسم ٥): صناع/مقدمو
+   خدمة بنماذج معروضة مقابل بلا نماذج، لعرضها في لوحة المؤسس بدل تذكيره
+   الشخصي بإضافة نماذج (وهو حساب عرض بلا نماذج أصلاً). */
+app.get('/api/owner/samples-stats', auth, ownerOnly, async (req, res) => {
+  const withRow = await db.prepare(`SELECT COUNT(DISTINCT p.user_id) AS c FROM portfolio_items p JOIN users u ON u.id = p.user_id WHERE u.role IN ('creator','provider') AND u.is_platform_founder = 0`).get();
+  const totalRow = await db.prepare(`SELECT COUNT(*) AS c FROM users WHERE role IN ('creator','provider') AND is_platform_founder = 0 AND banned = 0`).get();
+  const withS = (withRow && withRow.c) || 0, total = (totalRow && totalRow.c) || 0;
+  res.json({ with_samples: withS, without_samples: Math.max(0, total - withS), total });
+});
 app.get('/api/owner/star', auth, ownerOnly, async (req, res) => {
   await sweepStar();
   const rows = await db.prepare('SELECT * FROM star_subscriptions ORDER BY created_at DESC, id DESC LIMIT 200').all();

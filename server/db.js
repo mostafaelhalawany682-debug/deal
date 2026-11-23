@@ -335,7 +335,7 @@ CREATE INDEX IF NOT EXISTS idx_guest_messages_booking ON guest_messages(booking_
 CREATE TABLE IF NOT EXISTS money_obligations (
   id SERIAL PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
-  kind TEXT NOT NULL CHECK(kind IN ('star_subscription','booking_commission','booking_deposit','booking_final')),
+  kind TEXT NOT NULL CHECK(kind IN ('star_subscription','booking_commission','booking_deposit','booking_final','breach_penalty')),
   booking_id INTEGER DEFAULT NULL,
   user_id INTEGER DEFAULT NULL,
   base_amount DOUBLE PRECISION NOT NULL,
@@ -498,7 +498,7 @@ ALTER TABLE star_subscriptions ADD COLUMN IF NOT EXISTS obligation_id INTEGER DE
 CREATE TABLE IF NOT EXISTS money_obligations (
   id SERIAL PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
-  kind TEXT NOT NULL CHECK(kind IN ('star_subscription','booking_commission','booking_deposit','booking_final')),
+  kind TEXT NOT NULL CHECK(kind IN ('star_subscription','booking_commission','booking_deposit','booking_final','breach_penalty')),
   booking_id INTEGER DEFAULT NULL,
   user_id INTEGER DEFAULT NULL,
   base_amount DOUBLE PRECISION NOT NULL,
@@ -624,14 +624,14 @@ ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS collector_phone TEXT DEFA
 ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS collector_at BIGINT DEFAULT 0;
 `;
 
-/* ترحيلات جولة «إفراج باينانس»: جدول طلبات مراجعة الإفراج (Appeals) — طلب
+/* ترحيلات جولة «إفراج Deal»: جدول طلبات مراجعة الإفراج (Appeals) — طلب
    واحد مفتوح لكل حجز كحد أقصى (فهرس فريد جزئي على الحالة open)، وسجل الطلب
    لا يُحذف أبداً: إغلاقه/قراره يُختم بحالته ووقته ومن قرّر، فيبقى القرار
    موثّقاً أمام الطرفين. حالاته: open | closed_confirmed (أكد العميل فأُغلق
    تلقائياً) | closed_dispute (فُتح نزاع فانتقل المسار للنزاع) |
    decided_release (قرار مالك: تأكيد استلام موثّق وإفراج) | decided_refund
    (قرار مالك: رد المحتجَز للعميل). */
-const BINANCE_MIGRATIONS_SQL = `
+const P2P_MIGRATIONS_SQL = `
 CREATE TABLE IF NOT EXISTS release_appeals (
   id SERIAL PRIMARY KEY,
   booking_id INTEGER NOT NULL,
@@ -647,7 +647,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_appeals_one_open ON release_appeals(bookin
 CREATE INDEX IF NOT EXISTS idx_appeals_booking ON release_appeals(booking_id, id);
 `;
 
-/* ترحيلات جولة «المحاذاة الحرفية مع Binance P2P» (TESTING-BINANCE-ALIGN.md):
+/* ترحيلات جولة «المحاذاة الحرفية مع Deal P2P» (TESTING-P2P-ALIGN.md):
    طور تفاوض موقوت للتحكيم + إعادة تحكيم بمهلة، خطأ الإلغاء لصالح/ضد طرف،
    تنبيه إفراج، التزامات فرق ورفض طرف ثالث، أحداث نظام لمحادثة الطلب،
    بلاغات دفع متأخر، أعلام سلوك، وبوابة قبول «شروط المعاملات». كلها idempotent. */
@@ -742,6 +742,114 @@ CREATE TABLE IF NOT EXISTS platform_settings (
 );
 `;
 
+/* ترحيلات جولة «الدخول والاسترجاع زي التطبيقات الكبرى» (قرار المستخدم
+   2026-11-23): كلمات سر حقيقية (تجزئة scrypt في password_hash — NULL يعني
+   حساباً قديماً بلا كلمة سر يخضع لمسار الترحيل)، إيميل استرجاع اختياري
+   لحسابات الموبايل، جلسات غنية (وكيل المستخدم + آخر نشاط) لقسم «أجهزتي»،
+   أكواد إعادة تعيين قصيرة العمر مُجزّأة، أكواد احتياطية مُجزّأة أحادية
+   الاستخدام، خانق محاولات دخول/استرجاع، وجدول بلاغات المحتوى/الملفات
+   (بلاغ مفتوح واحد لكل مُبلِّغ وهدف — الفهرس الفريد الجزئي). كل عبارة
+   idempotent كسائر ترحيلات هذا الملف. */
+const RECOVERY_MIGRATIONS_SQL = `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT DEFAULT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set_at BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email TEXT DEFAULT '';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_agent TEXT DEFAULT '';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_seen_at BIGINT DEFAULT 0;
+CREATE TABLE IF NOT EXISTS password_resets (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  code_hash TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  attempts INTEGER DEFAULT 0,
+  used_at BIGINT DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_pwresets_user ON password_resets(user_id, id);
+CREATE TABLE IF NOT EXISTS backup_codes (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  code_hash TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  used_at BIGINT DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_backup_codes_user ON backup_codes(user_id, used_at);
+CREATE TABLE IF NOT EXISTS auth_throttle (
+  key TEXT PRIMARY KEY,
+  fails INTEGER DEFAULT 0,
+  window_start BIGINT DEFAULT 0,
+  locked_until BIGINT DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS reports (
+  id SERIAL PRIMARY KEY,
+  reporter_id INTEGER NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  target_user_id INTEGER NOT NULL,
+  reason TEXT DEFAULT '',
+  details TEXT DEFAULT '',
+  status TEXT DEFAULT 'open',
+  action TEXT DEFAULT '',
+  created_at BIGINT NOT NULL,
+  resolved_at BIGINT DEFAULT 0,
+  resolved_by INTEGER DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_one_open ON reports(reporter_id, target_type, target_id) WHERE status='open';
+`;
+
+/* ترحيلات جولة «ضمان الاستبدال الصارم + الردع بحكم القانون» (قرار المستخدم
+   المعتمَد 2026-11-23 — TESTING-DETERRENCE-APPLY.md):
+   - نوع التزام جديد breach_penalty (غرامة إخلال لصالح Deal): توسيع قيد CHECK
+     على kind في القواعد القائمة (الجدول الجديد يُنشأ بالقيد الموسّع أصلاً).
+   - قائمة حظر على مستوى الشخص (person_blocklist): هاتف/إيميل/بصمة جهاز —
+     الحظر النهائي للشخص لا للحساب، فلا حساب جديد بنفس أيٍّ منها.
+   - بصمات أجهزة الأعضاء المعروفة (user_fingerprints): تُسجَّل عند التسجيل
+     والدخول (حين يرسل العميل معرّف جهاز) لتُنسخ إلى قائمة الحظر عند الحظر.
+   - users.dues_frozen: علامة أن التجميد الحالي سببه مستحقات متجاوزة (تجميد
+     آلي) — فكه آلي عند سداد كل المستحقات، ولا يمسّ تجميد العقوبات اليدوي. */
+const DETERRENCE_MIGRATIONS_SQL = `
+DO $deal_kind$
+DECLARE c text;
+BEGIN
+  SELECT conname INTO c FROM pg_constraint
+   WHERE conrelid = 'money_obligations'::regclass AND contype = 'c'
+     AND pg_get_constraintdef(oid) LIKE '%star_subscription%'
+     AND pg_get_constraintdef(oid) NOT LIKE '%breach_penalty%'
+   LIMIT 1;
+  IF c IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE money_obligations DROP CONSTRAINT ' || quote_ident(c);
+    ALTER TABLE money_obligations ADD CONSTRAINT money_obligations_kind_check
+      CHECK (kind IN ('star_subscription','booking_commission','booking_deposit','booking_final','breach_penalty'));
+  END IF;
+END
+$deal_kind$;
+CREATE TABLE IF NOT EXISTS person_blocklist (
+  id SERIAL PRIMARY KEY,
+  kind TEXT NOT NULL CHECK(kind IN ('phone','email','device')),
+  value TEXT NOT NULL,
+  user_id INTEGER DEFAULT NULL,
+  reason TEXT DEFAULT '',
+  created_by INTEGER DEFAULT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_blocklist_kind_value ON person_blocklist(kind, value);
+CREATE INDEX IF NOT EXISTS idx_blocklist_user ON person_blocklist(user_id);
+CREATE TABLE IF NOT EXISTS user_fingerprints (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  fp TEXT NOT NULL,
+  last_seen BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_fp_unique ON user_fingerprints(user_id, fp);
+CREATE INDEX IF NOT EXISTS idx_user_fp_fp ON user_fingerprints(fp);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS dues_frozen INTEGER DEFAULT 0;
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS is_refund INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS protection_voided INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS protection_voided_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS protection_voided_by INTEGER DEFAULT NULL;
+`;
+
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
    موحّدة (0xxxxxxxxxx) مهما كانت الصيغة المدخلة (+20 / 0020 / مسافات).
    يُستخدم في التسجيل والدخول معاً حتى لا يتكرر حساب لنفس الشخص أبداً. */
@@ -757,6 +865,205 @@ function normalizeContact(raw) {
 }
 
 /* إنشاء الجداول مرة واحدة عند أول تشغيل (آمن للتكرار: IF NOT EXISTS). */
+
+/* هجرات «باقة المزايا + محرك الترتيب والمطابقة» (2026-11-23): أعمدة وجداول
+   المزايا العشر ومحرك النمو الصامت — كلها إضافية ومتوافقة رجعياً. */
+const FEATURES_MIGRATIONS_SQL = `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verified_at BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_summary_at BIGINT DEFAULT 0;
+ALTER TABLE guest_messages ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'text';
+ALTER TABLE guest_messages ADD COLUMN IF NOT EXISTS media_url TEXT DEFAULT '';
+ALTER TABLE guest_messages ADD COLUMN IF NOT EXISTS duration_sec INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_due_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_accepted INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS replacement_available INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS replacement_activated INTEGER DEFAULT 0;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS deliver_after BIGINT DEFAULT 0;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pushed INTEGER DEFAULT 0;
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS rescued_at BIGINT DEFAULT 0;
+CREATE TABLE IF NOT EXISTS user_templates (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  sort INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_templates_user ON user_templates(user_id, sort, id);
+CREATE TABLE IF NOT EXISTS directory_impressions (
+  id SERIAL PRIMARY KEY,
+  talent_id INTEGER NOT NULL,
+  viewer_key TEXT NOT NULL,
+  city TEXT DEFAULT '',
+  niche TEXT DEFAULT '',
+  day TEXT NOT NULL,
+  hits INTEGER DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_impr_unique ON directory_impressions(talent_id, viewer_key, city, niche, day);
+CREATE TABLE IF NOT EXISTS request_matches (
+  id SERIAL PRIMARY KEY,
+  request_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  score DOUBLE PRECISION DEFAULT 0,
+  notified INTEGER DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_match_unique ON request_matches(request_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_match_user ON request_matches(user_id, score);
+CREATE TABLE IF NOT EXISTS user_activity_hours (
+  user_id INTEGER NOT NULL,
+  hour INTEGER NOT NULL,
+  hits INTEGER DEFAULT 0,
+  PRIMARY KEY (user_id, hour)
+);
+`;
+
+/* ترحيلات جولة «التوسعة» (قرارات المستخدم 2026-11-23 — TESTING-EXPANSION.md):
+   عروض أسعار منظمة، باقات أسعار، عروض سريعة، قوائم انتظار، فيديوهات شغل
+   يومية، تعاقدات شهرية متكررة، تحدي أسبوع، إكراميات (نوع التزام tip —
+   توسيع قيد CHECK بنفس آلية جولة الردع)، وضع إجازة، أسئلة عامة على الملف،
+   أقسام موسمية مخصّصة/معدّلة من المالك، وأكاديمية Deal (تقدم + شارات).
+   كل عبارة idempotent كسائر ترحيلات هذا الملف. */
+const EXPANSION_MIGRATIONS_SQL = `
+DO $deal_kind_tip$
+DECLARE c text;
+BEGIN
+  SELECT conname INTO c FROM pg_constraint
+   WHERE conrelid = 'money_obligations'::regclass AND contype = 'c'
+     AND pg_get_constraintdef(oid) LIKE '%booking_commission%'
+     AND pg_get_constraintdef(oid) NOT LIKE '%tip%'
+   LIMIT 1;
+  IF c IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE money_obligations DROP CONSTRAINT ' || quote_ident(c);
+    ALTER TABLE money_obligations ADD CONSTRAINT money_obligations_kind_check
+      CHECK (kind IN ('star_subscription','booking_commission','booking_deposit','booking_final','breach_penalty','tip'));
+  END IF;
+END
+$deal_kind_tip$;
+CREATE TABLE IF NOT EXISTS request_quotes (
+  id SERIAL PRIMARY KEY,
+  request_id INTEGER NOT NULL,
+  talent_id INTEGER NOT NULL,
+  price DOUBLE PRECISION NOT NULL,
+  delivery_days INTEGER DEFAULT 0,
+  note TEXT DEFAULT '',
+  status TEXT DEFAULT 'pending',
+  created_at BIGINT NOT NULL,
+  decided_at BIGINT DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_one_pending ON request_quotes(request_id, talent_id) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS idx_quotes_request ON request_quotes(request_id, status);
+CREATE TABLE IF NOT EXISTS creator_packages (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  tier INTEGER NOT NULL,
+  name TEXT DEFAULT '',
+  price DOUBLE PRECISION DEFAULT 0,
+  description TEXT DEFAULT '',
+  features TEXT DEFAULT '',
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_packages_user_tier ON creator_packages(user_id, tier);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS flash_pct DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS flash_price DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS flash_until BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS vacation_until BIGINT DEFAULT 0;
+CREATE TABLE IF NOT EXISTS waitlist_entries (
+  id SERIAL PRIMARY KEY,
+  talent_id INTEGER NOT NULL,
+  request_id INTEGER DEFAULT NULL,
+  client_id INTEGER DEFAULT NULL,
+  guest_token TEXT DEFAULT '',
+  guest_name TEXT DEFAULT '',
+  status TEXT DEFAULT 'waiting',
+  offered_at BIGINT DEFAULT 0,
+  expires_at BIGINT DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_waitlist_talent ON waitlist_entries(talent_id, status, created_at);
+CREATE TABLE IF NOT EXISTS daily_videos (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  platform TEXT NOT NULL,
+  video_id TEXT DEFAULT '',
+  embed_url TEXT NOT NULL,
+  source_url TEXT DEFAULT '',
+  title TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_daily_videos_user ON daily_videos(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_daily_videos_feed ON daily_videos(created_at);
+CREATE TABLE IF NOT EXISTS contracts (
+  id SERIAL PRIMARY KEY,
+  client_id INTEGER DEFAULT NULL,
+  guest_token TEXT DEFAULT '',
+  guest_name TEXT DEFAULT '',
+  talent_id INTEGER NOT NULL,
+  title TEXT DEFAULT '',
+  service TEXT DEFAULT '',
+  times_per_month INTEGER DEFAULT 1,
+  cycle_price DOUBLE PRECISION NOT NULL,
+  currency TEXT DEFAULT 'EGP',
+  status TEXT DEFAULT 'pending',
+  client_accepted INTEGER DEFAULT 0,
+  talent_accepted INTEGER DEFAULT 0,
+  terms_version TEXT DEFAULT '',
+  cycles_done INTEGER DEFAULT 0,
+  next_cycle_at BIGINT DEFAULT 0,
+  stop_requested_by TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_contracts_talent ON contracts(talent_id, status);
+CREATE INDEX IF NOT EXISTS idx_contracts_client ON contracts(client_id, status);
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS contract_id INTEGER DEFAULT NULL;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS package_tier INTEGER DEFAULT NULL;
+CREATE TABLE IF NOT EXISTS challenge_weeks (
+  week_key TEXT PRIMARY KEY,
+  winner_id INTEGER NOT NULL,
+  completed_count INTEGER DEFAULT 0,
+  videos_count INTEGER DEFAULT 0,
+  score INTEGER DEFAULT 0,
+  crowned_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS profile_questions (
+  id SERIAL PRIMARY KEY,
+  talent_id INTEGER NOT NULL,
+  asker_id INTEGER DEFAULT NULL,
+  asker_name TEXT DEFAULT '',
+  question TEXT NOT NULL,
+  answer TEXT DEFAULT '',
+  answered_at BIGINT DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_questions_talent ON profile_questions(talent_id, created_at);
+CREATE TABLE IF NOT EXISTS seasons_custom (
+  id SERIAL PRIMARY KEY,
+  key TEXT NOT NULL UNIQUE,
+  name_ar TEXT DEFAULT '',
+  name_en TEXT DEFAULT '',
+  start_md TEXT NOT NULL,
+  end_md TEXT NOT NULL,
+  niches TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS academy_progress (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  track_key TEXT NOT NULL,
+  lesson_key TEXT NOT NULL,
+  done_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_academy_progress_unique ON academy_progress(user_id, track_key, lesson_key);
+CREATE TABLE IF NOT EXISTS academy_badges (
+  user_id INTEGER NOT NULL,
+  track_key TEXT NOT NULL,
+  earned_at BIGINT NOT NULL,
+  PRIMARY KEY (user_id, track_key)
+);
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS managed INTEGER DEFAULT 0;
+ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS template_key TEXT DEFAULT '';
+`;
+
 let readyPromise = null;
 function init() {
   if (!readyPromise) {
@@ -765,8 +1072,12 @@ function init() {
       await pool.query(MIGRATIONS_SQL);
       await pool.query(SOCIAL_MIGRATIONS_SQL);
       await pool.query(AMBASSADOR_MIGRATIONS_SQL);
-      await pool.query(BINANCE_MIGRATIONS_SQL);
+      await pool.query(P2P_MIGRATIONS_SQL);
       await pool.query(ALIGN_MIGRATIONS_SQL);
+      await pool.query(RECOVERY_MIGRATIONS_SQL);
+      await pool.query(DETERRENCE_MIGRATIONS_SQL);
+      await pool.query(FEATURES_MIGRATIONS_SQL);
+      await pool.query(EXPANSION_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -794,6 +1105,11 @@ const ID_TABLES = new Set([
   'money_obligations', 'money_ledger', 'money_receipts', 'ambassadors',
   'release_appeals', 'booking_events', 'late_payment_reports', 'behavior_flags',
   'booking_terms_acceptances', 'push_subscriptions', 'obligation_settlements',
+  'password_resets', 'backup_codes', 'reports',
+  'person_blocklist', 'user_fingerprints',
+  'user_templates', 'directory_impressions', 'request_matches',
+  'request_quotes', 'creator_packages', 'waitlist_entries', 'daily_videos',
+  'contracts', 'profile_questions', 'seasons_custom', 'academy_progress',
 ]);
 
 function toPgSql(sql) {

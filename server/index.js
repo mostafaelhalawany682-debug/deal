@@ -15,10 +15,12 @@ const PORT = process.env.PORT || 3000;
 const COMMISSION_RATE = 0.10;
 const COMMISSION_PHONE = process.env.COMMISSION_PHONE || ''; // server-side only — من متغير البيئة فقط، بلا أي قيمة افتراضية في الكود
 const FEE_REVIEW_WINDOW_MS = 24 * 3600 * 1000;   // نافذة رفض المالك لمرجع عمولة خاطئ: ٢٤ ساعة (قرار المالك)
-/* نموذج إفراج Deal (قرار المستخدم النهائي 2026-11-23): لا تأكيد استلام
-   تلقائياً بالوقت أبداً — المحتجَز لا يتحرك إلا بتأكيد العميل نفسه (إفراج
-   فوري)، أو بقرار مراجعة موثّق من المالك. سكوت العميل بعد إثبات سليم يفتح
-   للمقدم «طلب مراجعة الإفراج» بعد ٣ ساعات من تسليم الإثبات. */
+/* نموذج Deal النهائي (قرار المستخدم 2026-11-23): المنصة لا تحتجز أموال
+   المعاملات أبداً — الدفع بين العميل والمقدم مباشرة، وإثبات التنفيذ
+   معاينة، والنسخة النهائية لا تُسلَّم إلا بعد تأكيد قبض الباقي. سكوت
+   العميل ٣ ساعات بعد إثبات سليم = استلام مُعتبَر يفتح خطوة الباقي،
+   وللمقدم «طلب مراجعة» (Appeal) عند تعنّت العميل — والتحكيم بأدلة
+   التطبيق وحدها وقراره موثّق. */
 const APPEAL_AFTER_MS = 3 * 3600 * 1000; // طلب مراجعة الإفراج متاح بعد ٣ ساعات من إثبات سليم بلا تأكيد عميل
 
 /* ---------------- باقة «نجم Deal» — إعدادات واحدة من الخادم ----------------
@@ -186,7 +188,7 @@ const REAPPEAL_COOLDOWN_MS = 5 * 60 * 1000;    // مهلة من يلغي تحك�
 const DEEMED_AFTER_MS = 3 * 3600 * 1000;       // سكوت العميل بعد إثبات سليم + باقٍ محتجَز = استلام مُعتبَر (قاعدة Deal — قرار المستخدم 2026-11-23)
 const RELEASE_ALERT_MS = 15 * 60 * 1000;       // تنبيه المالك العاجل: مبلغ جاهز للإفراج ينتظر أكثر من ١٥ دقيقة (قاعدة Deal)
 const FRAUD_SUSPEND_AT = 3;                    // ٣ مطالبات دفع كاذبة مثبتة = الحد الثالث في سلّم الردع (حظر نهائي للشخص — توحيد 2026-11-23)
-const TX_TERMS_VERSION = 'deal-tx-terms-v4';   // إصدار «شروط المعاملات» الحالي (v4: قسم «ضمان الاستبدال والردع» المعتمَد 2026-11-23 + توحيد سلّم «حوّلت» الكاذبة: تحذير/تجميد/حظر نهائي للشخص) — إصدار جديد يطلب قبولاً جديداً للحجوزات الجديدة فقط، والمفتوحة تكمل على إصدارها
+const TX_TERMS_VERSION = 'deal-tx-terms-v5';   // إصدار «شروط المعاملات» الحالي (v5: تعميم بند «الردع والقانون» بثلاث طبقات لكل الدول — عقد ملزم بقانون الشروط الحاكم، عقوبات داخلية موحّدة، والاحتيال جريمة في كل دولة، ومواد مصر مثالاً موثقاً وحيداً؛ v4: قسم «ضمان الاستبدال والردع» المعتمَد 2026-11-23 + توحيد سلّم «حوّلت» الكاذبة: تحذير/تجميد/حظر نهائي للشخص) — إصدار جديد يطلب قبولاً جديداً للحجوزات الجديدة فقط، والمفتوحة تكمل على إصدارها
 const RECEIPT_MAX_BYTES = 2 * 1024 * 1024;     // أقصى حجم لصورة الإيصال
 const RECEIPT_MAX_ATTEMPTS = 5;                // بعدها يُقفل الرفع على الالتزام
 const RECEIPT_DATE_WINDOW_MS = 48 * 3600 * 1000; // حداثة تاريخ الإيصال المطلوبة
@@ -757,6 +759,8 @@ async function publicUser(u, viewerId = null) {
   const out = {
     id: u.id, name: u.name, role: u.role, niche: u.niche,
     provider_category: u.provider_category, provider_custom: u.provider_custom || '', city: u.city, country: u.country,
+    // اسم الدولة النصي للمسار الدولي العام فقط — وللمؤسس يُحجب كسائر بيانات موقعه.
+    country_name: founder ? '' : (u.country_name || ''),
     currency: u.currency, followers: u.followers,
     price: founder ? null : u.price,
     bio: founder ? '' : u.bio,
@@ -1093,11 +1097,22 @@ app.post('/api/auth/register', async (req, res) => {
   if ((req.body || {}).tos_accepted !== true) return res.status(400).json({ error: 'لازم توافق على شروط الاستخدام الأول عشان تسجل', tos_required: true, tos_version: TOS_VERSION });
   if ((req.body || {}).age_confirmed !== true) return res.status(400).json({ error: 'التسجيل لمن هم ١٨ سنة أو أكثر فقط — أكّد سنك', age_required: true });
   const { name, role, niche = '', provider_category = null, provider_custom = '', city = '', followers = 0, price = 0, bio = '', links = '' } = req.body || {};
-  // الدولة من القائمة المدعومة فقط (افتراضي مصر)، والعملة تُشتق منها خادمياً
+  // الدولة من القائمة المدعومة (افتراضي مصر)، والعملة تُشتق منها خادمياً
   // — لا تُقبل عملة من العميل أبداً حتى لا ينفصل السعر عن بلد صاحبه.
+  // الاستثناء الوحيد هو المسار الدولي العام (OTHER): الدولة غير مدرجة،
+  // فيُطلب اسمها نصياً وعملتها من قائمة ISO المدمجة (قائمة مغلقة خادمياً،
+  // لا نصاً حراً) — وكل ما عداه يبقى مشتقاً من الدولة.
   const countryDef = countryOf((req.body || {}).country || 'EG');
   if (!countryDef) return res.status(400).json({ error: 'دولة غير مدعومة حالياً' });
-  const country = countryDef.code, currency = countryDef.currency;
+  const country = countryDef.code;
+  let currency = countryDef.currency, countryName = '';
+  if (country === 'OTHER') {
+    countryName = String((req.body || {}).country_name || '').trim().slice(0, 60);
+    if (!countryName) return res.status(400).json({ error: 'اكتب اسم دولتك', country_name_required: true });
+    const reqCur = String((req.body || {}).currency || '').toUpperCase();
+    if (!isIntlCurrency(reqCur)) return res.status(400).json({ error: 'اختر عملة حسابك من القائمة', currency_required: true });
+    currency = reqCur;
+  }
   // تسجيل واحد فقط لكل شخص: وسيلة التواصل تُطبَّع قبل أي فحص أو حفظ،
   // فلا يفلت تسجيل مكرر بتغيير صيغة الرقم (+20 مقابل 0) أو حالة حروف الإيميل.
   // الهاتف يُطبَّع بقاعدة دولة التسجيل نفسها (مصر بصيغتها المحلية القائمة،
@@ -1146,9 +1161,9 @@ app.post('/api/auth/register', async (req, res) => {
   /* إيميل التواصل هو قناة الاسترجاع تلقائياً؛ حساب الموبايل يضيف إيميل
      استرجاع لاحقاً من إعدادات الأمان (تنبيه لطيف لا حظر). */
   const recoveryEmail = contact.includes('@') ? contact : '';
-  const info = await db.prepare(`INSERT INTO users (name,role,niche,provider_category,provider_custom,city,country,currency,contact,phone,followers,price,bio,links,is_platform_founder,is_founder_member,referred_by,created_at,tos_version,tos_accepted_at,password_hash,password_set_at,recovery_email)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(name, role, niche, provider_category, role === 'provider' ? String(provider_custom || '').trim() : '', city, country, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, referredBy, now(), TOS_VERSION, now(), passwordHash, now(), recoveryEmail);
+  const info = await db.prepare(`INSERT INTO users (name,role,niche,provider_category,provider_custom,city,country,country_name,currency,contact,phone,followers,price,bio,links,is_platform_founder,is_founder_member,referred_by,created_at,tos_version,tos_accepted_at,password_hash,password_set_at,recovery_email)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(name, role, niche, provider_category, role === 'provider' ? String(provider_custom || '').trim() : '', city, country, countryName, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, referredBy, now(), TOS_VERSION, now(), passwordHash, now(), recoveryEmail);
   /* مقعد المؤسس المرقّم: يُسنَد فوراً عند التسجيل برقم = ترتيب هذا العضو بين
      المؤهلين (صناع/مقدمون، بلا صاحب المنصة) — أول ٥٠ فقط، والرقم لا يتغير
      أبداً بعد إسناده (نفس قاعدة الإسناد الرجعي في ترحيلات db.js). */
@@ -2053,18 +2068,16 @@ app.post('/api/messages/:userId', auth, async (req, res) => {
 const TAXONOMY = {
   "niches": ["كوميديا", "طبخ", "رياضة", "جمال", "مراجعات وتقنية", "تعليم", "ألعاب", "سفر", "أطفال", "ديني", "أخبار وتريند", "حرف وDIY", "سيارات", "عقارات", "صحة ولياقة", "موسيقى", "تصوير", "عام"],
   "services": [
-    { "key": "videoproduction", "ar": "إنتاج فيديوهات وإعلانات", "en": "Video & ad production" },
-    { "key": "editing", "ar": "مونتاج فيديو", "en": "Video editing" },
+    { "key": "videoproduction", "ar": "إنتاج ومونتاج الفيديو", "en": "Video production & editing" },
     { "key": "design", "ar": "تصميم وموشن جرافيك", "en": "Design & motion graphics" },
-    { "key": "filming", "ar": "تصوير", "en": "Filming & photography" },
+    { "key": "filming", "ar": "تصوير احترافي", "en": "Professional filming & photography" },
     { "key": "voiceover", "ar": "تعليق صوتي", "en": "Voice-over" },
-    { "key": "script", "ar": "كتابة سكربت", "en": "Script writing" },
-    { "key": "accounts", "ar": "إدارة حسابات سوشيال", "en": "Social account management" },
+    { "key": "script", "ar": "كتابة محتوى وإعلانات", "en": "Content & ad copywriting" },
     { "key": "ads", "ar": "إدارة إعلانات ممولة", "en": "Sponsored ads management" },
     { "key": "support", "ar": "دعم وحل مشاكل الحسابات", "en": "Account support & troubleshooting" },
     { "key": "translation", "ar": "ترجمة", "en": "Translation" },
     { "key": "dev", "ar": "تطوير مواقع وتطبيقات", "en": "Web & app development" },
-    { "key": "marketing", "ar": "تسويق وصناعة محتوى", "en": "Marketing & content" }
+    { "key": "marketing", "ar": "تسويق وإدارة حسابات", "en": "Marketing & account management" }
   ],
   "countries": [
     { "code": "EG", "ar": "مصر", "en": "Egypt", "dial": "20", "currency": "EGP", "curAr": "جنيه", "curEn": "EGP", "payAr": "فودافون كاش / إنستاباي", "payEn": "Vodafone Cash / InstaPay", "nsn": "^1[0125][0-9]{8}$" },
@@ -2088,7 +2101,8 @@ const TAXONOMY = {
     { "code": "MR", "ar": "موريتانيا", "en": "Mauritania", "dial": "222", "currency": "MRU", "curAr": "أوقية", "curEn": "MRU", "payAr": "تحويل محلي", "payEn": "Local transfer", "nsn": "^[234][0-9]{7}$" }
   ],
   "link_platforms": ["facebook.com", "instagram.com", "youtube.com", "tiktok.com", "x.com", "twitter.com", "snapchat.com"],
-  "accents": { "gold": "#c9a227", "emerald": "#0e9f6e", "sapphire": "#2b5fd9", "ruby": "#c2255c", "violet": "#7048c9", "teal": "#1098ad", "copper": "#e8720c", "rose": "#d6336c" }
+  "accents": { "gold": "#c9a227", "emerald": "#0e9f6e", "sapphire": "#2b5fd9", "ruby": "#c2255c", "violet": "#7048c9", "teal": "#1098ad", "copper": "#e8720c", "rose": "#d6336c" },
+  "intl_currencies": ["USD", "EUR", "GBP", "EGP", "SAR", "AED", "KWD", "QAR", "BHD", "OMR", "JOD", "MAD", "DZD", "TND", "IQD", "LBP", "ILS", "LYD", "SDG", "YER", "SYP", "MRU", "TRY", "CAD", "AUD", "CHF", "CNY", "INR", "PKR", "BDT", "NGN", "KES", "ZAR", "BRL", "MXN", "RUB", "JPY", "KRW", "SEK", "NOK"]
 };
 const SERVICE_KEYS = TAXONOMY.services.map((s) => s.key);
 app.get('/api/taxonomy', (req, res) => res.json(TAXONOMY));
@@ -2107,6 +2121,28 @@ app.get('/api/taxonomy', (req, res) => res.json(TAXONOMY));
    فمنع التسجيل المكرر يعمل عبر كل صيغ نفس الرقم داخل الدولة الواحدة. */
 const COUNTRIES = TAXONOMY.countries;
 const COUNTRY_MAP = Object.fromEntries(COUNTRIES.map((c) => [c.code, c]));
+/* المسار الدولي العام (قرار المستخدم 2026-11-23: الانطلاق مفتوح للجميع من
+   أي دولة): أي دولة غير مدرجة في الـ١٩ تُسجَّل بالكود 'OTHER' مع اسم دولة
+   نصي (users.country_name) وعملة يختارها المستخدم من قائمة ISO المدمجة
+   (TAXONOMY.intl_currencies) وهاتف دولي عام بأي كود دولة. التعريف الاصطناعي
+   التالي لا يدخل TAXONOMY.countries (تبقى الـ١٩ كما هي في الواجهة)، لكنه
+   يُسجَّل في COUNTRY_MAP حتى تعمل كل المسارات المعتمدة على countryOf —
+   وسيلة الدفع المعروضة له: وسيلة محلية/دولية يتفق عليها الطرفان داخل
+   المحادثة الموثقة، والسفير يُعيَّن مع أول طلب فعلي كما هو مقرر. */
+const OTHER_COUNTRY = { code: 'OTHER', ar: 'دولة أخرى', en: 'Other country', dial: '', currency: 'USD', curAr: '', curEn: '', payAr: 'وسيلة دفع محلية/دولية — تُتفق داخل محادثة الحجز', payEn: 'A local/international method — agreed inside the booking chat', nsn: null };
+COUNTRY_MAP.OTHER = OTHER_COUNTRY;
+const INTL_CURRENCIES = TAXONOMY.intl_currencies || [];
+function isIntlCurrency(cur) { return INTL_CURRENCIES.includes(String(cur || '').toUpperCase()); }
+/* تطبيع هاتف دولي عام: يقبل + أو 00 أو أرقاماً تبدأ بكود دولة، ويطلب
+   ٧–١٥ رقماً إجمالاً (معيار E.164) — الصيغة القانونية: +<digits>. */
+function normalizeIntlPhone(raw) {
+  let d = String(raw || '').replace(/[^\d+]/g, '');
+  if (d.startsWith('00')) d = '+' + d.slice(2);
+  if (!d.startsWith('+')) d = '+' + d.replace(/\D/g, '');
+  const digits = d.slice(1);
+  if (!/^\d{7,15}$/.test(digits) || digits.startsWith('0')) return null;
+  return '+' + digits;
+}
 function countryOf(code) {
   const c = COUNTRY_MAP[String(code || 'EG').toUpperCase()];
   return c || null;
@@ -2114,6 +2150,7 @@ function countryOf(code) {
 function normalizePhoneForCountry(raw, code) {
   const c = countryOf(code);
   if (!c) return null;
+  if (!c.nsn) return normalizeIntlPhone(raw); // المسار الدولي العام: أي كود دولة
   let d = String(raw || '').replace(/\D/g, '');
   if (!d) return null;
   if (d.startsWith('00')) d = d.slice(2);
@@ -2126,16 +2163,16 @@ function normalizePhoneForCountry(raw, code) {
 }
 /* رسالة خطأ رقم غير صحيح حسب الدولة (رسالة مصر القائمة تبقى حرفياً كما هي). */
 function phoneErrorFor(c) {
-  return c.code === 'EG'
-    ? 'رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)'
-    : `رقم هاتف صحيح مطلوب في ${c.ar} (مثال: +${c.dial}xxxxxxxxx)`;
+  if (c.code === 'EG') return 'رقم موبايل مصري صحيح مطلوب (01xxxxxxxxx)';
+  if (!c.nsn) return 'رقم هاتف دولي صحيح مطلوب بصيغة +كود الدولة ثم الرقم (مثال: +33612345678)';
+  return `رقم هاتف صحيح مطلوب في ${c.ar} (مثال: +${c.dial}xxxxxxxxx)`;
 }
 /* نفس الرسالة بصياغة «هاتف» لمسار تعديل الملف (رسالته القائمة حرفياً لمصر). */
 function profilePhoneError(code) {
   const c = countryOf(code) || COUNTRY_MAP.EG;
-  return c.code === 'EG'
-    ? 'رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)'
-    : `رقم هاتف صحيح مطلوب في ${c.ar} (مثال: +${c.dial}xxxxxxxxx)`;
+  if (c.code === 'EG') return 'رقم هاتف مصري صحيح مطلوب (01xxxxxxxxx)';
+  if (!c.nsn) return 'رقم هاتف دولي صحيح مطلوب بصيغة +كود الدولة ثم الرقم (مثال: +33612345678)';
+  return `رقم هاتف صحيح مطلوب في ${c.ar} (مثال: +${c.dial}xxxxxxxxx)`;
 }
 
 /* ---------------- directory / market ---------------- */
@@ -2382,7 +2419,9 @@ async function closeOpenAppeal(bookingId, status) {
 /* ---- أحداث النظام في محادثة الطلب (أسلوب Deal): انتقالات جوهرية مختومة
    بوقت الخادم، تظهر داخل محادثة الحجز وصفحة الضيف وتدخل حزمة الأدلة كما هي. */
 async function addBookingEvent(bookingId, kind, body = '') {
-  try { await db.prepare('INSERT INTO booking_events (booking_id,kind,body,created_at) VALUES (?,?,?,?)').run(bookingId, kind, String(body || '').slice(0, 300), now()); }
+  /* حدّ ٢٠٠٠ حرف (كان ٣٠٠ فيبتر رسائل النظام الطويلة — منها سلّم ردع
+     التعامل الخارجي الذي يجب أن يصل كاملاً بقرار المراجعة الشاملة AU) */
+  try { await db.prepare('INSERT INTO booking_events (booking_id,kind,body,created_at) VALUES (?,?,?,?)').run(bookingId, kind, String(body || '').slice(0, 2000), now()); }
   catch (e) { /* توثيق الحدث لا يعطّل الحركة نفسها أبداً */ }
 }
 async function bookingEvents(bookingId, limit = 100) {
@@ -2407,7 +2446,7 @@ const TX_TERMS = {
     'محادثة الطلب داخل Deal هي قناة الأدلة الوحيدة — أي اتفاق خارجها لا يُقبل دليلاً في التحكيم.',
     'المعاملات P2P: الفلوس تتحرك بين المحافظ الشخصية مباشرة، وDeal ينظّم ويوثّق ويحمي — Deal ليس بنكاً ولا جهة مالية.',
     'ضمان الاستبدال الصارم: يتفعّل فقط لو أعلن المنفذ عدم قدرته، أو سكت في محادثة الحجز ٢٤ ساعة بعد قبض العربون رغم تنبيهين آليين. Deal لا تفرض موعد تسليم ولا تدير عدّاد تسليم: توقيت التنفيذ اتفاق بين الطرفين داخل محادثة الحجز، وعلامة «مستعجل» اتفاقية بلا أي التزام زمني مفروض من المنصة، وأي خلاف على تأخير التسليم يُحسم تحكيماً بأدلة المحادثة. ترشّح Deal بديلاً واحداً موثّقاً من نفس المدينة والمجال بنفس السعر والشروط حرفياً خلال ٢٤ ساعة، ويقرر العميل القبول أو الرفض خلال ٣ ساعات؛ وإن لم يوجد بديل مناسب يُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. ردّ العربون إجباري على المنفذ المتخلّف خلال ٣ ساعات من قرار الاستبدال أو التحكيم، ولا استبدال أبداً بعد اعتماد المعاينة.',
-    'الردع بحكم القانون — للطرفين: قبولك هذه الشروط عقد إلكتروني ملزم مسجّل بهويتك ووقته (المادة ١٤٧ من القانون المدني: العقد شريعة المتعاقدين)، وسجلات Deal ومحادثات الحجز وإيصالاتها أدلّة موثّقة تُسلَّم للطرف المتضرر في حزمة أدلة رسمية عند ثبوت احتيال. قبض العربون والاستيلاء عليه أو رفض ردّه عند الإخلال يدخل في نطاق خيانة الأمانة (المادة ٣٤١ عقوبات) والنصب (المادة ٣٣٦ عقوبات)، والاحتيال عبر الشبكات يغلّظه قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨، وللمتضرر المطالبة بتعويض كامل (المادة ١٦٣ مدني) — مسؤولية المحتال كاملة بلا أي سقف. وداخل المنصة: أي التزام مالي يتجاوز مهلته يجمّد الحساب فوراً مع علامة «مستحقات متأخرة» في ملفه، وفكّ التجميد بسداد الالتزام وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف في الإخلال الثاني)، والاحتيال المثبت = حظر نهائي للشخص نفسه (هاتف + إيميل + بصمة جهاز).',
+    'الردع والقانون — للطرفين في كل الدول: (١) قبولك هذه الشروط قبول مسجّل بهويتك ووقته، وهو عقد إلكتروني ملزم يخضع لقانون الشروط الحاكم المنصوص عليه في شروط استخدام Deal، وسجلات Deal ومحادثات الحجز وإيصالاتها أدلّة موثّقة تُسلَّم للطرف المتضرر في حزمة أدلة رسمية عند ثبوت احتيال. (٢) عقوبات المنصة الداخلية تسرى على كل المستخدمين بالتساوي في أي دولة: أي التزام مالي يتجاوز مهلته يجمّد الحساب فوراً مع علامة «مستحقات متأخرة» في ملفه، وفكّ التجميد بسداد الالتزام وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف في الإخلال الثاني)، والاحتيال المثبت = حظر نهائي للشخص نفسه (هاتف + إيميل + بصمة جهاز). (٣) الاحتيال جريمة في قوانين كل دولة تعمل فيها المنصة، ومسؤولية المحتال كاملة بلا أي سقف. مثال موثّق من مصر — القانون الحاكم للمنصة: قبول الشروط عقد ملزم (المادة ١٤٧ من القانون المدني: العقد شريعة المتعاقدين)، وقبض العربون والاستيلاء عليه أو رفض ردّه عند الإخلال يدخل في نطاق خيانة الأمانة (المادة ٣٤١ عقوبات) والنصب (المادة ٣٣٦ عقوبات)، والاحتيال عبر الشبكات يغلّظه قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨، وللمتضرر المطالبة بتعويض كامل (المادة ١٦٣ مدني).',
     'أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا ضمان ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal. أي ترتيب جانبي (مكالمة أو محادثة خارجية أو اتفاق شفهي) لا يُستند إليه في أي تحكيم ولا يُلزم المنصة بشيء، ومحاولة نقل التعامل لخارج المنصة تُرصد في محادثة الحجز وتدخل سلّم العقوبات. خدمات Deal — الضمان والتحكيم وحزمة الأدلة والتقييمات ودعم النزاعات — متاحة فقط للصفقات المفتوحة والموثّقة داخل المنصة من أول خطوة؛ أي اتفاق خارجي لا يمنح أي حق في أي خدمة من خدمات المنصة، ومحاولة استخدام أي خدمة لتغطية اتفاق خارجي مخالفة تستوجب علامة سلوك وتصعيد العقوبة عند التكرار.',
   ],
   en: [
@@ -2422,7 +2461,7 @@ const TX_TERMS = {
     'The in-app order chat is the only evidence channel — agreements made outside it are not accepted as arbitration evidence.',
     'Transactions are P2P: money moves directly between personal wallets, and Deal organizes, documents and protects — Deal is not a bank or a financial institution.',
     'The strict replacement guarantee: it activates only if the provider declares inability, or the provider stays silent in the booking chat for a full 24 hours after receiving the deposit despite two automatic warnings. Deal imposes no delivery deadline and runs no delivery countdown: execution timing is agreed between the parties inside the booking chat, the \u201curgent\u201d marker is a mutual agreement with no platform-imposed time commitment, and any dispute over delivery delay is decided by arbitration on the chat evidence. Deal nominates exactly one verified alternative from the same city and niche at exactly the same price and terms within 24 hours, and the client decides to accept or refuse within 3 hours; if no suitable alternative exists, the deposit is refunded in full by an arbitration decision within 72 hours. Refunding the deposit is mandatory for the defaulting provider within 3 hours of the replacement or arbitration decision, and there is never a replacement after the preview has been confirmed.',
-    'Deterrence by law — for both parties: your acceptance of these terms is a binding electronic contract recorded with your identity and its time (Article 147 of the Civil Code: the contract is the law of the parties), and Deal\u2019s records, booking chats and receipts are documented evidence handed to the harmed party in an official evidence bundle when fraud is proven. Taking a deposit and keeping it, or refusing to refund it on default, falls within breach of trust (Article 341 of the Penal Code) and fraud (Article 336 of the Penal Code); online fraud is aggravated by the Anti-IT-Crimes Law 175 of 2018, and the harmed party may claim full compensation (Article 163 of the Civil Code) — a fraudster\u2019s liability is full, with no cap. Inside the platform: any money obligation that passes its deadline freezes the account immediately with a \u201clate dues\u201d mark on the profile, unfreezing requires settling the obligation plus a breach penalty of 10% of the deal value (doubled on the second breach), and proven fraud means a permanent ban of the person (phone + email + device fingerprint).',
+    'Deterrence and the law — for both parties, in every country: (1) Your acceptance of these terms is recorded with your identity and its time and is a binding electronic contract governed by the governing law stated in Deal\u2019s Terms of Use; Deal\u2019s records, booking chats and receipts are documented evidence handed to the harmed party in an official evidence bundle when fraud is proven. (2) The platform\u2019s internal penalties apply equally to every user in every country: any money obligation that passes its deadline freezes the account immediately with a \u201clate dues\u201d mark on the profile, unfreezing requires settling the obligation plus a breach penalty of 10% of the deal value (doubled on the second breach), and proven fraud means a permanent ban of the person (phone + email + device fingerprint). (3) Fraud is a crime under the laws of every country the platform operates in, and a fraudster\u2019s liability is full, with no cap. One documented example — Egypt, the platform\u2019s governing law: acceptance of the terms is a binding contract (Article 147 of the Civil Code: the contract is the law of the parties); taking a deposit and keeping it, or refusing to refund it on default, falls within breach of trust (Article 341 of the Penal Code) and fraud (Article 336 of the Penal Code); online fraud is aggravated by the Anti-IT-Crimes Law 175 of 2018; and the harmed party may claim full compensation (Article 163 of the Civil Code).',
     'Any agreement outside the platform does not happen, and the platform is not bound by it — no guarantee, no arbitration, no rating and no evidence bundle for any agreement that was not opened and documented as a booking inside Deal. Any side arrangement (a call, an external chat or a verbal deal) cannot be relied on in any arbitration and binds the platform to nothing, and attempting to move the dealing outside the platform is detected in the booking chat and enters the penalty ladder. Deal\u2019s services — the guarantee, arbitration, the evidence bundle, ratings and dispute support — are available only for deals opened and documented inside the platform from the very first step; an external agreement grants no right to any platform service, and attempting to use any service to cover an external agreement is a violation that earns a behavior flag and escalating penalties on repetition.',
   ],
 };
@@ -2804,6 +2843,10 @@ async function sweepDuesEnforcement() {
    أحداث الحجز (سجل الأدلة). أرقام الطلبات والمبالغ القصيرة لا تُرصد: الهاتف
    يُشترط فيه طول وبادئة هاتفية حقيقية بعد تجريد الفواصل. */
 const OFF_PLATFORM_RULE_TEXT = 'أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا ضمان ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal';
+/* سلّم ردع التعامل الخارجي الكامل (قرار المستخدم 2026-11-23 «تشديد الردع
+   اللحظي»): نفس النص يظهر في تحذير ما قبل الإرسال بالواجهة وفي رسالة
+   النظام بعد الإرسال هنا — مصدر واحد للصياغة فلا يتناقض الموضعان. */
+const OFF_PLATFORM_LADDER_TEXT = 'العقوبات: المحاولة تُسجَّل في سجل أدلة الحجز وتُحسَب علامة سلوك على مرسلها — التكرار يجمّد الحساب، والإصرار حظر نهائي للشخص نفسه (هاتف + إيميل + بصمة جهاز — لا حساب جديد أبداً). وأي اتفاق يتم خارج المنصة لا حماية له إطلاقاً: لا ضمان ولا تحكيم ولا تقييم ولا حزمة أدلة ولا أي خدمة من خدمات Deal';
 const OFF_PLATFORM_KEYWORDS = ['واتساب', 'واتس اب', 'whatsapp', 'wa.me', 'تيليجرام', 'telegram', 't.me', 'بره المنصة', 'برا المنصة', 'خارج المنصة', 'بره التطبيق', 'نتعامل بره', 'كلمني على رقمي', 'ده رقمي', 'دا رقمي', 'ابعتلي رقمك', 'هات رقمك'];
 function detectOffPlatformLeak(text) {
   const s = String(text || '');
@@ -2819,12 +2862,12 @@ function detectOffPlatformLeak(text) {
   return null;
 }
 async function enforceOffPlatformLeak(booking, senderUserId, leakKind) {
-  await addBookingEvent(booking.id, 'off_platform_warning', `⚠️ رُصدت محاولة تعامل خارج المنصة في المحادثة (${leakKind === 'phone' ? 'رقم هاتف' : leakKind === 'link' ? 'رابط خارجي' : 'دعوة تواصل خارجي'}): ${OFF_PLATFORM_RULE_TEXT}. الرسالة محفوظة في سجل الأدلة، وتكرار المحاولة يدخل سلّم العقوبات (تحذير ← تجميد ← حظر)`);
+  await addBookingEvent(booking.id, 'off_platform_warning', `⚠️ رُصدت محاولة تعامل خارج المنصة في المحادثة (${leakKind === 'phone' ? 'رقم هاتف' : leakKind === 'link' ? 'رابط خارجي' : 'دعوة تواصل خارجي'}): ${OFF_PLATFORM_RULE_TEXT}. ${OFF_PLATFORM_LADDER_TEXT}`);
   if (senderUserId) {
     await db.prepare('INSERT INTO behavior_flags (booking_id,user_id,kind,created_by,created_at) VALUES (?,?,?,?,?)')
       .run(booking.id, senderUserId, 'off_platform', null, now());
     await applyBehaviorPenalty(senderUserId);
-    await notify(senderUserId, 'penalty', `⚠️ تنبيه من Deal على حجز #${booking.id}: رُصدت محاولة تعامل خارج المنصة في المحادثة — ${OFF_PLATFORM_RULE_TEXT}. اتسجّلت عليك علامة سلوك، وتكرارها يصعّد العقوبة (تجميد ثم حظر)`, `booking:${booking.id}`);
+    await notify(senderUserId, 'penalty', `⚠️ تنبيه من Deal على حجز #${booking.id}: رُصدت محاولة تعامل خارج المنصة في المحادثة — ${OFF_PLATFORM_RULE_TEXT}. ${OFF_PLATFORM_LADDER_TEXT}`, `booking:${booking.id}`);
   }
   await notifyOwner('penalty', `🚩 رصد تسرّب خارج المنصة في محادثة حجز #${booking.id} (${leakKind})${senderUserId ? ` — المرسل عضو #${senderUserId} واتسجّلت عليه علامة سلوك` : ' — المرسل ضيف (تحذير وتوثيق فقط)'}`, `booking:${booking.id}`);
 }
@@ -3566,7 +3609,8 @@ app.get('/api/opportunities', auth, async (req, res) => {
 });
 
 /* ---------------- guest client requests (طلب عميل بدون تسجيل) ----------------
-   العميل (محل/براند) ينشر طلبه كضيف: بلا حساب وبلا كلمة سر. هويته في المتابعة
+   العميل (أي شخص عاوز خدمة: فرد أو مناسبة أو محل أو براند) ينشر طلبه كضيف:
+   بلا حساب وبلا كلمة سر. هويته في المتابعة
    هي رمز وصول عشوائي طويل (token) يُحفظ على الطلب ثم على الحجز عند التحويل،
    وخطواته في الحجز تتم من صفحة الرمز بنفس آلة الحالات المشتركة أعلاه. */
 const GUEST_OPEN_LIMIT = 3; // أقصى طلبات ضيف مفتوحة لنفس البصمة — حد خفيف ضد الإغراق
@@ -3592,12 +3636,19 @@ app.post('/api/guest-requests', async (req, res) => {
   // جلسة عضو قائمة = القناة مغلقة لهذا الطلب أصلاً (الرفض على الخادم، والواجهة
   // تعطّل النموذج للمسجلين أيضاً) — التصفح العام وحده يبقى مفتوحاً للجميع.
   if (await optionalViewer(req)) return res.status(403).json({ error: GUEST_SESSION_ERR });
-  if (!business_name || !String(business_name).trim()) return res.status(400).json({ error: 'اسم النشاط مطلوب' });
+  if (!business_name || !String(business_name).trim()) return res.status(400).json({ error: 'اسمك أو اسم نشاطك مطلوب' });
   // دولة العميل الضيف (افتراضي مصر): عملة الطلب تُشتق من الدولة. لا هاتف في
   // هذه القناة إطلاقاً (أُزيل الحقل بقرار المستخدم) — التواصل والمتابعة من
-  // صفحة الرمز داخل المنصة فقط.
+  // صفحة الرمز داخل المنصة فقط. المسار الدولي العام (OTHER): عملة من قائمة
+  // ISO المدمجة يختارها الضيف، وتُحفظ عملة الطلب بها.
   const guestCountry = countryOf((req.body || {}).country || 'EG');
   if (!guestCountry) return res.status(400).json({ error: 'دولة غير مدعومة حالياً' });
+  let guestCurrency = guestCountry.currency;
+  if (guestCountry.code === 'OTHER') {
+    const reqCur = String((req.body || {}).currency || '').toUpperCase();
+    if (reqCur && !isIntlCurrency(reqCur)) return res.status(400).json({ error: 'اختر عملة طلبك من القائمة', currency_required: true });
+    guestCurrency = reqCur || 'USD';
+  }
   if (!city || !String(city).trim()) return res.status(400).json({ error: 'المدينة مطلوبة' });
   if (!niche || !String(niche).trim()) return res.status(400).json({ error: 'نوع الإعلان / المجال مطلوب' });
   if (budget == null || budget === '' || !isFinite(+budget) || +budget < 0) return res.status(400).json({ error: 'ميزانية تقريبية صحيحة مطلوبة' });
@@ -3621,11 +3672,11 @@ app.post('/api/guest-requests', async (req, res) => {
   const token = rnd(24);
   const urgent = (req.body || {}).urgent ? 1 : 0;
   const info = await db.prepare(`INSERT INTO shop_requests (shop_user_id,title,niche,city,budget,currency,details,status,is_guest,guest_name,guest_phone,guest_fp,guest_token,target_talent_id,country,urgent,managed,template_key,created_at) VALUES (NULL,?,?,?,?,?,?,'open',1,?,?,?,?,?,?,?,?,?,?)`)
-    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, guestCountry.currency, details, String(business_name).trim(), '', fp, token, targetId, guestCountry.code, urgent, managedReq, templateKey, now());
+    .run(title && String(title).trim() ? String(title).trim() : `طلب إعلان — ${String(business_name).trim()}`, niche, city, +budget, guestCurrency, details, String(business_name).trim(), '', fp, token, targetId, guestCountry.code, urgent, managedReq, templateKey, now());
   if (managedReq) {
     // طلب «Deal بلس» المُدار: لا يُطرح في السوق ولا يدخل المطابقة — يروح
     // لطابور المالك مباشرة مع إشعار فوري، والعميل يعرف أن الفريق سيدير طلبه.
-    await notifyOwner('managed_request', `🛎️ طلب «Deal بلس» مُدار جديد #${info.lastInsertRowid} من «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget} ${guestCountry.currency} — في طابور الطلبات المُدارة بلوحتك`, `request:${info.lastInsertRowid}`);
+    await notifyOwner('managed_request', `🛎️ طلب «Deal بلس» مُدار جديد #${info.lastInsertRowid} من «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget} ${guestCurrency} — في طابور الطلبات المُدارة بلوحتك`, `request:${info.lastInsertRowid}`);
     return res.json({ id: info.lastInsertRowid, token, follow: `/#/g/${token}`, managed: true, message: 'طلبك بقى «Deal بلس» — فريق Deal هيديره بالكامل وهيتواصل معاك من صفحة متابعتك هنا' });
   }
   try { await matchRequest(await db.prepare('SELECT * FROM shop_requests WHERE id=?').get(info.lastInsertRowid)); } catch (e) { /* المطابقة لا تعطّل إنشاء الطلب أبداً */ }
@@ -4122,8 +4173,8 @@ const SUPPORT_KB = [
     a_en: 'Campaigns are service requests posted by brands in the "Campaigns" section with a brief and budget: creators apply from the campaign card, and if the brand accepts, a normal booking opens automatically with the same Deal protection and payment stages.' },
   { id: 'countries', q_ar: 'هل Deal متاح في بلدي؟ ما هي الدول المتاحة؟', q_en: 'Is Deal available in my country? Which countries are supported?',
     keys: ['الدول المتاحه', 'دول متاحه', 'متاح في بلدي', 'في بلدي', 'بلدي متاح', 'دول عربية', 'available countries', 'which countries', 'supported countries', 'my country'],
-    a_ar: 'Deal متاح الآن في 19 دولة عربية: مصر، السعودية، الإمارات، الكويت، قطر، الأردن، المغرب، البحرين، عُمان، العراق، الجزائر، تونس، لبنان، فلسطين، ليبيا، السودان، اليمن، سوريا، وموريتانيا. اختر دولتك عند التسجيل (أو في نموذج «طلب خدمة» كضيف) وسيظهر سعرك بعملة بلدك، ورقم هاتفك يُتحقق منه بقاعدة بلدك، والدفع المحلي عندك هو وسيلة التحويل المعروفة في بلدك (مثل فودافون كاش/إنستاباي في مصر، وSTC Pay/مدى في السعودية، وCliQ في الأردن).',
-    a_en: 'Deal is now available in 19 Arab countries: Egypt, Saudi Arabia, UAE, Kuwait, Qatar, Jordan, Morocco, Bahrain, Oman, Iraq, Algeria, Tunisia, Lebanon, Palestine, Libya, Sudan, Yemen, Syria and Mauritania. Pick your country when you register (or in the guest "Request a service" form) and your price shows in your country\'s currency, your phone is validated by your country\'s rules, and payments use your local method (e.g. Vodafone Cash/InstaPay in Egypt, STC Pay/mada in Saudi Arabia, CliQ in Jordan).' },
+    a_ar: 'Deal متاح الآن في 19 دولة عربية: مصر، السعودية، الإمارات، الكويت، قطر، الأردن، المغرب، البحرين، عُمان، العراق، الجزائر، تونس، لبنان، فلسطين، ليبيا، السودان، اليمن، سوريا، وموريتانيا. اختر دولتك عند التسجيل (أو في نموذج «طلب خدمة» كضيف) وسيظهر سعرك بعملة بلدك، ورقم هاتفك يُتحقق منه بقاعدة بلدك، والدفع المحلي عندك هو وسيلة التحويل المعروفة في بلدك (مثل فودافون كاش/إنستاباي في مصر، وSTC Pay/مدى في السعودية، وCliQ في الأردن). ولو دولتك مش في القائمة، التسجيل مفتوح من أي دولة في العالم: اختر «دولة أخرى» واكتب اسم دولتك واختر عملتك من القائمة وسجّل برقم هاتفك الدولي بأي كود دولة — ووسيلة الدفع عندها تُتفق داخل محادثة الحجز الموثقة.',
+    a_en: 'Deal is now available in 19 Arab countries: Egypt, Saudi Arabia, UAE, Kuwait, Qatar, Jordan, Morocco, Bahrain, Oman, Iraq, Algeria, Tunisia, Lebanon, Palestine, Libya, Sudan, Yemen, Syria and Mauritania. Pick your country when you register (or in the guest "Request a service" form) and your price shows in your country\'s currency, your phone is validated by your country\'s rules, and payments use your local method (e.g. Vodafone Cash/InstaPay in Egypt, STC Pay/mada in Saudi Arabia, CliQ in Jordan). If your country is not listed, registration is open from anywhere in the world: choose "Other country", write your country\'s name, pick your currency from the list and register with your international phone number with any country code — the payment method is then agreed inside the documented booking chat.' },
   { id: 'password_recovery', q_ar: 'نسيت كلمة السر — كيف أستعيد حسابي؟', q_en: 'I forgot my password — how do I recover my account?',
     keys: ['نسيت كلمه السر', 'نسيت كلمة السر', 'استعاده الحساب', 'استرجاع الحساب', 'اكواد احتياطيه', 'كود التحقق', 'تغيير كلمه السر', 'forgot password', 'recover my account', 'backup codes', 'reset password', 'verification code'],
     a_ar: 'من شاشة الدخول اضغط «نسيت كلمة السر؟»: هيوصلك كود تحقق من ٦ أرقام على إيميلك (صالح ١٠ دقائق)، وبيه تعيّن كلمة سر جديدة — وبتتلغي جلساتك التانية تلقائياً وبيوصلك تنبيه أمني. ولو الإيميل مش متاح، استخدم واحداً من الأكواد الاحتياطية العشرة اللي ولّدتها من «أجهزتي وجلساتي» — كل كود بيشتغل مرة واحدة بس. ومن نفس القسم تقدر تشوف أجهزتك وجلساتك وتلغي أي جلسة غريبة.',
@@ -4367,6 +4418,12 @@ const STAR_FUEL = {
   'marketing': { ideas: ['خطة تسويق كاملة لمحل وهمي في ٥ دقائق — بتوري طريقة تفكيرك من الصفر.', 'تفكيك حملة براند ناجحة: الفكرة والتنفيذ والنتائج التقديرية.', '«لو كنت مكانهم»: إزاي تسوّق لمنتج صعب/ممل — تحدي بيظهر إبداعك.'], steps: ['اعرض خططك بقوالب بصرية ثابتة تحمل هويتك — القالب المعروف بيخلي المحتوى «بتاعك».', 'اربط كل فكرة بنتيجة قابلة للقياس (مبيعات/حجوزات/رسائل) — العملاء بيشتروا النتائج.'] },
   'other': { ideas: ['عرض «قبل/بعد» من شغلك الحقيقي — أقوى إعلان لأي خدمة هو نتيجتها.', '«بتتعمل إزاي؟» — كواليس تنفيذ خدمتك خطوة بخطوة بتبني ثقة فورية.', 'إجابة أعمق سؤال بيتسأل في مجالك — فيديو واحد يخليك مرجعاً.'], steps: ['وثّق نتائج عملائك (بإذنهم) وانشر نتيجة واحدة أسبوعياً — الانتظام بيبني سوقك.', 'اعرض خدمتك داخل قصة عميل حقيقي لا كقائمة مميزات.'] },
 };
+/* دمج المهارات المعتمد (المراجعة الشاملة): وقود «المونتاج» صار جزءاً من
+   بنك «إنتاج ومونتاج الفيديو»، ووقود «إدارة الحسابات» جزءاً من بنك
+   «تسويق وإدارة حسابات» — تُدمج الأفكار والخطوات وتُحذف المفاتيح القديمة
+   حتى لا يخرج وقود بمفتاح خدمة لم تعد موجودة في التصنيف. */
+if (STAR_FUEL.editing) { STAR_FUEL.videoproduction.ideas.push(...STAR_FUEL.editing.ideas); STAR_FUEL.videoproduction.steps.push(...STAR_FUEL.editing.steps); delete STAR_FUEL.editing; }
+if (STAR_FUEL.accounts) { STAR_FUEL.marketing.ideas.push(...STAR_FUEL.accounts.ideas); STAR_FUEL.marketing.steps.push(...STAR_FUEL.accounts.steps); delete STAR_FUEL.accounts; }
 function starFuelFor(u) {
   const key = u.role === 'provider' ? (u.provider_category || 'other') : (u.niche || 'عام');
   const bank = STAR_FUEL[key] || (u.role === 'provider' ? STAR_FUEL.other : STAR_FUEL['عام']);
@@ -5375,7 +5432,7 @@ async function buildOfficialReport(b, viewer) {
     `الطرف المتضرر (مقدّم التقرير): ${viewer.name} — وسيلة التواصل المسجلة: ${viewer.contact}`,
     other ? `الطرف الآخر (ثبت عليه الإخلال/الاحتيال بقرار تحكيم): ${other.name} — وسيلة التواصل المسجلة: ${other.contact} — الهاتف المسجل: ${other.phone || '—'} — المدينة/الدولة: ${other.city || '—'}/${other.country || '—'} — موثّق بكود ملكية: ${other.verified ? 'نعم' : 'لا'}` : 'الطرف الآخر: عميل ضيف (بلا حساب — هويته محفوظة بسجل الحجز)',
     dispute ? `قرار التحكيم: نزاع #${dispute.id} — الحالة: ${dispute.status} — القرار: ${dispute.resolution || '—'} — بتاريخ: ${fmt(dispute.resolved_at || dispute.created_at)}` : 'قرار التحكيم: موثّق في سجل أحداث الحجز أدناه',
-    'الإطار القانوني: قبول الطرفين لشروط معاملات Deal عقد إلكتروني ملزم (المادة ١٤٧ مدني)، وللمتضرر المطالبة بتعويض كامل (المادة ١٦٣ مدني)، وقبض العربون والاستيلاء عليه يدخل في نطاق خيانة الأمانة (٣٤١ عقوبات) والنصب (٣٣٦ عقوبات)، والاحتيال عبر الشبكات يغلّظه قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨.',
+    'الإطار القانوني (القانون الحاكم للمنصة — مصر، مثال موثّق وحيد؛ والاحتيال جريمة في قوانين كل دولة تعمل فيها المنصة): قبول الطرفين لشروط معاملات Deal عقد إلكتروني ملزم (المادة ١٤٧ مدني)، وللمتضرر المطالبة بتعويض كامل (المادة ١٦٣ مدني)، وقبض العربون والاستيلاء عليه يدخل في نطاق خيانة الأمانة (٣٤١ عقوبات) والنصب (٣٣٦ عقوبات)، والاحتيال عبر الشبكات يغلّظه قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨.',
     'السجل الموقوت والإيصالات والالتزامات المالية كاملة في حزمة الأدلة المرفقة بهذا التقرير (تُستخرج من صفحة الحجز — «حزمة الأدلة»).',
   ];
   return {
@@ -5385,7 +5442,7 @@ async function buildOfficialReport(b, viewer) {
     harmed_party: { id: viewer.id, name: viewer.name, contact: viewer.contact },
     counterparty: other ? { id: other.id, name: other.name, contact: other.contact, phone: other.phone || '', city: other.city || '', country: other.country || '', verified: !!other.verified } : { guest: true },
     arbitration: dispute ? { dispute_id: dispute.id, status: dispute.status, resolution: dispute.resolution || '', decided_at: fmt(dispute.resolved_at || dispute.created_at) } : null,
-    legal_frame: 'عقد إلكتروني ملزم (١٤٧ مدني) — تعويض كامل (١٦٣ مدني) — خيانة أمانة (٣٤١ عقوبات) — نصب (٣٣٦ عقوبات) — قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨',
+    legal_frame: 'القانون الحاكم للمنصة (مصر — مثال موثّق وحيد): عقد إلكتروني ملزم (١٤٧ مدني) — تعويض كامل (١٦٣ مدني) — خيانة أمانة (٣٤١ عقوبات) — نصب (٣٣٦ عقوبات) — قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨',
     evidence_bundle: bundle,
     report_text: lines.join('\n'),
   };
@@ -5850,8 +5907,8 @@ app.get('/api/stories/today', async (req, res) => {
 const REQUEST_TEMPLATES = [
   { key: 'short_ad', ar: 'إعلان قصير', en: 'Short ad', niche: 'عام', title_ar: 'إعلان قصير لنشاطي', title_en: 'A short ad for my business',
     details_ar: 'محتاج إعلان قصير (٣٠–٦٠ ثانية) لنشاطي. المنتج/الخدمة: ___ | أهم رسالة في الإعلان: ___ | الأسلوب المفضل: ___', details_en: 'I need a short ad (30–60 seconds) for my business. Product/service: ___ | Key message: ___ | Preferred style: ___' },
-  { key: 'opening', ar: 'تغطية افتتاح', en: 'Opening coverage', niche: 'تصوير', title_ar: 'تغطية افتتاح محل', title_en: 'Shop opening coverage',
-    details_ar: 'محتاج تغطية افتتاح محلي (فيديو + صور). تاريخ الافتتاح: ___ | العنوان: ___ | أهم لحظات لازم تتصور: ___', details_en: 'I need coverage of my shop opening (video + photos). Opening date: ___ | Address: ___ | Must-capture moments: ___' },
+  { key: 'opening', ar: 'تغطية افتتاح أو مناسبة', en: 'Opening / event coverage', niche: 'تصوير', title_ar: 'تغطية افتتاح أو مناسبة', title_en: 'Opening or event coverage',
+    details_ar: 'محتاج تغطية افتتاح أو مناسبة (فيديو + صور). نوع المناسبة: ___ | التاريخ: ___ | العنوان: ___ | أهم لحظات لازم تتصور: ___', details_en: 'I need coverage of an opening or an event (video + photos). Event type: ___ | Date: ___ | Address: ___ | Must-capture moments: ___' },
   { key: 'products', ar: 'تصوير منتجات', en: 'Product photography', niche: 'تصوير', title_ar: 'تصوير منتجات', title_en: 'Product photography',
     details_ar: 'محتاج تصوير منتجات احترافي. عدد المنتجات: ___ | الاستخدام (سوشيال/متجر): ___ | أمثلة تعجبني: ___', details_en: 'I need professional product photography. Number of products: ___ | Usage (social/store): ___ | References I like: ___' },
   { key: 'monthly', ar: 'محتوى شهري', en: 'Monthly content', niche: 'عام', title_ar: 'محتوى شهري لصفحتي', title_en: 'Monthly content for my page',
@@ -6231,6 +6288,18 @@ const SEASONS = [
   { key: 'white_friday', ar: 'الجمعة البيضاء', en: 'White Friday', special: 'white_friday', niches: [] },
   { key: 'summer', ar: 'موسم الصيف', en: 'Summer season', md: ['06-15', '08-31'], niches: ['سفر', 'رياضة', 'صحة ولياقة', 'videoproduction'] },
   { key: 'new_year', ar: 'رأس السنة', en: 'New Year', md: ['12-26', '01-02'], niches: ['عام', 'videoproduction'] },
+  /* مواسم وطنية محلية (تكافؤ الدول): قسم الموسم يظهر لصناع دولته فقط —
+     حقل countries يقصر قسم /api/seasons/active على مستخدمي هذه الدول.
+     التواريخ هي الأعياد الوطنية الرسمية المعروفة لكل دولة. */
+  { key: 'nd_eg', ar: 'اليوم الوطني المصري', en: 'Egypt National Day', md: ['07-21', '07-23'], niches: ['عام', 'videoproduction'], countries: ['EG'] },
+  { key: 'nd_sa', ar: 'اليوم الوطني السعودي', en: 'Saudi National Day', md: ['09-20', '09-23'], niches: ['عام', 'videoproduction'], countries: ['SA'] },
+  { key: 'nd_ae', ar: 'اليوم الوطني الإماراتي', en: 'UAE National Day', md: ['11-30', '12-03'], niches: ['عام', 'videoproduction'], countries: ['AE'] },
+  { key: 'nd_kw', ar: 'اليوم الوطني الكويتي', en: 'Kuwait National Day', md: ['02-23', '02-26'], niches: ['عام', 'videoproduction'], countries: ['KW'] },
+  { key: 'nd_qa', ar: 'اليوم الوطني القطري', en: 'Qatar National Day', md: ['12-16', '12-18'], niches: ['عام', 'videoproduction'], countries: ['QA'] },
+  { key: 'nd_bh', ar: 'اليوم الوطني البحريني', en: 'Bahrain National Day', md: ['12-14', '12-17'], niches: ['عام', 'videoproduction'], countries: ['BH'] },
+  { key: 'nd_om', ar: 'اليوم الوطني العُماني', en: 'Oman National Day', md: ['11-16', '11-18'], niches: ['عام', 'videoproduction'], countries: ['OM'] },
+  { key: 'nd_jo', ar: 'عيد استقلال الأردن', en: 'Jordan Independence Day', md: ['05-23', '05-25'], niches: ['عام', 'videoproduction'], countries: ['JO'] },
+  { key: 'nd_ma', ar: 'عيد استقلال المغرب', en: 'Morocco Independence Day', md: ['11-16', '11-18'], niches: ['عام', 'videoproduction'], countries: ['MA'] },
 ];
 function mdToMs(y, md) { const [m, d] = md.split('-').map(Number); return Date.UTC(y, m - 1, d); }
 function seasonWindow(season, t) {
@@ -6289,7 +6358,7 @@ async function activeSeasons(t = now()) {
     } else {
       win = seasonWindow(s, t);
     }
-    if (win) out.push({ key: s.key, ar: s.ar, en: s.en, niches: s.niches || [], start: win.start, end: win.end, custom: !!s.custom });
+    if (win) out.push({ key: s.key, ar: s.ar, en: s.en, niches: s.niches || [], countries: s.countries || null, start: win.start, end: win.end, custom: !!s.custom });
   }
   return out;
 }
@@ -6305,6 +6374,10 @@ app.get('/api/seasons/active', async (req, res) => {
       sql += ` AND (niche IN (${s.niches.map(() => '?').join(',')}) OR provider_category IN (${s.niches.map(() => '?').join(',')}))`;
       args.push(...s.niches, ...s.niches);
     }
+    if (s.countries && s.countries.length) {
+      sql += ` AND country IN (${s.countries.map(() => '?').join(',')})`;
+      args.push(...s.countries);
+    }
     sql += ' LIMIT 60';
     let rows = await db.prepare(sql).all(...args);
     rows = rows.filter((u) => !onVacation(u));
@@ -6318,7 +6391,7 @@ app.get('/api/owner/seasons', auth, ownerOnly, async (req, res) => {
   const { off, wins } = await seasonOverrides();
   const customs = await db.prepare('SELECT * FROM seasons_custom ORDER BY id ASC').all();
   res.json({
-    builtins: SEASONS.map((s) => ({ key: s.key, ar: s.ar, en: s.en, disabled: off.includes(s.key), window_override: wins[s.key] || null })),
+    builtins: SEASONS.map((s) => ({ key: s.key, ar: s.ar, en: s.en, countries: s.countries || null, disabled: off.includes(s.key), window_override: wins[s.key] || null })),
     customs, disabled: off, active_now: (await activeSeasons()).map((s) => s.key),
   });
 });

@@ -1800,6 +1800,44 @@ async function main() {
         && uiHtml.includes('dash-hero') && uiHtml.includes('card g1'));
       check('حارس واجهة: نسخة كاش PWA رُفعت إلى deal-v3 حتى تلتقط الأجهزة التصميم السينمائي الجديد فوراً',
         fs.readFileSync(path.join(pubDir, 'sw.js'), 'utf8').includes("const CACHE = 'deal-v3'"));
+      /* ===== جولة «المطابقة الحرفية للمرجع» (TESTING-DESIGN-EXACT.md) =====
+         قرار المستخدم: «نفّذ نفس اللي اخترته بالظبط — من كل شئ: التصميم
+         والترتيب والأيقونات». الجولة الأولى لوّنت الهيكل القديم؛ هذه
+         الحراس تثبّت التكوين نفسه (مواضع العناصر) لا مجرد وجودها. */
+      const heroStageBlock = (uiHtml.match(/<div class="hero-stage">([\s\S]*?)<\/div>\s*<div class="marquee">/) || [])[1] || '';
+      const heroOrder = ['hero-emblem', '<h1', 'hero-cta', 'hero-stats'].map((m) => heroStageBlock.indexOf(m));
+      check('حارس مطابقة: الهيرو = تكوين المرجع بالظبط — درع كبير ← عنوان ← CTA واحد ← سطر إحصاءات نحيف (مقاعد + ١٠٪ فقط)، وبلا موبايل/بطاقات عائمة/شرائح ثقة/شريط متحرك في أول شاشة',
+        !!heroStageBlock && heroOrder.every((v, i) => v >= 0 && (i === 0 || v > heroOrder[i - 1]))
+        && !heroStageBlock.includes('class="phone"') && !heroStageBlock.includes('float-card') && !heroStageBlock.includes('glass-chip')
+        && !heroStageBlock.includes('marquee') && (heroStageBlock.match(/class="hstat"/g) || []).length === 2
+        && heroStageBlock.includes('id="heroSeatStat"') && heroStageBlock.includes('class="cnt"'),
+        JSON.stringify(heroOrder));
+      check('حارس مطابقة: الدرع البطولي في CSS — حجم بطولي 172px + هالة توهج نابضة + حلقة إضاءة دوّارة',
+        uiHtml.includes('.hero-emblem img{width:172px') && uiHtml.includes('@keyframes emblemHalo') && uiHtml.includes('@keyframes emblemRing'));
+      const previewBlock = (uiHtml.match(/id="appPreview"([\s\S]*?)<div class="how-sec/) || [])[1] || '';
+      check('حارس مطابقة: مشهد الموبايل والبطاقات العائمة وأزرار التسجيل/تصفح/تثبيت انتقلت لقسم معاينة أسفل الشريط المتحرك — موجودة ووظيفية عند التمرير لا في أول شاشة',
+        !!previewBlock && previewBlock.includes('class="phone"') && previewBlock.includes('float-card')
+        && previewBlock.includes('id="installBtn"') && previewBlock.includes("openAuth('creator')") && previewBlock.includes('hero_guest_note')
+        && uiHtml.indexOf('<div class="marquee">') < uiHtml.indexOf('id="appPreview"')
+        && (uiHtml.match(/preview_t:/g) || []).length >= 2);
+      const howBlock = (uiHtml.match(/<div class="how-sec[^>]*>([\s\S]*?)<div class="seats-sec/) || [])[1] || '';
+      check('حارس مطابقة: شرائح الثقة مندمجة داخل قسم «إزاي بتشتغل» ورموز شريط الثقة وزر فتحه SVG خطية ذهبية (لا إيموجي بنيوي)',
+        !!howBlock && howBlock.includes('glass-row') && howBlock.includes('glass-chip') && howBlock.includes('trust-strip-symbols')
+        && howBlock.includes('<svg') && howBlock.includes('trust-open-ic') && !howBlock.includes('trust-strip-symbols"><span>🛡'));
+      check('حارس مطابقة: أيقونات الترويسة والدعم SVG خطية — زر طلب الخدمة وجرس التنبيهات وزر القائمة وزر الدعم العائم، بلا إيموجي بنيوي',
+        uiHtml.includes('onclick="openGuest()"><svg') && uiHtml.includes('id="bellBtn" title="التنبيهات"><svg')
+        && uiHtml.includes('id="menuBtn" onclick="toggleMenu(true)"><svg') && uiHtml.includes('id="supportFab" onclick="openSupport()" title="الدعم"><svg')
+        && !uiHtml.includes('data-i18n="post_job_btn">📣') && (uiHtml.match(/post_job_btn:'طلب خدمة'/g) || []).length === 1);
+      const bmSrc = fnSrc('buildMenu');
+      check('حارس مطابقة: بنود القائمة الجانبية كلها من خريطة الأيقونات الخطية IC (ذهبية موحّدة) وشريط «باقة النجوم» الذهبي والخروج المنفصل — لا نداء item() بإيموجي',
+        uiHtml.includes('const IC={') && bmSrc.includes('IC.store') && bmSrc.includes('IC.shield') && bmSrc.includes('IC.star') && bmSrc.includes('IC.exit')
+        && bmSrc.includes('goldband') && bmSrc.includes('logout-item') && !bmSrc.includes("item('") && !bmSrc.includes('🏪') && !bmSrc.includes('🎧'));
+      const tbBtns = tbBlock.split('<button').slice(1);
+      check('حارس مطابقة: الشريط السفلي — كل تبويب من الخمسة بأيقونة SVG خطية وسم تحته، والتبويب النشط بتعبئة ذهبية متوهجة في CSS',
+        tbBtns.length === 5 && tbBtns.every((b) => b.includes('<svg') && b.includes('<span')) && uiHtml.includes('.tabbar button.on svg{fill:'));
+      check('حارس مطابقة: بطاقة الصانع — سطر البيانات بأيقونات SVG (متابعون/صفقات موثّقة/مكان) وشريحة «موثّق» ونجمة التقييم SVG، وختم الاسم vseal دائرة ذهبية ممتلئة بدل ✔️ النصية',
+        (tcSrc.match(/<svg/g) || []).length >= 4 && !tcSrc.includes('👥') && !tcSrc.includes('📍') && !tcSrc.includes('✅') && !tcSrc.includes('✔️')
+        && fnSrc('seal').includes('vseal') && !fnSrc('seal').includes('✔️'));
       /* ===== جولة الإبداع الثانية + وصول الضيوف + التصنيف الموحّد (TESTING-BOLD-REDESIGN.md) ===== */
       const mqVals = [...uiHtml.matchAll(/marquee_items:'([^']*)'/g)].map((m) => m[1]);
       const mqBlock = (uiHtml.match(/<div class="marquee">([\s\S]*?)<\/div><\/div>/) || [])[1] || '';

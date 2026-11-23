@@ -708,6 +708,16 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS tos_accepted_at BIGINT DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at BIGINT DEFAULT 0;
 ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS warn_sent INTEGER DEFAULT 0;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deemed_warn_sent INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deemed_mid_warn_sent INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS agreed_revisions INTEGER DEFAULT NULL;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS agreed_delivery_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS initial_proof_url TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS initial_proof_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS initial_proof_check TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS initial_confirmed_at BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS fin_wallet_number TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS fin_declared_at BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS fin_declared_version TEXT DEFAULT '';
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_delivered_at BIGINT DEFAULT 0;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_confirmed_at BIGINT DEFAULT 0;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_auto INTEGER DEFAULT 0;
@@ -1097,6 +1107,43 @@ INSERT INTO academy_badges (user_id,track_key,earned_at)
 DELETE FROM academy_badges WHERE track_key='svc_accounts';
 `;
 
+/* ترحيلات بناء «تصحيحات المراجعة الخارجية» (الأقسام ١–٨): حقول الاتفاق
+   المهيكل والمعاينة الأولية والهوية المالية موجودة في ALIGN أعلاه؛ هنا:
+   تحقق الإيميل الإلزامي (حالة + جدول أكواد مُجزّأة قصيرة العمر)، الاسم
+   القانوني واسم صاحب المحفظة، وهوية الدافع على الالتزامات والسجل المالي،
+   وأعمدة هوية الدافع على المدفوعات. ترحيل الحسابات القائمة: أول تشغيل
+   يختم «email_verify_cutoff_ms» بوقته ويعلّم كل حساب أُنشئ حتى تلك اللحظة
+   موثّقاً (المؤسس وكل القائمين) — والحسابات اللاحقة تبدأ غير موثّقة. */
+const REVIEW_MIGRATIONS_SQL = `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_name TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS fin_wallet_owner TEXT DEFAULT '';
+CREATE TABLE IF NOT EXISTS email_verification_codes (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  email TEXT DEFAULT '',
+  code_hash TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  attempts INTEGER DEFAULT 0,
+  used_at BIGINT DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_email_verify_user ON email_verification_codes(user_id, id);
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS payer_name TEXT DEFAULT '';
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS payer_wallet TEXT DEFAULT '';
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS payer_device_fp TEXT DEFAULT '';
+ALTER TABLE money_ledger ADD COLUMN IF NOT EXISTS payer_name TEXT DEFAULT '';
+ALTER TABLE money_ledger ADD COLUMN IF NOT EXISTS payer_wallet TEXT DEFAULT '';
+ALTER TABLE money_ledger ADD COLUMN IF NOT EXISTS device_fp TEXT DEFAULT '';
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_name TEXT DEFAULT '';
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_wallet TEXT DEFAULT '';
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_device_fp TEXT DEFAULT '';
+INSERT INTO platform_settings (key,value,updated_at)
+  SELECT 'email_verify_cutoff_ms', CAST(EXTRACT(EPOCH FROM NOW())*1000 AS BIGINT)::text, CAST(EXTRACT(EPOCH FROM NOW())*1000 AS BIGINT)
+  WHERE NOT EXISTS (SELECT 1 FROM platform_settings WHERE key='email_verify_cutoff_ms');
+UPDATE users SET email_verified=1 WHERE email_verified=0 AND created_at <= (SELECT NULLIF(value,'')::bigint FROM platform_settings WHERE key='email_verify_cutoff_ms');
+`;
+
 let readyPromise = null;
 function init() {
   if (!readyPromise) {
@@ -1112,6 +1159,7 @@ function init() {
       await pool.query(FEATURES_MIGRATIONS_SQL);
       await pool.query(EXPANSION_MIGRATIONS_SQL);
       await pool.query(AUDIT_MIGRATIONS_SQL);
+      await pool.query(REVIEW_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -1139,7 +1187,7 @@ const ID_TABLES = new Set([
   'money_obligations', 'money_ledger', 'money_receipts', 'ambassadors',
   'release_appeals', 'booking_events', 'late_payment_reports', 'behavior_flags',
   'booking_terms_acceptances', 'push_subscriptions', 'obligation_settlements',
-  'password_resets', 'backup_codes', 'reports',
+  'password_resets', 'backup_codes', 'reports', 'email_verification_codes',
   'person_blocklist', 'user_fingerprints',
   'user_templates', 'directory_impressions', 'request_matches',
   'request_quotes', 'creator_packages', 'waitlist_entries', 'daily_videos',

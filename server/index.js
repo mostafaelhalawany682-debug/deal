@@ -2577,6 +2577,13 @@ async function guestBookingView(b) {
   const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
   const net = b.price - fee, half = Math.round(net / 2 * 100) / 100;
   const myReview = await db.prepare('SELECT * FROM reviews WHERE booking_id=? AND reviewer_id IS NULL').get(b.id);
+  /* حالة شروط المعاملات لعرض الضيف: مشاهِد صفحة الرمز هو جانب العميل نفسه،
+     فيُرفَق علم قبوله هو (mine_accepted = client_accepted) تناظراً مع
+     bookingView — بدونه كانت الصفحة عمياء عن قبول صاحبها: يبقى زر القبول
+     ظاهراً بعد القبول فلا يعرف الضيف أن قبوله سُجّل ولا أيَّ جانبٍ ينقص
+     (TESTING-TERMS-GATE-FIX.md). */
+  const gTerms = await termsStateFor(b);
+  gTerms.mine_accepted = gTerms.client_accepted;
   return {
     id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status,
     order_state: orderStateFor(b),
@@ -2588,7 +2595,7 @@ async function guestBookingView(b) {
     chat_unread: (await db.prepare(`SELECT COUNT(*) c FROM guest_messages WHERE booking_id=? AND sender='talent' AND is_read=0`).get(b.id)).c,
     final_delivered_at: b.final_delivered_at || 0, final_confirmed_at: b.final_confirmed_at || 0, final_auto: !!b.final_auto,
     appeal: appealView(await openAppealFor(b.id)),
-    terms: await termsStateFor(b),
+    terms: gTerms,
     events: await bookingEvents(b.id),
     deemed_at: b.deemed_at || 0,
     final_obligation_status: await (async () => { const o = await finalObligation(b.id); return o ? o.status : null; })(),

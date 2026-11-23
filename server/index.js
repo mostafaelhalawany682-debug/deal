@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { db, pool, init, normalizeContact } = require('./db');
 const mailer = require('./mailer');
+const aiSupport = require('./ai');
 
 const PORT = process.env.PORT || 3000;
 const COMMISSION_RATE = 0.10;
@@ -1610,6 +1611,16 @@ if (process.env.DEAL_TEST_HOOKS === '1') {
     if (!m) return res.status(404).json({ error: 'no code' });
     res.json({ code: m[1] });
   });
+  /* خطّاف الرد الذكي: كتابة سيناريو مزوّد test وقراءة عدّاد نداءاته —
+     بنفس قاعدة الخطّاف أعلاه (بيئة الاختبار فقط، غائب من الإنتاج). */
+  app.post('/api/support/_test/ai-script', (req, res) => {
+    const { mode = 'off', text = '' } = req.body || {};
+    global.__dealAiScript = { mode: String(mode), text: String(text || '') };
+    res.json({ ok: true });
+  });
+  app.get('/api/support/_test/ai-calls', (req, res) => {
+    res.json({ calls: global.__dealAiCalls || [], configured: aiSupport.configured(), provider: aiSupport.provider, model: aiSupport.MODEL });
+  });
 }
 
 /* ---------------- البلاغات (محتوى وملفات) ----------------
@@ -1813,6 +1824,9 @@ app.post('/api/me/verify-email/confirm', auth, async (req, res) => {
   }
   await db.prepare('UPDATE email_verification_codes SET used_at=? WHERE id=?').run(now(), row.id);
   await db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(req.user.id);
+  /* رسالة ترحيب المؤسس (جولة التلميع والنمو): أول إكمال لتحقق الإيميل فقط —
+     أفضل جهد، لا تعطّل التأكيد أبداً. */
+  try { await maybeSendFounderWelcome(await getUser(req.user.id), (req.body || {}).lang); } catch (e) { /* الترحيب لا يعطّل التأكيد */ }
   res.json({ ok: true, email_verified: true });
 });
 /* ---- الهوية المالية المؤكدة (٦-ب + ٨-ب): إقرار مسجل + اسم قانوني ---- */
@@ -2185,6 +2199,38 @@ app.get('/api/deals/:bookingId', async (req, res) => {
    (قرار المالك — «تواصل المؤسس الصادر»): المؤسس يبدأ التواصل مع أي عضو
    مسجل بلا شرط صداقة ويرسل/يستقبل في محادثاته، والعضو يرد فقط داخل
    محادثة بدأها المؤسس — بدء محادثة جديدة منه إلى المؤسس مرفوض. */
+/* رسالة ترحيب المؤسس التلقائية (جولة التلميع والنمو — بند ٤): عند إكمال
+   صانع/مقدم خدمة تحقق إيميله لأول مرة، يفتح المؤسس محادثة ١:١ معه برسالة
+   ترحيب واحدة ثابتة (بآلية بدء المؤسس للتواصل نفسها — رسالة عادية في جدول
+   messages من المؤسس، فيرد العضو داخلها بحكم قاعدة المراسلة القائمة).
+   «مرة واحدة أبداً» محقّقة ذرّياً: ختم founder_welcomed_at بشرط أنه صفر —
+   فلا إعادة تحقق ولا إعادة إرسال أكواد ولا سباق متزامن يكررها. المؤسس
+   نفسه مستثنى، وغياب حساب مؤسس = تخطٍّ صامت. */
+const FOUNDER_WELCOME_AR = (name) => `أهلاً بيك في Deal يا ${name} 👑 أنا مؤسس المنصة وبرحّب بيك بنفسي.
+عشان تبدأ صح، خطواتك الجاية:
+١) ضيف نماذج من شغلك في ملفك — هي أول حاجة العميل بيشوفها.
+٢) اتعرّف على أكاديمية Deal — دروس قصيرة بتكبّر شغلك وسعرك.
+٣) انسخ رابطك الشخصي من لوحتك وحطه في بايو حساباتك — كل عميل وكل صانع يسجّل منه بيوصلك.
+أي سؤال؟ رد عليّ هنا على طول — بالتوفيق 🚀`;
+const FOUNDER_WELCOME_EN = (name) => `Welcome to Deal, ${name} 👑 I am the platform founder, welcoming you personally.
+To start right, your next steps:
+1) Add work samples to your profile — they are the first thing a client sees.
+2) Check out the Deal Academy — short lessons that grow your work and your price.
+3) Copy your personal link from your dashboard into your social bios — every client and every creator who registers through it reaches you.
+Any question? Just reply right here — good luck 🚀`;
+async function maybeSendFounderWelcome(user, lang) {
+  if (!user || user.is_platform_founder) return false;
+  if (!['creator', 'provider'].includes(user.role)) return false;
+  const founder = await db.prepare('SELECT * FROM users WHERE is_platform_founder=1 ORDER BY id ASC LIMIT 1').get();
+  if (!founder || founder.id === user.id) return false;
+  const claim = await db.prepare('UPDATE users SET founder_welcomed_at=? WHERE id=? AND founder_welcomed_at=0').run(now(), user.id);
+  if (!claim.changes) return false; // خُتمت من قبل — لا تكرار أبداً
+  const body = (lang === 'en' ? FOUNDER_WELCOME_EN : FOUNDER_WELCOME_AR)(user.name);
+  await db.prepare('INSERT INTO messages (sender_id,recipient_id,body,created_at) VALUES (?,?,?,?)')
+    .run(founder.id, user.id, body, now());
+  await notify(user.id, 'message', `رسالة جديدة من ${founder.name}`, `messages:${founder.id}`);
+  return true;
+}
 async function founderStartedThread(founderId, memberId) {
   const r = await db.prepare('SELECT 1 FROM messages WHERE sender_id=? AND recipient_id=? LIMIT 1').get(founderId, memberId);
   return !!r;
@@ -3367,6 +3413,7 @@ app.post('/api/bookings/:id/order-again', auth, async (req, res) => {
   const b = await getBooking(+req.params.id);
   if (!b) return res.status(404).json({ error: 'الحجز غير موجود' });
   if (b.client_id !== req.user.id) return res.status(403).json({ error: 'إعادة الطلب لعميل الصفقة فقط' });
+  if (founderClientBlocked(req, res)) return;
   if (b.status !== 'completed') return res.status(400).json({ error: 'إعادة الطلب من صفقة مكتملة فقط' });
   if (req.user.frozen) return res.status(403).json({ error: 'حسابك مجمّد حالياً' });
   const talent = await getUser(b.talent_id);
@@ -3467,6 +3514,7 @@ app.post('/api/bookings', auth, async (req, res) => {
   const talent = await getUser(+talent_id);
   if (!talent || !['creator', 'provider'].includes(talent.role)) return res.status(400).json({ error: 'المنفذ غير صحيح' });
   if (talent.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً' });
+  if (founderClientBlocked(req, res)) return;
   if (talent.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك حجز نفسك' });
   if (talent.penalty_level === 'suspended' || talent.frozen) return res.status(403).json({ error: 'هذا الحساب معلّق حالياً ولا يستقبل حجوزات' });
   if (onVacation(talent)) return res.status(400).json({ error: 'المنفذ في إجازة حالياً ولا يستقبل حجوزات جديدة حتى عودته' });
@@ -4610,6 +4658,29 @@ function supportMatch(q) {
   scored.sort((a, b) => b.score - a.score);
   return { best: bestScore >= 2 ? best : null, closest: scored.filter(s => s.score > 0).slice(0, 3).map(s => s.item) };
 }
+/* ---------------- الرد الذكي على الدعم (جولة رد الدعم الذكي) ----------------
+   الترتيب الصارم داخل /api/support/ask: بوابة الخدمات ← مطابقة الأسئلة
+   الشائعة ← الرد الذكي ← احتياط اليوم (حفظ لطابور المالك). الرد الذكي
+   لا يُستدعى إلا بعد فشل المطابقة الجاهزة، وأي فشل منه (تصعيد ESCALATE،
+   حصة 429، مهلة، انهيار، بلا إعداد) يسقط بصمت لنفس احتياط اليوم حرفياً.
+   سقف الاستخدام: 10 ردود ذكية ناجحة لكل مستخدم (أو IP للضيف) في الساعة —
+   بعده يسقط للاحتياط بصمت أيضاً. محادثات الحجوزات لا تمر من هنا أبداً:
+   هذا المسار الوحيد في الخادم كله الذي ينادي aiSupportReply. */
+const AI_SUPPORT_HOURLY_CAP = 10;
+const aiSupportReplyLog = new Map();
+async function tryAiSupportReply(req, viewer, question, lang) {
+  if (!aiSupport.configured()) return null;
+  const key = viewer ? `u:${viewer.id}` : `ip:${req.ip || ''}`;
+  const nowMs = Date.now();
+  const recent = (aiSupportReplyLog.get(key) || []).filter((t) => nowMs - t < 3600 * 1000);
+  if (recent.length >= AI_SUPPORT_HOURLY_CAP) { aiSupportReplyLog.set(key, recent); return null; }
+  let r = null;
+  try { r = await aiSupport.aiSupportReply({ question, lang }); } catch (e) { return null; }
+  if (!r || !r.ok || !r.text) return null;
+  recent.push(nowMs);
+  aiSupportReplyLog.set(key, recent);
+  return r.text;
+}
 app.get('/api/support/topics', (req, res) => {
   const lang = req.query.lang === 'en' ? 'en' : 'ar';
   res.json({ items: SUPPORT_KB.map(x => ({ id: x.id, q: lang === 'en' ? x.q_en : x.q_ar })) });
@@ -4652,6 +4723,15 @@ app.post('/api/support/ask', async (req, res) => {
   // مشترك «نجم Deal» النشط تُعلَّم رسالته «أولوية» في لوحة المالك تلقائياً.
   const viewer = await optionalViewer(req);
   const priority = viewer && !viewer.is_platform_founder && (await isStar(viewer.id)) ? 1 : 0;
+  // الرد الذكي (بعد فشل المطابقة الجاهزة فقط): نجاحه يُحفظ مع السؤال
+  // موسوماً في ai_answer ليراه المالك في قائمة الدعم بشارة «رد ذكي»،
+  // وفشله/تصعيده يكمل لنفس الاحتياط أسفله بلا أي اختلاف مرئي.
+  const aiText = await tryAiSupportReply(req, viewer, String(q), lang);
+  if (aiText) {
+    await db.prepare('INSERT INTO support_messages (user_id,question,contact,lang,priority,ai_answer,created_at) VALUES (?,?,?,?,?,?,?)')
+      .run(viewer ? viewer.id : null, String(q).slice(0, 1000), String(contact || '').slice(0, 120), lang, priority, aiText, now());
+    return res.json({ fallback: false, ai: true, answer: aiText });
+  }
   await db.prepare('INSERT INTO support_messages (user_id,question,contact,lang,priority,created_at) VALUES (?,?,?,?,?,?)')
     .run(viewer ? viewer.id : null, String(q).slice(0, 1000), String(contact || '').slice(0, 120), lang, priority, now());
   const topics = (closest.length ? closest : SUPPORT_KB.slice(0, 3)).map(x => lang === 'en' ? x.q_en : x.q_ar);
@@ -5580,23 +5660,22 @@ app.get('/api/owner/ambassadors', auth, ownerOnly, async (req, res) => {
     .map((u) => ({ id: u.id, name: u.name, role: u.role, niche: u.niche, provider_category: u.provider_category, city: u.city, country: u.country }));
   res.json({ items, candidates });
 });
-app.post('/api/owner/ambassadors', auth, ownerOnly, async (req, res) => {
-  const { user_id, city, country, collection_phone, compensation, settlement_method } = req.body || {};
-  const target = await getUser(+user_id || 0);
-  if (!target) return res.status(404).json({ error: 'العضو غير موجود' });
-  if (target.is_platform_founder) return res.status(400).json({ error: 'المؤسس لا يُعيَّن سفيراً أبداً' });
-  if (!target.verified) return res.status(400).json({ error: 'تعيين السفير لعضو موثّق فقط — العضو غير موثّق' });
-  if (target.banned) return res.status(400).json({ error: 'العضو محظور — لا يمكن تعيينه سفيراً' });
+/* نواة التعيين الواحدة (جولة التلميع والنمو): تُستخدم من تعيين المالك
+   المباشر ومن اعتماد طلب سفير معاً — نفس قواعد النطاق حرفياً: سفير فعّال
+   واحد لكل (دولة، مدينة) بالفهرس الفريد، والبديل يُلغي السابق مع بقاء
+   سجله التاريخي، ووسيلة التسوية من سجلّ الوسائل (افتراضياً بايونير خارج
+   مصر ومباشر داخلها)، وإشعار التعيين للمُعيَّن. */
+async function appointAmbassadorCore({ target, city, country, collection_phone, compensation, settlement_method, byUserId }) {
   const ctry = countryOf(country);
-  if (!ctry) return res.status(400).json({ error: 'دولة غير صحيحة' });
+  if (!ctry) return { error: 'دولة غير صحيحة' };
   const cityN = normCity(city);
-  if (!cityN) return res.status(400).json({ error: 'مدينة السفير مطلوبة' });
+  if (!cityN) return { error: 'مدينة السفير مطلوبة' };
   const phone = normalizePhoneForCountry(collection_phone, ctry.code);
-  if (!phone) return res.status(400).json({ error: 'رقم التحصيل غير صالح لدولة النطاق' });
+  if (!phone) return { error: 'رقم التحصيل غير صالح لدولة النطاق' };
   // بديل لنفس النطاق: السابق يُلغى (يبقى تاريخه) قبل تفعيل الجديد.
   const prev = await activeAmbassadorFor(cityN, ctry.code);
   if (prev) {
-    await db.prepare('UPDATE ambassadors SET active=0, removed_at=?, removed_by=? WHERE id=?').run(now(), req.user.id, prev.id);
+    await db.prepare('UPDATE ambassadors SET active=0, removed_at=?, removed_by=? WHERE id=?').run(now(), byUserId, prev.id);
     await notify(prev.user_id, 'ambassador_removed', `انتهى تعيينك سفيراً لـDeal في ${prev.city} — شكراً لخدمتك`, 'ambassador');
   }
   /* وسيلة التسوية لهذا النطاق: اختيار المالك من سجلّ الوسائل؛ الافتراضي
@@ -5605,14 +5684,25 @@ app.post('/api/owner/ambassadors', auth, ownerOnly, async (req, res) => {
   let settleMethod = String(settlement_method || '').trim();
   if (settleMethod) {
     const reg = SETTLEMENT_METHODS[settleMethod];
-    if (!reg) return res.status(400).json({ error: 'وسيلة تسوية غير معروفة' });
-    if (!reg.enabled) return res.status(400).json({ error: 'وسيلة التسوية دي مش مفعّلة لسه' });
+    if (!reg) return { error: 'وسيلة تسوية غير معروفة' };
+    if (!reg.enabled) return { error: 'وسيلة التسوية دي مش مفعّلة لسه' };
   } else settleMethod = ctry.code === 'EG' ? '' : 'payoneer';
   const info = await db.prepare(`INSERT INTO ambassadors (user_id,city,country,collection_phone,compensation,settlement_method,active,created_at) VALUES (?,?,?,?,?,?,1,?)`)
     .run(target.id, cityN, ctry.code, phone, String(compensation || '').slice(0, 200), settleMethod, now());
   const appt = await db.prepare('SELECT * FROM ambassadors WHERE id=?').get(info.lastInsertRowid);
   await notify(target.id, 'ambassador_appointed', `🏛️ عيّنك مالك Deal سفيراً للمنصة في ${cityN} — رقم تحصيلك المحلي بقى يظهر في خطوات دفع مدينتك`, 'ambassador');
-  res.json({ ok: true, appointment: await ambassadorView(appt) });
+  return { appointment: appt };
+}
+app.post('/api/owner/ambassadors', auth, ownerOnly, async (req, res) => {
+  const { user_id, city, country, collection_phone, compensation, settlement_method } = req.body || {};
+  const target = await getUser(+user_id || 0);
+  if (!target) return res.status(404).json({ error: 'العضو غير موجود' });
+  if (target.is_platform_founder) return res.status(400).json({ error: 'المؤسس لا يُعيَّن سفيراً أبداً' });
+  if (!target.verified) return res.status(400).json({ error: 'تعيين السفير لعضو موثّق فقط — العضو غير موثّق' });
+  if (target.banned) return res.status(400).json({ error: 'العضو محظور — لا يمكن تعيينه سفيراً' });
+  const out = await appointAmbassadorCore({ target, city, country, collection_phone, compensation, settlement_method, byUserId: req.user.id });
+  if (out.error) return res.status(400).json({ error: out.error });
+  res.json({ ok: true, appointment: await ambassadorView(out.appointment) });
 });
 app.post('/api/owner/ambassadors/:id/remove', auth, ownerOnly, async (req, res) => {
   const appt = await db.prepare('SELECT * FROM ambassadors WHERE id=?').get(+req.params.id);
@@ -5633,6 +5723,129 @@ app.post('/api/owner/ambassadors/:id/settle', auth, ownerOnly, async (req, res) 
 /* إعدادات المالك: معرّف استلام بايونير (إيميل/معرّف حسابه) — يضبطه المالك
    بنفسه من لوحته، افتراضياً فارغ، ولا يُكشف إلا للسفير المعيَّن داخل قسم
    تسويته (عبر /api/ambassador/me) وللمالك نفسه هنا. */
+/* ---------------- طلبات السفير (جولة التلميع والنمو — بند ٩) ----------------
+   عضو أكمل تحقق إيميله يرشّح نفسه سفيراً لدولته ومدينته هو فقط (النطاق
+   يُختم من حسابه لا من إدخاله)، وطلب مفتوح واحد لكل عضو (فهرس فريد جزئي).
+   الاعتماد يمرّ بنواة التعيين الواحدة appointAmbassadorCore بقواعد النطاق
+   نفسها، والرفض يُختم على السجل. المتقدم يرى حالة طلبه من لوحته. */
+function ambassadorApplicationView(a, applicant) {
+  return {
+    id: a.id, user_id: a.user_id, city: a.city, country: a.country, note: a.note || '',
+    status: a.status, created_at: a.created_at, decided_at: a.decided_at || 0,
+    ambassador_id: a.ambassador_id || null,
+    applicant: applicant ? { id: applicant.id, name: applicant.name, role: applicant.role, city: applicant.city, country: applicant.country, verified: !!applicant.verified, email_verified: !!applicant.email_verified, phone: applicant.phone || '' } : null,
+  };
+}
+app.post('/api/me/ambassador-application', auth, async (req, res) => {
+  const u = req.user;
+  if (u.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس يدير المنصة — لا يرشّح نفسه سفيراً · The founder runs the platform and does not apply as ambassador' });
+  if (!u.email_verified) return res.status(403).json({ error: 'أكّد إيميلك أولاً قبل التقديم كسفير · Verify your email first before applying as an ambassador', code: 'EMAIL_NOT_VERIFIED' });
+  if (u.banned) return res.status(403).json({ error: 'حسابك محظور حالياً' });
+  const active = await db.prepare('SELECT id FROM ambassadors WHERE user_id=? AND active=1 LIMIT 1').get(u.id);
+  if (active) return res.status(409).json({ error: 'أنت سفير معيّن بالفعل · You are already an appointed ambassador' });
+  const open = await db.prepare(`SELECT id FROM ambassador_applications WHERE user_id=? AND status='open' LIMIT 1`).get(u.id);
+  if (open) return res.status(409).json({ error: 'عندك طلب سفير مفتوح بالفعل — استنى قرار المالك · You already have an open ambassador application' });
+  const city = normCity((req.body || {}).city || u.city);
+  if (!city) return res.status(400).json({ error: 'مدينتك مطلوبة للتقديم · Your city is required to apply' });
+  const ctry = countryOf(u.country);
+  if (!ctry) return res.status(400).json({ error: 'دولة حسابك غير مدعومة لنطاق سفير · Your account country is not supported for an ambassador scope' });
+  const note = String((req.body || {}).note || '').trim().slice(0, 300);
+  const info = await db.prepare(`INSERT INTO ambassador_applications (user_id,city,country,note,status,created_at) VALUES (?,?,?,?,'open',?)`)
+    .run(u.id, city, ctry.code, note, now());
+  const row = await db.prepare('SELECT * FROM ambassador_applications WHERE id=?').get(info.lastInsertRowid);
+  await notifyOwner('ambassador_application', `📍 طلب سفير جديد: ${u.name} — ${city} · ${ctry.code}${note ? ` — ${note}` : ''}`, 'ambassador');
+  res.json({ ok: true, application: ambassadorApplicationView(row, u) });
+});
+app.get('/api/me/ambassador-application', auth, async (req, res) => {
+  const row = await db.prepare('SELECT * FROM ambassador_applications WHERE user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
+  const active = await db.prepare('SELECT id FROM ambassadors WHERE user_id=? AND active=1 LIMIT 1').get(req.user.id);
+  res.json({ application: row ? ambassadorApplicationView(row, req.user) : null, is_ambassador: !!active });
+});
+app.get('/api/owner/ambassador-applications', auth, ownerOnly, async (req, res) => {
+  const rows = await db.prepare(`SELECT * FROM ambassador_applications ORDER BY (status='open') DESC, id DESC LIMIT 100`).all();
+  const items = [];
+  for (const a of rows) items.push(ambassadorApplicationView(a, await getUser(a.user_id)));
+  res.json({ items, open_count: rows.filter((a) => a.status === 'open').length });
+});
+app.post('/api/owner/ambassador-applications/:id/approve', auth, ownerOnly, async (req, res) => {
+  const a = await db.prepare('SELECT * FROM ambassador_applications WHERE id=?').get(+req.params.id);
+  if (!a || a.status !== 'open') return res.status(404).json({ error: 'الطلب غير موجود أو تم البت فيه' });
+  const target = await getUser(a.user_id);
+  if (!target) return res.status(404).json({ error: 'العضو غير موجود' });
+  if (target.is_platform_founder) return res.status(400).json({ error: 'المؤسس لا يُعيَّن سفيراً أبداً' });
+  if (target.banned) return res.status(400).json({ error: 'العضو محظور — لا يمكن تعيينه سفيراً' });
+  const phone = (req.body || {}).collection_phone || target.phone || target.contact;
+  const out = await appointAmbassadorCore({ target, city: a.city, country: a.country, collection_phone: phone, compensation: (req.body || {}).compensation || '', settlement_method: (req.body || {}).settlement_method || '', byUserId: req.user.id });
+  if (out.error) return res.status(400).json({ error: out.error });
+  await db.prepare(`UPDATE ambassador_applications SET status='approved', decided_at=?, decided_by=?, ambassador_id=? WHERE id=?`)
+    .run(now(), req.user.id, out.appointment.id, a.id);
+  const fresh = await db.prepare('SELECT * FROM ambassador_applications WHERE id=?').get(a.id);
+  res.json({ ok: true, application: ambassadorApplicationView(fresh, target), appointment: await ambassadorView(out.appointment) });
+});
+app.post('/api/owner/ambassador-applications/:id/reject', auth, ownerOnly, async (req, res) => {
+  const a = await db.prepare('SELECT * FROM ambassador_applications WHERE id=?').get(+req.params.id);
+  if (!a || a.status !== 'open') return res.status(404).json({ error: 'الطلب غير موجود أو تم البت فيه' });
+  await db.prepare(`UPDATE ambassador_applications SET status='rejected', decided_at=?, decided_by=? WHERE id=?`)
+    .run(now(), req.user.id, a.id);
+  await notify(a.user_id, 'ambassador_application', 'وصل قرار طلبك كسفير — لم يتم الاعتماد هذه المرة، وتقدر تتقدم تاني بعد تطوير ملفك', 'ambassador');
+  const fresh = await db.prepare('SELECT * FROM ambassador_applications WHERE id=?').get(a.id);
+  res.json({ ok: true, application: ambassadorApplicationView(fresh, await getUser(a.user_id)) });
+});
+
+/* ---------------- ملخص المالك الأسبوعي بالبريد (بند ١٠) ----------------
+   يُركَّب من أرقام القاعدة الحقيقية فقط، ويُرسَل عبر طبقة البريد القائمة.
+   التشغيل يدوي الآن من لوحة المالك، ونداء مجدوَل خارجي لاحقاً يضرب نفس
+   المسار. بلا بريد مُعدّ: تخطٍّ صامت بلا أي خطأ (نفس انضباط طبقة البريد). */
+async function composeOwnerDigest() {
+  const weekAgo = now() - 7 * 24 * 3600 * 1000;
+  const cnt = async (sql, ...args) => +(await db.prepare(sql).get(...args)).c || 0;
+  const sum = async (sql, ...args) => { const r = await db.prepare(sql).get(...args); return (r && r.s) || 0; };
+  const newRegs = await cnt('SELECT COUNT(*) c FROM users WHERE is_platform_founder=0 AND created_at>=?', weekAgo);
+  const newVerified = await cnt('SELECT COUNT(*) c FROM users WHERE is_platform_founder=0 AND created_at>=? AND email_verified=1', weekAgo);
+  const bookingsCreated = await cnt('SELECT COUNT(*) c FROM bookings WHERE created_at>=?', weekAgo);
+  const bookingsCompleted = await cnt('SELECT COUNT(*) c FROM bookings WHERE completed_at>=?', weekAgo);
+  const commissionWeek = await sum(`SELECT COALESCE(SUM(exact_amount),0) s FROM money_obligations WHERE kind='booking_commission' AND status IN ('confirmed','auto_confirmed') AND COALESCE(NULLIF(decided_at,0),created_at)>=?`, weekAgo);
+  const commissionTotal = await sum(`SELECT COALESCE(SUM(exact_amount),0) s FROM money_obligations WHERE kind='booking_commission' AND status IN ('confirmed','auto_confirmed')`);
+  const starWeek = await sum(`SELECT COALESCE(SUM(exact_amount),0) s FROM money_obligations WHERE kind='star_subscription' AND status IN ('confirmed','auto_confirmed') AND COALESCE(NULLIF(decided_at,0),created_at)>=?`, weekAgo);
+  const openDisputes = await cnt(`SELECT COUNT(*) c FROM disputes WHERE status='open'`);
+  const seatsTaken = await cnt('SELECT COUNT(*) c FROM users WHERE founder_seat BETWEEN 1 AND 50');
+  const stats = {
+    new_registrations: newRegs, new_email_verified: newVerified,
+    bookings_created: bookingsCreated, bookings_completed: bookingsCompleted,
+    commission_week: Math.round(commissionWeek * 100) / 100, commission_total: Math.round(commissionTotal * 100) / 100,
+    star_week: Math.round(starWeek * 100) / 100,
+    open_disputes: openDisputes, seats_taken: seatsTaken, seats_remaining: 50 - seatsTaken,
+  };
+  const day = new Date(now()).toLocaleDateString('ar-EG');
+  const subject = `ملخص Deal الأسبوعي — ${day}`;
+  const text = [
+    'ملخص Deal الأسبوعي (آخر ٧ أيام) — أرقام حقيقية من قاعدة المنصة:',
+    '',
+    `• تسجيلات جديدة: ${stats.new_registrations} (منها ${stats.new_email_verified} أكملت تحقق الإيميل)`,
+    `• حجوزات أُنشئت: ${stats.bookings_created} · حجوزات اكتملت: ${stats.bookings_completed}`,
+    `• عمولات صفقات مؤكدة هذا الأسبوع: ${stats.commission_week} (الإجمالي المؤكد: ${stats.commission_total})`,
+    `• اشتراكات نجم Deal مؤكدة هذا الأسبوع: ${stats.star_week}`,
+    `• نزاعات مفتوحة الآن: ${stats.open_disputes}`,
+    `• مقاعد المؤسسين: ${stats.seats_taken} مشغولاً من ٥٠ — باقي ${stats.seats_remaining}`,
+    '',
+    '— Deal',
+  ].join('\n');
+  return { subject, text, stats };
+}
+app.post('/api/owner/send-digest', auth, ownerOnly, async (req, res) => {
+  const { subject, text, stats } = await composeOwnerDigest();
+  if (!mailer.configured()) return res.json({ ok: true, sent: false, reason: 'email_not_configured', stats });
+  const founder = req.user;
+  const to = [founder.recovery_email, founder.contact].find((x) => x && String(x).includes('@'));
+  if (!to) return res.json({ ok: true, sent: false, reason: 'no_owner_email', stats });
+  try {
+    await mailer.sendMail({ to, subject, text });
+    res.json({ ok: true, sent: true, stats });
+  } catch (e) {
+    res.json({ ok: true, sent: false, reason: 'send_failed', stats });
+  }
+});
+
 app.get('/api/owner/settings', auth, ownerOnly, async (req, res) => {
   res.json({ payoneer_id: await getSetting('payoneer_id'), settlement_methods: Object.entries(SETTLEMENT_METHODS).map(([k, v]) => ({ key: k, enabled: v.enabled, ar: v.ar, en: v.en })) });
 });
@@ -6127,6 +6340,10 @@ async function acceptQuote(rq, quoteId, agr = { revisions: null, deliveryAt: 0 }
   if (!q || q.status !== 'pending') return { error: 'عرض غير متاح' };
   const talent = await getUser(q.talent_id);
   if (!talent || talent.banned) return { error: 'الصانع غير متاح' };
+  if (!rq.is_guest && rq.shop_user_id) {
+    const clientU = await getUser(rq.shop_user_id);
+    if (clientU && clientU.is_platform_founder) return { error: FOUNDER_NO_CLIENT_ERROR };
+  }
   if (onVacation(talent)) return { error: 'الصانع في إجازة حالياً — اختر عرضاً آخر أو انتظر عودته' };
   let bookingId;
   if (rq.is_guest) {
@@ -6148,6 +6365,7 @@ async function acceptQuote(rq, quoteId, agr = { revisions: null, deliveryAt: 0 }
   return { bookingId };
 }
 app.post('/api/my/requests/:id/quotes/:qid/accept', auth, async (req, res) => {
+  if (founderClientBlocked(req, res)) return;
   const rq = await db.prepare('SELECT * FROM shop_requests WHERE id=?').get(+req.params.id);
   if (!rq || rq.status !== 'open' || !(await requestOwnerCheck(rq, req.user))) return res.status(404).json({ error: 'غير موجود' });
   const agrQ = agreementFromBody(req.body || {}); if (agrQ.error) return res.status(400).json({ error: agrQ.error });
@@ -6412,6 +6630,7 @@ app.post('/api/contracts', auth, async (req, res) => {
   const { talent_id, title = '', service = '', times_per_month = 1, cycle_price } = req.body || {};
   const talent = await getUser(+talent_id);
   if (!talent || !['creator', 'provider'].includes(talent.role) || talent.is_platform_founder) return res.status(400).json({ error: 'المنفذ غير صحيح' });
+  if (founderClientBlocked(req, res)) return;
   if (talent.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك التعاقد مع نفسك' });
   if (onVacation(talent)) return res.status(400).json({ error: 'المنفذ في إجازة حالياً' });
   const price = +cycle_price;
@@ -7036,6 +7255,19 @@ app.get('/api/me/insights', auth, async (req, res) => {
 function ownerOnly(req, res, next) {
   if (!req.user.is_platform_founder) return res.status(403).json({ error: 'لوحة المالك للمؤسس فقط' });
   next();
+}
+/* منع المؤسس من التعامل كعميل (قرار المالك 2026-11-23: «لا انا مش عاوز
+   اعمل شغل انا مؤسس»): المؤسس يدير المنصة ولا يفتح صفقات من أي جهة —
+   هذا المنع يكمل خادمياً منعَ جهة المقدم القائم أصلاً في نفس المسارات
+   (لا سعر ولا حجوزات واردة للمؤسس)، فيُغلق باب العميل أيضاً: إنشاء حجز
+   مباشر، قبول عرض سعر يفتح حجزاً، إعادة طلب، واقتراح تعاقد شهري. */
+const FOUNDER_NO_CLIENT_ERROR = 'حساب المؤسس لا يتعامل كعميل — المؤسس يدير المنصة ولا يفتح صفقات · The founder account does not transact as a client — the founder runs the platform and opens no deals';
+function founderClientBlocked(req, res) {
+  if (req.user && req.user.is_platform_founder) {
+    res.status(403).json({ error: FOUNDER_NO_CLIENT_ERROR, code: 'FOUNDER_NO_CLIENT' });
+    return true;
+  }
+  return false;
 }
 /* قائمة إشراف البلاغات (جولة الاسترجاع): كل بلاغ بمُبلِّغه وهدفه وسببه،
    وإجراءات المالك: تجاهل / حذف المحتوى (منشورات فقط) / تجميد حساب

@@ -1196,6 +1196,71 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_exp_unique ON exp_events(vid_hash, kind, d
 CREATE INDEX IF NOT EXISTS idx_exp_variant ON exp_events(variant, kind);
 `;
 
+/* ---------------- الجولة الأخيرة الشاملة (TESTING-FINAL.md) ----------------
+   حالة جديدة فقط، كلها idempotent:
+   - error_log: سجل أخطاء الخادم الداخلي (للمالك فقط — بلا أي حمولات حساسة).
+   - owner_audit_log: سجل تدقيق إجراءات المالك (من فعل ماذا ومتى).
+   - backups: نسخ احتياطية JSON كاملة من كل الجداول (تُبقى أحدث ٤ فقط).
+   - broadcasts: سجل إعلانات المالك المرسلة لكل الأعضاء.
+   - user_blocks: حظر عضو↔عضو (يمنع بدء المراسلة والحجوزات بين الطرفين).
+   - page_views: عدّاد مشاهدات أولي خفيف (بصمة زائر + يوم) لقمع نمو المالك.
+   - disputes: أعمدة قرار التحكيم المسبّب (سبب + مراجع أدلة + من قرر).
+   - users.link_copied_at: ختم أول نسخ للرابط الشخصي (إشارة قائمة «أكمِل ملفك»). */
+const FINAL_MIGRATIONS_SQL = `
+CREATE TABLE IF NOT EXISTS error_log (
+  id SERIAL PRIMARY KEY,
+  route TEXT DEFAULT '',
+  message TEXT DEFAULT '',
+  user_id INTEGER DEFAULT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_error_log_id ON error_log(id DESC);
+CREATE TABLE IF NOT EXISTS owner_audit_log (
+  id SERIAL PRIMARY KEY,
+  actor_id INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT DEFAULT '',
+  detail TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_owner_audit_id ON owner_audit_log(id DESC);
+CREATE TABLE IF NOT EXISTS backups (
+  id SERIAL PRIMARY KEY,
+  created_at BIGINT NOT NULL,
+  size_bytes INTEGER DEFAULT 0,
+  tables_count INTEGER DEFAULT 0,
+  data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS broadcasts (
+  id SERIAL PRIMARY KEY,
+  title TEXT DEFAULT '',
+  body TEXT DEFAULT '',
+  body_en TEXT DEFAULT '',
+  recipients INTEGER DEFAULT 0,
+  created_by INTEGER DEFAULT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS user_blocks (
+  id SERIAL PRIMARY KEY,
+  blocker_id INTEGER NOT NULL,
+  blocked_id INTEGER NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_blocks_pair ON user_blocks(blocker_id, blocked_id);
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id);
+CREATE TABLE IF NOT EXISTS page_views (
+  id SERIAL PRIMARY KEY,
+  vid_hash TEXT NOT NULL,
+  day TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_page_views_day ON page_views(day);
+ALTER TABLE disputes ADD COLUMN IF NOT EXISTS decision_reason TEXT DEFAULT '';
+ALTER TABLE disputes ADD COLUMN IF NOT EXISTS evidence_refs TEXT DEFAULT '';
+ALTER TABLE disputes ADD COLUMN IF NOT EXISTS decided_by INTEGER DEFAULT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS link_copied_at BIGINT DEFAULT 0;
+`;
+
 let readyPromise = null;
 function init() {
   if (!readyPromise) {
@@ -1214,6 +1279,7 @@ function init() {
       await pool.query(REVIEW_MIGRATIONS_SQL);
       await pool.query(POLISH_MIGRATIONS_SQL);
       await pool.query(ENGINES_MIGRATIONS_SQL);
+      await pool.query(FINAL_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -1247,6 +1313,7 @@ const ID_TABLES = new Set([
   'request_quotes', 'creator_packages', 'waitlist_entries', 'daily_videos',
   'contracts', 'profile_questions', 'seasons_custom', 'academy_progress',
   'ambassador_applications', 'churn_interventions', 'exp_events',
+  'error_log', 'owner_audit_log', 'backups', 'broadcasts', 'user_blocks', 'page_views',
 ]);
 
 function toPgSql(sql) {

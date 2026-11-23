@@ -1094,6 +1094,10 @@ html,body{overflow-x:clip}
   <div class="row"><button type="button" class="btn" onclick="doAuth(this)" data-i18n="continue_btn">متابعة</button>
   <button type="button" class="btn ghost sm" onclick="openForgot()" data-i18n="forgot_link">نسيت كلمة السر؟</button>
   <button class="btn ghost" data-i18n="close">إغلاق</button></div>
+  <!-- دخول البصمة (جولة البصمة): صف مخفي دائماً ولا يظهر إلا في وضع
+       «دخول» وعلى متصفح يدعم WebAuthn فعلاً — المتصفحات المدمجة داخل
+       تطبيقات التواصل قد لا تدعمه فيبقى مخفياً بصمت، ولا زر مكسور أبداً. -->
+  <div class="row hide" id="pkLoginRow" style="margin-top:8px"><button type="button" class="btn ghost" onclick="doPasskeyLogin(this)">🔑 <span data-i18n="pk_login_btn">الدخول بالبصمة</span></button></div>
 </form></dialog>
 
 <dialog id="forgotDlg"><form method="dialog">
@@ -1167,6 +1171,16 @@ html,body{overflow-x:clip}
   <div class="mut" data-i18n="sec_sessions_d">كل الأجهزة المسجل دخولها بحسابك. شايف جهاز مش بتاعك؟ أنهِ جلسته فوراً.</div>
   <div id="sessList" style="margin-top:10px"></div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn ghost sm" onclick="revokeOtherSessions(this)" data-i18n="sec_sessions_revoke_others">إنهاء كل الجلسات الأخرى</button>
+  <button class="btn ghost" data-i18n="close">إغلاق</button></div>
+</form></dialog>
+
+<dialog id="pkDlg"><form method="dialog">
+  <h3>🔑 <span data-i18n="pk_t">الدخول بالبصمة</span></h3>
+  <div class="mut" data-i18n="pk_d">بصمتك ما بتخرجش من موبايلك — Deal بيحفظ مفتاح تحقق بس، والبصمة نفسها بتفضل على جهازك. كلمة السر بتفضل شغالة دايماً كطريقتك الأساسية.</div>
+  <div class="err" id="pkErr"></div>
+  <div id="pkList" style="margin-top:10px"></div>
+  <label data-i18n="pk_label">اسم الجهاز (اختياري)</label><input id="pkLabel" data-i18n-ph="pk_label_ph" placeholder="مثال: موبايل سامسونج">
+  <div class="row" style="margin-top:8px"><button type="button" class="btn" onclick="doAddPasskey(this)" data-i18n="pk_add">أضف بصمة هذا الجهاز</button>
   <button class="btn ghost" data-i18n="close">إغلاق</button></div>
 </form></dialog>
 
@@ -1428,7 +1442,10 @@ Object.assign(DICT.en,{evgate_t:'Verify your email to continue',evgate_d:'Submit
 /* الجولة الأخيرة الشاملة (TESTING-FINAL.md): صيانة/إكمال ملف/بياناتي/حظر/لوحة مالك موسّعة/خط زمني/شفافية */
 Object.assign(DICT.ar,{fin_maint_t:'بنعمل صيانة سريعة — راجعين قريباً',fin_maint_d:'بنظبط حاجات صغيرة عشان تجربتك تبقى أحسن — شكراً لصبرك، جرّب تاني كمان شوية.',fin_maint_login:'دخول المالك',fin_chk_t:'أكمِل ملفك',fin_chk_d:'كل خطوة بتكمّلها بتقرّب ملفك من الظهور الكامل قدام العملاء.',fin_chk_photo:'صورة شخصية لملفك',fin_chk_bio:'نبذة تعريفية عنك',fin_chk_samples:'أضف نماذجك عشان العملاء يشوفوا شغلك',fin_chk_packages:'باقة أسعار واحدة على الأقل',fin_chk_fin:'خطوة الهوية المالية المؤكدة',fin_chk_link:'انسخ رابطك الشخصي مرة على الأقل',fin_chk_fix:'أكملها',fin_data_t:'بياناتي',fin_data_d:'نزّل نسخة JSON من بياناتك عندنا: ملفك وحجوزاتك وسجلك المالي وإشعاراتك وبيانات رسائلك الوصفية.',fin_data_btn:'⬇️ نزّل بياناتي',fin_blocks_t:'المحظورون',fin_blocks_none:'لا أحد محظور.',fin_block_btn:'حظر',fin_unblock_btn:'فك الحظر',fin_blocked_t:'اتحظر — مش هتقدروا تبدأوا تواصل أو حجوزات جديدة',fin_unblocked_t:'اتفك الحظر',fin_tl_t:'الخط الزمني الموحّد للصفقة',fin_arb_t:'قرار التحكيم المسبّب',fin_arb_refs:'مراجع الأدلة',fin_tr_t:'الشفافية والأمان',fin_tr_1:'Deal لا تستلم ولا تحتجز أموال المعاملات أبداً: كل تحويل يتحرك بين محفظتي العميل والمنفّذ مباشرة، ودور المنصة التنظيم والتوثيق والتحكيم فقط.',fin_tr_2:'كل رقم تشوفه في Deal حقيقي من قاعدة بياناتها: عدد الصناع والصفقات والمقاعد والتقييمات — لا أرقام تجميلية ولا إحصاءات مخترعة.',fin_tr_3:'كل مهلة وكل عقوبة معلنة في شروط المعاملات قبل أن تبدأ أي خطوة: مهلات الدفع ٣ ساعات، ومهلة المعاينة ٢٤ ساعة، وسلّم العقوبات منشور بالكامل — لا قواعد خفية أبداً.',fin_tr_4:'التحكيم عند أي خلاف يتم من أدلة التطبيق وحدها (المحادثة والإيصالات وسجل الخطوات)، وقراره مسبّب دائماً: السبب مكتوب ومراجع الأدلة ظاهرة للطرفين في صفحة الحجز نفسها.',fin_ow_ops_t:'تشغيل المنصة',fin_ow_maint:'وضع الصيانة',fin_ow_maint_on:'مفعّل الآن — الزوار والأعضاء يرون شاشة الصيانة',fin_ow_maint_off:'متوقف — المنصة تعمل طبيعياً',fin_ow_maint_toggle:'تبديل وضع الصيانة',fin_ow_funnel_t:'قمع النمو (أرقام حقيقية)',fin_ow_views:'مشاهدات الصفحات',fin_ow_visitors:'زوار فريدون',fin_ow_regs:'تسجيلات',fin_ow_verified_emails:'إيميلات مؤكدة',fin_ow_first_booking:'صناع بأول حجز',fin_ow_completed:'صفقات مكتملة',fin_ow_backup_t:'النسخ الاحتياطي',fin_ow_backup_now:'اعمل نسخة دلوقتي',fin_ow_backup_last:'آخر نسخة',fin_ow_backup_none:'لا نسخ بعد',fin_ow_backup_dl:'تنزيل أحدث نسخة',fin_ow_broadcast_t:'إعلان لكل الأعضاء',fin_ow_bc_title_ph:'عنوان الإعلان',fin_ow_bc_body_ph:'نص الإعلان (عربي)',fin_ow_bc_body_en_ph:'نص الإعلان (إنجليزي — اختياري)',fin_ow_bc_send:'إرسال الإعلان',fin_ow_bc_sent:'اتبعت الإعلان',fin_ow_bc_hist:'سجل الإعلانات',fin_ow_bc_recipients:'مستلماً',fin_ow_fin_t:'التصدير المالي',fin_ow_fin_d:'سجل الأموال والالتزامات لفترة من اختيارك — ملف جداول (SpreadsheetML .xls) بإجماليات.',fin_ow_fin_btn:'⬇️ تصدير مالي',fin_ow_errlog_t:'سجل الأخطاء الداخلي (آخر ١٠٠)',fin_ow_errlog_none:'لا أخطاء مسجلة.',fin_ow_audit_t:'سجل تدقيق إجراءات المالك (آخر ١٠٠)',fin_ow_audit_none:'لا إجراءات مدققة بعد.',fin_arb_dlg_t:'قرار تحكيم مسبّب',fin_arb_reason_ph:'سبب القرار (إلزامي — يظهر للطرفين)',fin_arb_evidence:'اختر دليلاً واحداً على الأقل من خط زمن الحجز',fin_arb_go:'تأكيد القرار'});
 Object.assign(DICT.en,{fin_maint_t:'Quick maintenance — we will be back soon',fin_maint_d:'We are fine-tuning a few things to make your experience better — thanks for your patience, try again shortly.',fin_maint_login:'Owner login',fin_chk_t:'Complete your profile',fin_chk_d:'Every step you finish brings your profile closer to full visibility in front of clients.',fin_chk_photo:'A profile photo',fin_chk_bio:'A short bio about you',fin_chk_samples:'Add your samples so clients can see your work',fin_chk_packages:'At least one price package',fin_chk_fin:'The verified financial-identity step',fin_chk_link:'Copy your personal link at least once',fin_chk_fix:'Complete it',fin_data_t:'My data',fin_data_d:'Download a JSON copy of your data with us: your profile, bookings, money ledger, notifications and message metadata.',fin_data_btn:'⬇️ Download my data',fin_blocks_t:'Blocked members',fin_blocks_none:'Nobody is blocked.',fin_block_btn:'Block',fin_unblock_btn:'Unblock',fin_blocked_t:'Blocked — neither of you can start new messages or bookings',fin_unblocked_t:'Unblocked',fin_tl_t:'Unified deal timeline',fin_arb_t:'Reasoned arbitration decision',fin_arb_refs:'Evidence references',fin_tr_t:'Transparency & security',fin_tr_1:'Deal never receives or holds transaction money: every transfer moves directly between the client wallet and the provider wallet, and the platform only organizes, documents and arbitrates.',fin_tr_2:'Every number you see on Deal is real from its database: creators, deals, seats and ratings — no cosmetic figures and no invented statistics.',fin_tr_3:'Every deadline and every penalty is published in the transaction terms before any step begins: payment deadlines are 3 hours, the preview window is 24 hours, and the full penalty ladder is public — no hidden rules, ever.',fin_tr_4:'Arbitration in any dispute works from in-app evidence only (the chat, receipts and the step log), and its decision is always reasoned: the written reason and the evidence references are visible to both parties on the booking page itself.',fin_ow_ops_t:'Platform operations',fin_ow_maint:'Maintenance mode',fin_ow_maint_on:'ON now — guests and members see the maintenance screen',fin_ow_maint_off:'Off — the platform runs normally',fin_ow_maint_toggle:'Toggle maintenance mode',fin_ow_funnel_t:'Growth funnel (real numbers)',fin_ow_views:'Page views',fin_ow_visitors:'Unique visitors',fin_ow_regs:'Registrations',fin_ow_verified_emails:'Verified emails',fin_ow_first_booking:'Creators with a first booking',fin_ow_completed:'Completed deals',fin_ow_backup_t:'Database backup',fin_ow_backup_now:'Back up now',fin_ow_backup_last:'Last backup',fin_ow_backup_none:'No backups yet',fin_ow_backup_dl:'Download latest backup',fin_ow_broadcast_t:'Broadcast to all members',fin_ow_bc_title_ph:'Announcement title',fin_ow_bc_body_ph:'Announcement text (Arabic)',fin_ow_bc_body_en_ph:'Announcement text (English — optional)',fin_ow_bc_send:'Send announcement',fin_ow_bc_sent:'Announcement sent',fin_ow_bc_hist:'Announcement history',fin_ow_bc_recipients:'recipients',fin_ow_fin_t:'Financial export',fin_ow_fin_d:'The money ledger and obligations for a period you choose — a spreadsheet file (SpreadsheetML .xls) with totals.',fin_ow_fin_btn:'⬇️ Financial export',fin_ow_errlog_t:'Internal error log (latest 100)',fin_ow_errlog_none:'No errors recorded.',fin_ow_audit_t:'Owner action audit log (latest 100)',fin_ow_audit_none:'No audited actions yet.',fin_arb_dlg_t:'Reasoned arbitration decision',fin_arb_reason_ph:'Decision reason (required — visible to both parties)',fin_arb_evidence:'Pick at least one evidence item from the booking timeline',fin_arb_go:'Confirm decision'});
-Object.assign(ERR_EN,{'بيانات الدخول غير صحيحة — راجع وسيلة التواصل وكلمة السر':'Incorrect login details — check your contact and password','محاولات دخول كثيرة — استنى شوية وحاول تاني':'Too many login attempts — wait a bit and try again','محاولات كثيرة — استنى شوية وحاول تاني':'Too many attempts — wait a bit and try again','كلمة السر مطلوبة — ٨ أحرف على الأقل':'A password is required — at least 8 characters','كلمة السر الجديدة مطلوبة — ٨ أحرف على الأقل':'A new password is required — at least 8 characters','كلمة السر الحالية غير صحيحة':'The current password is incorrect','عيّن كلمة سر لحسابك أولاً لإتمام هذا الإجراء':'Set a password for your account first to complete this action','عندك كلمة سر بالفعل — استخدم «تغيير كلمة السر»':'You already have a password — use "Change password"','لا كلمة سر بعد — استخدم «تعيين كلمة سر»':'No password yet — use "Set a password"','اكتب إيميلاً صحيحاً':'Enter a valid email','الإيميل ده مربوط بحساب آخر':'This email is linked to another account','اكتب إيميل الحساب':'Enter the account email','استرجاع كلمة السر بالإيميل غير مفعّل حالياً — استخدم الأكواد الاحتياطية أو تواصل مع الدعم':'Email password recovery is not enabled yet — use your backup codes or contact support','تعذّر إرسال الإيميل حالياً — حاول بعد قليل أو استخدم الأكواد الاحتياطية':'Could not send the email right now — try again shortly or use your backup codes','الكود غير صحيح أو منتهي — اطلب كوداً جديداً':'The code is incorrect or expired — request a new one','الكود الاحتياطي غير صحيح أو مستخدم من قبل':'The backup code is incorrect or already used','عيّن كلمة سر أولاً قبل توليد أكواد احتياطية':'Set a password first before generating backup codes','دي جلستك الحالية — استخدم «خروج» لإنهائها':'This is your current session — use Logout to end it','هدف إبلاغ غير صحيح':'Invalid report target','اختر سبب الإبلاغ':'Choose a report reason','لا يمكنك الإبلاغ عن منشورك':'You cannot report your own post','لا يمكنك الإبلاغ عن ملفك':'You cannot report your own profile','أبلغت عن هذا من قبل وهو قيد المراجعة':'You already reported this — it is under review','حذف المحتوى للمنشورات فقط — للملفات استخدم تجميد الحساب':'Content deletion is for posts only — use account freeze for profiles','إجراء غير صحيح':'Invalid action'});
+/* جولة البصمة (TESTING-PASSKEY.md): دخول اختياري بالبصمة — كلمة السر تبقى الأساس دائماً */
+Object.assign(DICT.ar,{pk_t:'الدخول بالبصمة',pk_d:'بصمتك ما بتخرجش من موبايلك — Deal بيحفظ مفتاح تحقق بس، والبصمة نفسها بتفضل على جهازك. كلمة السر بتفضل شغالة دايماً كطريقتك الأساسية.',pk_add:'أضف بصمة هذا الجهاز',pk_label:'اسم الجهاز (اختياري)',pk_label_ph:'مثال: موبايل سامسونج',pk_none:'لا بصمات مضافة بعد — أضف بصمة جهازك عشان تدخل ببصمتك بعد كده.',pk_unnamed:'بصمة بلا اسم',pk_revoke:'حذف',pk_last_used:'آخر استخدام',pk_login_btn:'الدخول بالبصمة',pk_added:'تمت إضافة البصمة ✓',pk_revoked:'اتحذفت البصمة'});
+Object.assign(DICT.en,{pk_t:'Fingerprint sign-in',pk_d:'Your fingerprint never leaves your phone — Deal stores only a verification key, and the biometric itself stays on your device. Your password always keeps working as your primary method.',pk_add:'Add this device\'s fingerprint',pk_label:'Device name (optional)',pk_label_ph:'e.g. Samsung phone',pk_none:'No fingerprints added yet — add this device to sign in with your fingerprint.',pk_unnamed:'Unnamed fingerprint',pk_revoke:'Remove',pk_last_used:'Last used',pk_login_btn:'Sign in with fingerprint',pk_added:'Fingerprint added ✓',pk_revoked:'Fingerprint removed'});
+Object.assign(ERR_EN,{'تعذّر إتمام البصمة — جرّب تاني أو استخدم كلمة السر':'Fingerprint sign-in could not be completed — try again or use your password','بيانات الدخول غير صحيحة — راجع وسيلة التواصل وكلمة السر':'Incorrect login details — check your contact and password','محاولات دخول كثيرة — استنى شوية وحاول تاني':'Too many login attempts — wait a bit and try again','محاولات كثيرة — استنى شوية وحاول تاني':'Too many attempts — wait a bit and try again','كلمة السر مطلوبة — ٨ أحرف على الأقل':'A password is required — at least 8 characters','كلمة السر الجديدة مطلوبة — ٨ أحرف على الأقل':'A new password is required — at least 8 characters','كلمة السر الحالية غير صحيحة':'The current password is incorrect','عيّن كلمة سر لحسابك أولاً لإتمام هذا الإجراء':'Set a password for your account first to complete this action','عندك كلمة سر بالفعل — استخدم «تغيير كلمة السر»':'You already have a password — use "Change password"','لا كلمة سر بعد — استخدم «تعيين كلمة سر»':'No password yet — use "Set a password"','اكتب إيميلاً صحيحاً':'Enter a valid email','الإيميل ده مربوط بحساب آخر':'This email is linked to another account','اكتب إيميل الحساب':'Enter the account email','استرجاع كلمة السر بالإيميل غير مفعّل حالياً — استخدم الأكواد الاحتياطية أو تواصل مع الدعم':'Email password recovery is not enabled yet — use your backup codes or contact support','تعذّر إرسال الإيميل حالياً — حاول بعد قليل أو استخدم الأكواد الاحتياطية':'Could not send the email right now — try again shortly or use your backup codes','الكود غير صحيح أو منتهي — اطلب كوداً جديداً':'The code is incorrect or expired — request a new one','الكود الاحتياطي غير صحيح أو مستخدم من قبل':'The backup code is incorrect or already used','عيّن كلمة سر أولاً قبل توليد أكواد احتياطية':'Set a password first before generating backup codes','دي جلستك الحالية — استخدم «خروج» لإنهائها':'This is your current session — use Logout to end it','هدف إبلاغ غير صحيح':'Invalid report target','اختر سبب الإبلاغ':'Choose a report reason','لا يمكنك الإبلاغ عن منشورك':'You cannot report your own post','لا يمكنك الإبلاغ عن ملفك':'You cannot report your own profile','أبلغت عن هذا من قبل وهو قيد المراجعة':'You already reported this — it is under review','حذف المحتوى للمنشورات فقط — للملفات استخدم تجميد الحساب':'Content deletion is for posts only — use account freeze for profiles','إجراء غير صحيح':'Invalid action'});
 function applyI18n(){
   document.documentElement.lang=LANG;document.documentElement.dir=LANG==='ar'?'rtl':'ltr';
   document.title=LANG==='ar'?'Deal — الشغل هو اللي بيدوّر عليك':'Deal — Work comes looking for you';
@@ -2620,6 +2637,7 @@ async function loadDash(){
   if(qc&&BOOK_URL){ try{ drawQr(qc,BOOK_URL); }catch(e){ /* رابط أطول من سعة QR — يبقى الرابط النصي وأزرار النسخ */ } }
   fillTools();
   finLoadBlocks();
+  if(typeof pkFillSlot==='function') pkFillSlot();
   const dbSnap=$('#dashBody'); if(dbSnap) DASH_HTML=dbSnap.innerHTML;
 }
 async function vReq(btn){await withBusy(btn,async()=>{try{const r=await api('/api/verify/request',{method:'POST',body:'{}'});
@@ -2946,7 +2964,9 @@ async function ambSettle(btn,id){await withBusy(btn,async()=>{try{await api(`/ap
 /* ================= المصادقة ================= */
 let AMODE='register';
 function openAuth(role){hideErr('authErr');if(!$('#aProvCat').options.length||!$('#aNiche').options.length)buildTaxUI();if(role){$('#aRole').value=role;roleFx();authMode('register')}else authMode('login');$('#authDlg').showModal()}
-function authMode(m){AMODE=m;$('#regFields').style.display=m==='register'?'block':'none';$('#authTitle').textContent=m==='register'?t('auth_reg_t'):t('auth_login_t');const aT=$('#authTabReg'),aL=$('#authTabLogin');if(aT){aT.classList.toggle('on',m==='register');aT.setAttribute('aria-pressed',m==='register')}if(aL){aL.classList.toggle('on',m==='login');aL.setAttribute('aria-pressed',m==='login')}}
+function authMode(m){AMODE=m;$('#regFields').style.display=m==='register'?'block':'none';$('#authTitle').textContent=m==='register'?t('auth_reg_t'):t('auth_login_t');const aT=$('#authTabReg'),aL=$('#authTabLogin');if(aT){aT.classList.toggle('on',m==='register');aT.setAttribute('aria-pressed',m==='register')}if(aL){aL.classList.toggle('on',m==='login');aL.setAttribute('aria-pressed',m==='login')}
+  /* زر البصمة: وضع الدخول فقط + دعم WebAuthn فعلي — غير ذلك يبقى مخفياً. */
+  const pkRow=$('#pkLoginRow'); if(pkRow) pkRow.classList.toggle('hide',!(m==='login'&&typeof pkSupported==='function'&&pkSupported()));}
 function roleFx(){$('#provCat').classList.toggle('hide',$('#aRole').value!=='provider')}
 async function doAuth(btn){
   hideErr('authErr');
@@ -3109,6 +3129,80 @@ async function revokeOtherSessions(btn){
     catch(e){ toast(errT(e.message)) }
   });
 }
+/* ================= البصمة (Passkey / WebAuthn) =================
+   اعتماد اختياري إضافي — كلمة السر تبقى الأساس والاحتياطي الدائم.
+   كل الواجهة مشروطة بدعم فعلي: بلا window.PublicKeyCredential لا زرّ
+   في الإعدادات ولا في حوار الدخول (متصفحات داخل تطبيقات التواصل قد
+   لا تدعم WebAuthn — تختفي البصمة بصمت ولا يظهر زر مكسور أبداً).
+   البصمة نفسها لا تغادر الجهاز: المتصفح يوقّع بالمفتاح الخاص المحلي
+   والخادم يتحقق بالمفتاح العام المحفوظ عنده فقط. */
+function pkSupported(){ try{ return !!(window.PublicKeyCredential&&navigator.credentials&&navigator.credentials.create&&navigator.credentials.get); }catch(e){ return false; } }
+function pkB64ToBuf(s){ const b64=String(s||'').replace(/-/g,'+').replace(/_/g,'/'); const pad='='.repeat((4-b64.length%4)%4); const bin=atob(b64+pad); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); return arr.buffer; }
+function pkBufToB64(buf){ const arr=new Uint8Array(buf||new ArrayBuffer(0)); let s=''; for(let i=0;i<arr.length;i++) s+=String.fromCharCode(arr[i]); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+/* زر «الدخول بالبصمة» في بطاقة الأمان: يُملأ فقط عند الدعم الفعلي. */
+function pkFillSlot(){ const slot=$('#pkBtnSlot'); if(!slot) return; slot.innerHTML=pkSupported()?`<button class="btn ghost sm" onclick="openPasskeys()">🔑 ${t('pk_t')}</button>`:''; }
+async function openPasskeys(){ hideErr('pkErr'); $('#pkDlg').showModal(); renderPasskeys(); }
+async function renderPasskeys(){
+  const host=$('#pkList'); if(!host) return;
+  try{
+    const r=await api('/api/passkeys');
+    host.innerHTML=r.items.length?r.items.map(p=>`<div class="step" style="margin-bottom:8px"><div class="row"><b>🔑 ${esc(p.label||t('pk_unnamed'))}</b><div class="sp"></div><button class="btn ghost sm" onclick="revokePasskey(this,${p.id})">${t('pk_revoke')}</button></div>
+    <div class="mut">${t('sec_started')}: ${new Date(p.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}${p.last_used_at?` · ${t('pk_last_used')}: ${new Date(p.last_used_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}`:''}</div></div>`).join(''):`<div class="mut">${t('pk_none')}</div>`;
+  }catch(e){ host.innerHTML=`<div class="mut">${esc(errT(e.message))}</div>`; }
+}
+async function doAddPasskey(btn){
+  hideErr('pkErr');
+  if(!pkSupported()) return;
+  await withBusy(btn,async()=>{
+    try{
+      const o=await api('/api/passkeys/register/options',{method:'POST',body:'{}'});
+      const pk=o.publicKey;
+      pk.challenge=pkB64ToBuf(pk.challenge);
+      pk.user.id=pkB64ToBuf(pk.user.id);
+      (pk.excludeCredentials||[]).forEach(c=>{ c.id=pkB64ToBuf(c.id); });
+      const cred=await navigator.credentials.create({publicKey:pk});
+      if(!cred) throw new Error('pk_cancelled');
+      const resp=cred.response;
+      await api('/api/passkeys/register/verify',{method:'POST',body:JSON.stringify({
+        ceremony_id:o.ceremony_id, id:pkBufToB64(cred.rawId), label:($('#pkLabel')||{}).value||'',
+        response:{ attestationObject:pkBufToB64(resp.attestationObject), clientDataJSON:pkBufToB64(resp.clientDataJSON),
+          transports:(typeof resp.getTransports==='function'?resp.getTransports():[]) },
+      })});
+      if($('#pkLabel')) $('#pkLabel').value='';
+      toast(t('pk_added')); renderPasskeys();
+    }catch(e){ if(e&&e.name==='NotAllowedError') return; showErr('pkErr',errT(e.message)) }
+  });
+}
+async function revokePasskey(btn,id){
+  await withBusy(btn,async()=>{
+    try{ await api('/api/passkeys/'+id,{method:'DELETE'}); toast(t('pk_revoked')); renderPasskeys(); }
+    catch(e){ toast(errT(e.message)) }
+  });
+}
+async function doPasskeyLogin(btn){
+  hideErr('authErr');
+  if(!pkSupported()) return;
+  await withBusy(btn,async()=>{
+    try{
+      const o=await api('/api/passkeys/login/options',{method:'POST',body:'{}'});
+      const pk=o.publicKey;
+      pk.challenge=pkB64ToBuf(pk.challenge);
+      const cred=await navigator.credentials.get({publicKey:pk});
+      if(!cred) throw new Error('pk_cancelled');
+      const resp=cred.response;
+      const r=await api('/api/passkeys/login/verify',{method:'POST',body:JSON.stringify({
+        ceremony_id:o.ceremony_id, id:pkBufToB64(cred.rawId),
+        response:{ authenticatorData:pkBufToB64(resp.authenticatorData), clientDataJSON:pkBufToB64(resp.clientDataJSON),
+          signature:pkBufToB64(resp.signature), userHandle:resp.userHandle?pkBufToB64(resp.userHandle):null },
+      })});
+      /* نفس ما بعد دخول كلمة السر حرفياً: نفس الجلسة ونفس الترحيل. */
+      TOKEN=r.token;localStorage.setItem('deal_token',TOKEN);ME={user:r.user};
+      if(r.user&&r.user.is_platform_founder) hideMaintenance();
+      $('#authDlg').close();renderAuth();toast(t('welcome_t'));FILTERS_READY=false;refresh();
+      if(r.needs_password) openSetPassword(true);
+    }catch(e){ if(e&&e.name==='NotAllowedError') return; showErr('authErr',errT(e.message)) }
+  });
+}
 /* بطاقة الأمان داخل «لوحتي»: حالة كلمة السر + إيميل الاسترجاع (مع تنبيه
    لطيف متكرر لحسابات الموبايل بلا إيميل — لا حظر أبداً) + أزرار الأكواد
    والجلسات. تُبنى من بيانات /api/me نفسها فلا طلب إضافي. */
@@ -3120,7 +3214,8 @@ function securityCardHtml(u){
   <div class="sp"></div>
   ${hasPw?`<button class="btn ghost sm" onclick="openChangePassword()">${t('sec_change_pw')}</button>`:`<button class="btn sm" onclick="openSetPassword()">${t('sec_set_pw')}</button>`}
   <button class="btn ghost sm" onclick="openBackupCodes()">${t('sec_backup_t')}</button>
-  <button class="btn ghost sm" onclick="openSessions()">${t('sec_sessions_t')}</button></div>
+  <button class="btn ghost sm" onclick="openSessions()">${t('sec_sessions_t')}</button>
+  <span id="pkBtnSlot"></span></div>
   ${needsRecEmail?`<div class="sec-nudge"><b>${t('sec_nudge_t')}</b><div class="mut" style="margin-top:3px">${t('sec_nudge_d')}</div></div>`:''}
   <label style="margin-top:10px">${t('sec_recovery_email')}</label>
   <div class="mut">${t('sec_recovery_email_d')}</div>

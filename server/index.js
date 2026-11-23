@@ -358,6 +358,26 @@ async function claimObligationForPayment(b, kind, ref, actor) {
   if (legKind === 'booking_final') await syncFinalLeg(b.id);
   return ob;
 }
+/* ربط إعلان الدفع بالتزامه المالي — بلا ابتلاع صامت أبداً (إصلاح حي ٢،
+   TESTING-LIVE-FIXES.md): النسخة السابقة كانت تلتفّ بـtry/catch فارغ
+   («الربط لا يعطّل الدفع») فأي فشل في الربط كان يختفي تماماً — يبقى
+   الالتزام «open» بلا مرجع وبلا أي أثر، والدافع بلا تأكيد. الآن: محاولة
+   + إعادة واحدة، والفشل النهائي يُسجَّل في سجل الخادم ويُوثَّق في سجل
+   أحداث الحجز ويُبلَّغ للمالك فوراً، ويُعاد علمه في رد الدفع نفسه
+   (obligation_linked) لتراه الواجهة — فلا فشل مالي صامت بعد اليوم.
+   الدفع نفسه لا يتعطّل بفشل الربط (قاعدة مرونة المنصة)، لكنه لا يمر
+   بصمت أبداً. */
+async function linkObligationClaim(booking, kind, ref, actor) {
+  try { await claimObligationForPayment(booking, kind, ref, actor); return true; }
+  catch (e) { console.error(`[deal-money] obligation link failed booking=${booking && booking.id} kind=${kind}:`, (e && e.message) || e); }
+  try { await claimObligationForPayment(booking, kind, ref, actor); return true; }
+  catch (e) { console.error(`[deal-money] obligation link retry failed booking=${booking && booking.id} kind=${kind}:`, (e && e.message) || e); }
+  try {
+    await addBookingEvent(booking.id, 'obligation_link_failed', `تعذّر ربط إعلان دفع (${kind}) بالتزامه المالي تلقائياً — الدفعة مسجلة في الحجز والربط عند المالك للمراجعة`);
+    await notifyOwner('money_link_failed', `حجز #${booking.id}: إعلان دفع (${kind}) سُجّل لكن ربطه بالتزام المرجع المالي تعذّر — راجع الالتزام من لوحة المال`, `booking:${booking.id}`);
+  } catch (e) { /* التوثيق نفسه لا يعطّل الرد */ }
+  return false;
+}
 /* تسوية التزام رجل (عربون/أخيرة) إلى «confirmed» عندما يثبت اكتمال الحجز —
    اكتمال القبض نفسه هو عامل التأكيد الثاني بعد ادعاء الدافع. */
 async function settleLegObligation(bookingId, legKind, note) {
@@ -743,7 +763,7 @@ async function publicUser(u, viewerId = null) {
     avatar: founder ? '' : (u.avatar || ''),
     is_platform_founder: founder,
     is_founder_member: !!u.is_founder_member,
-    // مقعد المؤسس المرقّم (١–١٠٠ بالأسبقية العالمية): المؤسس صاحب المنصة بلا
+    // مقعد المؤسس المرقّم (١–٥٠ بالأسبقية العالمية): المؤسس صاحب المنصة بلا
     // مقعد — ختمه «مؤسس Deal» منفصل تماماً عن فئة الأعضاء المؤسسين.
     founder_seat: founder ? null : (u.founder_seat ?? null),
     // غلاف شخصي + لون تمييز من اللوحة المنسّقة — المؤسس بهوية ثابتة بلا كليهما.
@@ -1023,27 +1043,34 @@ async function auth(req, res, next) {
   if (!s.last_seen_at || now() - s.last_seen_at > 60 * 1000) {
     await db.prepare('UPDATE sessions SET last_seen_at=? WHERE token=?').run(now(), token);
   }
-  /* بوابة الترحيل: حساب قديم بلا كلمة سر يستطيع القراءة وكل إعدادات
-     الأمان نفسها، لكن أي إجراء كتابي حساس خارج قائمة الأمان يُرفض حتى
-     يعيّن كلمة سر — فلا يُقفل أحد خارج حسابه ولا يبقى بلا حماية. */
-  if (!req.user.password_hash && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
+  /* بوابة الترحيل — نطاق جلسة مقيّد خادمياً (إصلاح حي ١، TESTING-LIVE-FIXES.md):
+     أي جلسة لحساب بلا كلمة سر — سواء خُتمت scope='setup' عند إصدارها أو
+     سابقة لها (تُشتق التقييدة من غياب password_hash نفسه فتُغطَّى كل
+     الجلسات القائمة تلقائياً) — لا تصل إلا لثلاثة مسارات: قراءة الهوية
+     (GET /api/me — تحتاجها شاشة التعيين لتعرف الحساب)، تعيين كلمة السر،
+     وتسجيل الخروج. كل مسار آخر (بيانات/حجوزات/مالك/قراءات) يُرفض بـ403
+     PASSWORD_SETUP_REQUIRED حتى يُعيَّن كلمة السر — فلا اعتماد على
+     الواجهة في الفرض أبداً، ولا يُقفل أحد خارج حسابه. */
+  req.sessionScope = s.scope || 'full';
+  const restricted = req.sessionScope === 'setup' || !req.user.password_hash;
+  req.sessionRestricted = restricted;
+  if (restricted) {
     const p = req.path || '';
     const allowed =
-      p === '/api/me/set-password' || p === '/api/me/change-password' ||
-      p === '/api/me/recovery-email' || p === '/api/me/backup-codes' ||
-      p.startsWith('/api/me/sessions') || p === '/api/notifications/read' ||
-      p === '/api/support/ask';
+      (req.method === 'GET' && p === '/api/me') ||
+      p === '/api/me/set-password' ||
+      p === '/api/auth/logout';
     if (!allowed) {
       return res.status(403).json({ error: 'عيّن كلمة سر لحسابك أولاً لإتمام هذا الإجراء', code: 'PASSWORD_SETUP_REQUIRED' });
     }
   }
   next();
 }
-async function makeSession(userId, req) {
+async function makeSession(userId, req, scope = 'full') {
   const token = rnd(24);
   const ua = req ? String((req.headers && req.headers['user-agent']) || '').slice(0, 300) : '';
-  await db.prepare('INSERT INTO sessions (token,user_id,created_at,user_agent,last_seen_at) VALUES (?,?,?,?,?)')
-    .run(token, userId, now(), ua, now());
+  await db.prepare('INSERT INTO sessions (token,user_id,created_at,user_agent,last_seen_at,scope) VALUES (?,?,?,?,?,?)')
+    .run(token, userId, now(), ua, now(), scope === 'setup' ? 'setup' : 'full');
   return token;
 }
 /* تنبيه «جهاز جديد»: عند دخول من وكيل مستخدم لم يظهر في جلسات الحساب
@@ -1123,12 +1150,12 @@ app.post('/api/auth/register', async (req, res) => {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(name, role, niche, provider_category, role === 'provider' ? String(provider_custom || '').trim() : '', city, country, currency, contact, phone, followers, price, bio, links, isFounder, isFounderMember, referredBy, now(), TOS_VERSION, now(), passwordHash, now(), recoveryEmail);
   /* مقعد المؤسس المرقّم: يُسنَد فوراً عند التسجيل برقم = ترتيب هذا العضو بين
-     المؤهلين (صناع/مقدمون، بلا صاحب المنصة) — أول ١٠٠ فقط، والرقم لا يتغير
+     المؤهلين (صناع/مقدمون، بلا صاحب المنصة) — أول ٥٠ فقط، والرقم لا يتغير
      أبداً بعد إسناده (نفس قاعدة الإسناد الرجعي في ترحيلات db.js). */
   if (!isFounder && ['creator', 'provider'].includes(role)) {
     const newId = info.lastInsertRowid;
     const rank = (await db.prepare(`SELECT COUNT(*) c FROM users WHERE role IN ('creator','provider') AND is_platform_founder=0 AND id<=?`).get(newId)).c;
-    if (rank >= 1 && rank <= 100) {
+    if (rank >= 1 && rank <= 50) {
       await db.prepare('UPDATE users SET founder_seat=? WHERE id=? AND founder_seat IS NULL').run(rank, newId);
     }
   }
@@ -1181,12 +1208,21 @@ app.post('/api/auth/login', async (req, res) => {
     }
   }
   /* حساب قديم بلا كلمة سر (password_hash NULL): دخول بالمعرّف وحده في
-     فترة الترحيل فقط، والرد يحمل needs_password لفرض التعيين من الواجهة،
-     وبوابة الخادم تمنع أي إجراء حساس حتى يتم. */
+     فترة الترحيل فقط — لكن الجلسة الصادرة مقيّدة النطاق خادمياً
+     (scope='setup': تعيين كلمة السر + الهوية + الخروج فقط) حتى يُعيَّن
+     كلمة السر؛ وبحساب له كلمة سر الجلسة كاملة من البداية. */
   await throttleClear(tKey);
   await recordUserFingerprint(user.id, req);
   await notifyIfNewDevice(user.id, req);
-  res.json({ token: await makeSession(user.id, req), user: await publicUser(user), needs_password: !user.password_hash });
+  const needsPw = !user.password_hash;
+  res.json({ token: await makeSession(user.id, req, needsPw ? 'setup' : 'full'), user: await publicUser(user), needs_password: needsPw, session_scope: needsPw ? 'setup' : 'full' });
+});
+
+/* تسجيل الخروج الخادمي: حذف جلسة الرمز الحالي نفسه (المقيّدة أو الكاملة)
+   فلا يبقى الرمز صالحاً بعدها — متاح للجلستين بنفس المسار. */
+app.post('/api/auth/logout', auth, async (req, res) => {
+  await db.prepare('DELETE FROM sessions WHERE token=?').run(req.sessionToken);
+  res.json({ ok: true });
 });
 
 /* ---------------- إعدادات الأمان: كلمة السر والاسترجاع والجلسات ---------------- */
@@ -1198,8 +1234,11 @@ app.post('/api/me/set-password', auth, async (req, res) => {
   if (!validPassword(password)) return res.status(400).json({ error: 'كلمة السر مطلوبة — ٨ أحرف على الأقل' });
   await db.prepare('UPDATE users SET password_hash=?, password_set_at=? WHERE id=?')
     .run(await hashPassword(password), now(), req.user.id);
+  /* ترقية الجلسة الحالية نفسها لنطاق كامل فور التعيين — صاحب الحساب
+     يكمل من نفس الجلسة بلا إعادة دخول. */
+  await db.prepare("UPDATE sessions SET scope='full' WHERE token=?").run(req.sessionToken);
   await notifySecurity(req.user.id, 'تم تعيين كلمة سر لحسابك — حسابك صار محمياً بكلمة سر');
-  res.json({ ok: true, has_password: true });
+  res.json({ ok: true, has_password: true, session_scope: 'full' });
 });
 
 /* تغيير كلمة السر: يتحقق من الحالية (بخانق محاولات)، ويُبطل كل الجلسات
@@ -1889,14 +1928,14 @@ app.post('/api/posts/:id/react', auth, async (req, res) => {
   res.json({ ok: true, post: await postView(p, me) });
 });
 
-/* ---------------- جدار المؤسسين: المقاعد ١–١٠٠ كما هي في السجلات ----------------
+/* ---------------- جدار المؤسسين: المقاعد ١–٥٠ كما هي في السجلات ----------------
    المشغولة بالعضو (اسم/مدينة/دولة/مجال) والشاغرة «مقعد متاح» — والفئة مغلقة
-   نهائياً عند اكتمال المئة (closed=true) ولا تُفتح ثانية أبداً. */
+   نهائياً عند اكتمال الخمسين (closed=true) ولا تُفتح ثانية أبداً. */
 app.get('/api/founders-wall', async (req, res) => {
-  const rows = await db.prepare(`SELECT * FROM users WHERE founder_seat IS NOT NULL AND founder_seat BETWEEN 1 AND 100 ORDER BY founder_seat ASC`).all();
+  const rows = await db.prepare(`SELECT * FROM users WHERE founder_seat IS NOT NULL AND founder_seat BETWEEN 1 AND 50 ORDER BY founder_seat ASC`).all();
   const bySeat = new Map(rows.map((u) => [u.founder_seat, u]));
   const seats = [];
-  for (let n = 1; n <= 100; n++) {
+  for (let n = 1; n <= 50; n++) {
     const u = bySeat.get(n);
     seats.push(u ? {
       seat: n, taken: true, user_id: u.id, name: u.name, role: u.role,
@@ -1904,7 +1943,7 @@ app.get('/api/founders-wall', async (req, res) => {
       city: u.city || '', country: u.country || '', avatar: u.avatar || '', verified: !!u.verified,
     } : { seat: n, taken: false });
   }
-  res.json({ seats, taken: rows.length, closed: rows.length >= 100 });
+  res.json({ seats, taken: rows.length, closed: rows.length >= 50 });
 });
 
 /* ---------------- بطاقة «صفقة موثقة عبر Deal» (#/d/<bookingId>) ----------------
@@ -2285,8 +2324,10 @@ async function bookingView(b, viewer) {
   if (viewer) view.terms.mine_accepted = viewer.id === b.client_id ? view.terms.client_accepted : viewer.id === b.talent_id ? view.terms.talent_accepted : false;
   view.events = await bookingEvents(b.id); // رسائل نظام محادثة الطلب
   view.official_report_available = viewer ? !!(await officialReportEligibility(b, viewer.id)) : false; // زر «تقرير أدلة رسمي» بعد ثبوت احتيال/إخلال
-  const dd = effectiveDeliveryDue(b); // موعد التسليم المنظّم: المقترح المقبول أو موعد الحجز المتفق ضمناً
-  view.delivery_due_at = dd.due; view.delivery_accepted = dd.accepted;
+  /* نموذج التسليم (قرار المستخدم 2026-11-23): لا موعد تسليم منظّماً ولا عدّاد
+     تسليم في Deal — التوقيت اتفاق بين الطرفين داخل محادثة الحجز (دليل تحكيم)،
+     والاستعجال علامة «مستعجل» فقط. الحقول صفر دائماً توافقاً مع الواجهات القديمة. */
+  view.delivery_due_at = 0; view.delivery_accepted = false;
   view.replacement_available = !!b.replacement_available; view.replacement_activated = !!b.replacement_activated;
   view.deemed_at = b.deemed_at || 0;
   view.tips = await tipsOf(b.id); // إكراميات الصفقة (التزامات tip في السجل — بلا عمولة)
@@ -2365,7 +2406,7 @@ const TX_TERMS = {
     'التحكيم بنظام Deal: طور تفاوض ١٠ دقائق بين الطرفين أولاً، ثم حسم المالك من الأدلة — وقراره نهائي داخل المنصة ومسجّل.',
     'محادثة الطلب داخل Deal هي قناة الأدلة الوحيدة — أي اتفاق خارجها لا يُقبل دليلاً في التحكيم.',
     'المعاملات P2P: الفلوس تتحرك بين المحافظ الشخصية مباشرة، وDeal ينظّم ويوثّق ويحمي — Deal ليس بنكاً ولا جهة مالية.',
-    'ضمان الاستبدال الصارم: يتفعّل فقط لو أعلن المنفذ عدم قدرته، أو عدّى موعد التسليم المتفق بلا إثبات تنفيذ، أو سكت في محادثة الحجز ٢٤ ساعة بعد قبض العربون رغم تنبيهين آليين. ترشّح Deal بديلاً واحداً موثّقاً من نفس المدينة والمجال بنفس السعر والشروط حرفياً خلال ٢٤ ساعة، ويقرر العميل القبول أو الرفض خلال ٣ ساعات؛ وإن لم يوجد بديل مناسب يُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. ردّ العربون إجباري على المنفذ المتخلّف خلال ٣ ساعات من قرار الاستبدال أو التحكيم، ولا استبدال أبداً بعد اعتماد المعاينة.',
+    'ضمان الاستبدال الصارم: يتفعّل فقط لو أعلن المنفذ عدم قدرته، أو سكت في محادثة الحجز ٢٤ ساعة بعد قبض العربون رغم تنبيهين آليين. Deal لا تفرض موعد تسليم ولا تدير عدّاد تسليم: توقيت التنفيذ اتفاق بين الطرفين داخل محادثة الحجز، وعلامة «مستعجل» اتفاقية بلا أي التزام زمني مفروض من المنصة، وأي خلاف على تأخير التسليم يُحسم تحكيماً بأدلة المحادثة. ترشّح Deal بديلاً واحداً موثّقاً من نفس المدينة والمجال بنفس السعر والشروط حرفياً خلال ٢٤ ساعة، ويقرر العميل القبول أو الرفض خلال ٣ ساعات؛ وإن لم يوجد بديل مناسب يُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. ردّ العربون إجباري على المنفذ المتخلّف خلال ٣ ساعات من قرار الاستبدال أو التحكيم، ولا استبدال أبداً بعد اعتماد المعاينة.',
     'الردع بحكم القانون — للطرفين: قبولك هذه الشروط عقد إلكتروني ملزم مسجّل بهويتك ووقته (المادة ١٤٧ من القانون المدني: العقد شريعة المتعاقدين)، وسجلات Deal ومحادثات الحجز وإيصالاتها أدلّة موثّقة تُسلَّم للطرف المتضرر في حزمة أدلة رسمية عند ثبوت احتيال. قبض العربون والاستيلاء عليه أو رفض ردّه عند الإخلال يدخل في نطاق خيانة الأمانة (المادة ٣٤١ عقوبات) والنصب (المادة ٣٣٦ عقوبات)، والاحتيال عبر الشبكات يغلّظه قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨، وللمتضرر المطالبة بتعويض كامل (المادة ١٦٣ مدني) — مسؤولية المحتال كاملة بلا أي سقف. وداخل المنصة: أي التزام مالي يتجاوز مهلته يجمّد الحساب فوراً مع علامة «مستحقات متأخرة» في ملفه، وفكّ التجميد بسداد الالتزام وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف في الإخلال الثاني)، والاحتيال المثبت = حظر نهائي للشخص نفسه (هاتف + إيميل + بصمة جهاز).',
     'أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا ضمان ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal. أي ترتيب جانبي (مكالمة أو محادثة خارجية أو اتفاق شفهي) لا يُستند إليه في أي تحكيم ولا يُلزم المنصة بشيء، ومحاولة نقل التعامل لخارج المنصة تُرصد في محادثة الحجز وتدخل سلّم العقوبات. خدمات Deal — الضمان والتحكيم وحزمة الأدلة والتقييمات ودعم النزاعات — متاحة فقط للصفقات المفتوحة والموثّقة داخل المنصة من أول خطوة؛ أي اتفاق خارجي لا يمنح أي حق في أي خدمة من خدمات المنصة، ومحاولة استخدام أي خدمة لتغطية اتفاق خارجي مخالفة تستوجب علامة سلوك وتصعيد العقوبة عند التكرار.',
   ],
@@ -2380,7 +2421,7 @@ const TX_TERMS = {
     'Arbitration follows Deal\'s own system: a 10-minute negotiation phase between the parties first, then the owner decides from the evidence — the decision is final inside the platform and recorded.',
     'The in-app order chat is the only evidence channel — agreements made outside it are not accepted as arbitration evidence.',
     'Transactions are P2P: money moves directly between personal wallets, and Deal organizes, documents and protects — Deal is not a bank or a financial institution.',
-    'The strict replacement guarantee: it activates only if the provider declares inability, or the agreed delivery deadline passes with no execution proof, or the provider stays silent in the booking chat for a full 24 hours after receiving the deposit despite two automatic warnings. Deal nominates exactly one verified alternative from the same city and niche at exactly the same price and terms within 24 hours, and the client decides to accept or refuse within 3 hours; if no suitable alternative exists, the deposit is refunded in full by an arbitration decision within 72 hours. Refunding the deposit is mandatory for the defaulting provider within 3 hours of the replacement or arbitration decision, and there is never a replacement after the preview has been confirmed.',
+    'The strict replacement guarantee: it activates only if the provider declares inability, or the provider stays silent in the booking chat for a full 24 hours after receiving the deposit despite two automatic warnings. Deal imposes no delivery deadline and runs no delivery countdown: execution timing is agreed between the parties inside the booking chat, the \u201curgent\u201d marker is a mutual agreement with no platform-imposed time commitment, and any dispute over delivery delay is decided by arbitration on the chat evidence. Deal nominates exactly one verified alternative from the same city and niche at exactly the same price and terms within 24 hours, and the client decides to accept or refuse within 3 hours; if no suitable alternative exists, the deposit is refunded in full by an arbitration decision within 72 hours. Refunding the deposit is mandatory for the defaulting provider within 3 hours of the replacement or arbitration decision, and there is never a replacement after the preview has been confirmed.',
     'Deterrence by law — for both parties: your acceptance of these terms is a binding electronic contract recorded with your identity and its time (Article 147 of the Civil Code: the contract is the law of the parties), and Deal\u2019s records, booking chats and receipts are documented evidence handed to the harmed party in an official evidence bundle when fraud is proven. Taking a deposit and keeping it, or refusing to refund it on default, falls within breach of trust (Article 341 of the Penal Code) and fraud (Article 336 of the Penal Code); online fraud is aggravated by the Anti-IT-Crimes Law 175 of 2018, and the harmed party may claim full compensation (Article 163 of the Civil Code) — a fraudster\u2019s liability is full, with no cap. Inside the platform: any money obligation that passes its deadline freezes the account immediately with a \u201clate dues\u201d mark on the profile, unfreezing requires settling the obligation plus a breach penalty of 10% of the deal value (doubled on the second breach), and proven fraud means a permanent ban of the person (phone + email + device fingerprint).',
     'Any agreement outside the platform does not happen, and the platform is not bound by it — no guarantee, no arbitration, no rating and no evidence bundle for any agreement that was not opened and documented as a booking inside Deal. Any side arrangement (a call, an external chat or a verbal deal) cannot be relied on in any arbitration and binds the platform to nothing, and attempting to move the dealing outside the platform is detected in the booking chat and enters the penalty ladder. Deal\u2019s services — the guarantee, arbitration, the evidence bundle, ratings and dispute support — are available only for deals opened and documented inside the platform from the very first step; an external agreement grants no right to any platform service, and attempting to use any service to cover an external agreement is a violation that earns a behavior flag and escalating penalties on repetition.',
   ],
@@ -2544,7 +2585,6 @@ async function runAllSweeps() {
   try { out.deadline_warnings = await sweepDeadlineWarnings(); } catch (e) { out.deadline_warnings = -1; }
   try { out.dues_enforcement = await sweepDuesEnforcement(); } catch (e) { out.dues_enforcement = -1; }
   try { out.weekly_summary = await sweepWeeklySummaries(); } catch (e) { out.weekly_summary = -1; }
-  try { out.delivery_overdue = await sweepDeliveryOverdue(); } catch (e) { out.delivery_overdue = -1; }
   try { out.request_rescue = await sweepRequestRescue(); } catch (e) { out.request_rescue = -1; }
   try { out.due_pushes = await sweepDuePushes(); } catch (e) { out.due_pushes = -1; }
   try { out.waitlist = await sweepWaitlist(); } catch (e) { out.waitlist = -1; }
@@ -2992,27 +3032,7 @@ async function sweepWeeklySummaries() {
   return sent;
 }
 
-/* ---- موعد التسليم المنظّم: تجاوزه بلا إثبات تنفيذ يفتح مسار الاستبدال ---- */
-function effectiveDeliveryDue(b) {
-  if (b.delivery_due_at) return { due: b.delivery_due_at, accepted: !!b.delivery_accepted || !!(b.agreed_client && b.agreed_talent) };
-  if (b.deadline) return { due: b.deadline, accepted: !!(b.agreed_client && b.agreed_talent) };
-  return { due: 0, accepted: false };
-}
-async function sweepDeliveryOverdue() {
-  const rows = await db.prepare(`SELECT * FROM bookings WHERE status='in_progress' AND proof_at=0 AND replacement_available=0`).all();
-  let opened = 0;
-  for (const b of rows) {
-    const { due, accepted } = effectiveDeliveryDue(b);
-    if (!due || !accepted || due > now()) continue;
-    await db.prepare('UPDATE bookings SET replacement_available=1 WHERE id=?').run(b.id);
-    await addBookingEvent(b.id, 'delivery_overdue', '⏰ تجاوز موعد التسليم المتفق بلا إثبات تنفيذ — اتفتح للعميل مسار «ضمان الاستبدال» (تفعيله من صفحة الحجز)');
-    await notify(b.talent_id, 'booking', `حجز #${b.id}: ⏰ عدّى موعد التسليم المتفق ولسه ما اتقدّمش إثبات تنفيذ — اتفتح للعميل مسار ضمان الاستبدال. لو نفّذت فعلاً ارفع الإثبات فوراً من صفحة الحجز`, `booking:${b.id}`);
-    if (b.client_id) await notify(b.client_id, 'booking', `حجز #${b.id}: ⏰ عدّى موعد التسليم المتفق بلا إثبات تنفيذ — تقدر تفعّل «ضمان الاستبدال» دلوقتي من صفحة الحجز`, `booking:${b.id}`);
-    await notifyOwner('booking', `حجز #${b.id}: ⏰ تجاوز موعد تسليم بلا إثبات — مسار الاستبدال مفتوح للعميل`, `booking:${b.id}`);
-    opened++;
-  }
-  return opened;
-}
+/* موعد التسليم المنظّم أُلغي بقرار المستخدم 2026-11-23: لا عدّاد تسليم ولا فتح آلي لمسار الاستبدال بمرور وقت — محرّكا الاستبدال الباقيان (إعلان المنفذ عدم القدرة، وصمته ٢٤ ساعة بعد العربون رغم تنبيهين) يمضيان عبر التحكيم الموثّق كما كانا. */
 
 /* ---- قوالب الرد السريعة ---- */
 const DEFAULT_TEMPLATES = [
@@ -3100,42 +3120,7 @@ app.get('/api/my/opportunities', auth, async (req, res) => {
   res.json({ items: rows.map((r) => ({ id: r.id, title: r.title || '', niche: r.niche || '', city: r.city || '', budget: r.budget || 0, currency: r.currency || 'EGP', details: r.details || '', urgent: !!r.urgent, is_guest: !!r.is_guest, match_score: Math.round(r.match_score), created_at: r.created_at })) });
 });
 
-/* ---- موعد التسليم: اقتراح المنفّذ وقبول العميل ---- */
-app.post('/api/bookings/:id/delivery-date', auth, async (req, res) => {
-  const b = await getBooking(+req.params.id);
-  if (!b) return res.status(404).json({ error: 'الحجز غير موجود' });
-  if (b.talent_id !== req.user.id) return res.status(403).json({ error: 'اقتراح موعد التسليم من المنفّذ فقط' });
-  const due = +((req.body || {}).due_at || 0);
-  if (!due || due <= now()) return res.status(400).json({ error: 'اختر موعد تسليم في المستقبل' });
-  if (['completed', 'cancelled', 'disputed'].includes(b.status)) return res.status(400).json({ error: 'الحجز ليس في مرحلة تسمح بموعد تسليم' });
-  await db.prepare('UPDATE bookings SET delivery_due_at=?, delivery_accepted=0 WHERE id=?').run(due, b.id);
-  await addBookingEvent(b.id, 'delivery_proposed', `📅 اقترح المنفّذ موعد التسليم: ${new Date(due).toISOString()} — بانتظار قبول العميل (يقبله ضمن اتفاقه أو من زر القبول)`);
-  if (b.client_id) await notify(b.client_id, 'booking', `حجز #${b.id}: 📅 المنفّذ اقترح موعد تسليم — راجعه واقبله من صفحة الحجز`, `booking:${b.id}`);
-  res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
-});
-app.post('/api/bookings/:id/delivery-date/accept', auth, async (req, res) => {
-  const b = await getBooking(+req.params.id);
-  if (!b) return res.status(404).json({ error: 'الحجز غير موجود' });
-  if (b.client_id !== req.user.id) return res.status(403).json({ error: 'قبول موعد التسليم من العميل فقط' });
-  if (!b.delivery_due_at) return res.status(400).json({ error: 'لا يوجد موعد مقترح لقبوله' });
-  await db.prepare('UPDATE bookings SET delivery_accepted=1 WHERE id=?').run(b.id);
-  await addBookingEvent(b.id, 'delivery_accepted', '📅 قبل العميل موعد التسليم المقترح — العدّاد شغّال وتجاوزه بلا إثبات تنفيذ يفتح مسار الاستبدال');
-  await notify(b.talent_id, 'booking', `حجز #${b.id}: ✅ العميل قبل موعد التسليم المقترح`, `booking:${b.id}`);
-  res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
-});
-/* تفعيل ضمان الاستبدال من العميل بعد فتح المسار آلياً */
-app.post('/api/bookings/:id/activate-replacement', auth, async (req, res) => {
-  const b = await getBooking(+req.params.id);
-  if (!b) return res.status(404).json({ error: 'الحجز غير موجود' });
-  if (b.client_id !== req.user.id) return res.status(403).json({ error: 'التفعيل من العميل فقط' });
-  if (!b.replacement_available) return res.status(400).json({ error: 'مسار الاستبدال غير مفتوح لهذا الحجز' });
-  if (b.replacement_activated) return res.status(400).json({ error: 'المسار مفعّل من قبل' });
-  await db.prepare('UPDATE bookings SET replacement_activated=1 WHERE id=?').run(b.id);
-  const r = await applyOpenDispute(await getBooking(b.id), req.user.id, 'تفعيل ضمان الاستبدال: تجاوز موعد التسليم المتفق بلا إثبات تنفيذ');
-  if (r.error) return res.status(400).json({ error: r.error });
-  await addBookingEvent(b.id, 'replacement_activated', '🔁 فعّل العميل «ضمان الاستبدال» — فُتح نزاع موثّق ومسار الاستبدال/الرد بقواعده المعتمدة');
-  res.json({ ok: true, booking: await bookingView(await getBooking(b.id), req.user) });
-});
+/* مسارات موعد التسليم المنظّم وتفعيل الاستبدال الآلي حُذفت بقرار المستخدم 2026-11-23 (لا موعد تسليم مفروضاً ولا مسار يفتح بساعة) — ضمان الاستبدال بمحرّكيه الباقيين يمضي عبر التحكيم الموثّق. */
 
 /* ---- لوحة المالك: درجات الظهور بعناصرها (شفافية داخلية) ---- */
 app.get('/api/owner/ranking', auth, ownerOnly, async (req, res) => {
@@ -3240,8 +3225,6 @@ async function applyAgree(b, side) {
   if (b.status !== 'pending_agreement') return { error: 'الحجز تجاوز مرحلة الاتفاق' };
   if (side === 'client') {
     await db.prepare('UPDATE bookings SET agreed_client=1 WHERE id=?').run(b.id);
-    // قبول العميل ضمن اتفاق الحجز = قبول موعد التسليم المقترح إن وُجد (موعد منظّم).
-    if (b.delivery_due_at) await db.prepare('UPDATE bookings SET delivery_accepted=1 WHERE id=?').run(b.id);
   }
   else await db.prepare('UPDATE bookings SET agreed_talent=1 WHERE id=?').run(b.id);
   let nb = await getBooking(b.id);
@@ -3364,9 +3347,10 @@ app.post('/api/bookings/:id/pay', auth, async (req, res) => {
   if (!(await termsGateOpen(b))) return res.status(403).json({ error: 'خطوات الدفع مقفلة حتى يقبل الطرفان «شروط المعاملات» — اقرأها ووافق عليها أولاً من صفحة الحجز', terms_required: true, terms: await termsStateFor(b) });
   const r = await applyClientPayment(b, kind, ref);
   if (r.error) return res.status(400).json({ error: r.error });
-  // ربط الدفعة بالتزامها المالي (ادعاء بمرجع — التأكيد بعوامل أخرى كما هو موثق).
-  try { await claimObligationForPayment(r.booking, kind, ref, 'user'); } catch (e) { /* الربط لا يعطّل الدفع */ }
-  res.json({ booking: await bookingView(r.booking, req.user) });
+  // ربط الدفعة بالتزامها المالي (ادعاء بمرجع — التأكيد بعوامل أخرى كما هو
+  // موثق) — عبر الرابط الموثّق: لا ابتلاع صامت لأي فشل (إصلاح حي ٢).
+  const linked = await linkObligationClaim(r.booking, kind, ref, 'user');
+  res.json({ booking: await bookingView(r.booking, req.user), obligation_linked: linked });
 });
 
 app.post('/api/bookings/:id/proof', auth, async (req, res) => {
@@ -3811,8 +3795,9 @@ app.post('/api/guest/:token/pay', async (req, res) => {
   if (!(await termsGateOpen(b))) return res.status(403).json({ error: 'خطوات الدفع مقفلة حتى يقبل الطرفان «شروط المعاملات» — اقرأها ووافق عليها أولاً من صفحة متابعتك', terms_required: true, terms: await termsStateFor(b) });
   const r = await applyClientPayment(b, kind, ref);
   if (r.error) return res.status(400).json({ error: r.error });
-  try { await claimObligationForPayment(r.booking, kind, ref, 'guest'); } catch (e) { /* الربط لا يعطّل الدفع */ }
-  res.json({ booking: await guestBookingView(r.booking) });
+  // ربط الدفعة بالتزامها المالي عبر الرابط الموثّق — لا ابتلاع صامت (إصلاح حي ٢).
+  const linked = await linkObligationClaim(r.booking, kind, ref, 'guest');
+  res.json({ booking: await guestBookingView(r.booking), obligation_linked: linked });
 });
 
 app.post('/api/guest/:token/confirm-receipt', async (req, res) => {
@@ -3920,18 +3905,6 @@ app.post('/api/guest/:token/order-again', async (req, res) => {
     .run(`طلب إعلان — ${b.guest_name || 'عميل'}`, orig ? orig.niche : '', orig ? orig.city : '', budget, b.currency, details, b.guest_name || '', '', guestFingerprint(req), token, b.talent_id, orig ? orig.country : 'EG', 0, now());
   try { await matchRequest(await db.prepare('SELECT * FROM shop_requests WHERE id=?').get(info.lastInsertRowid)); } catch (e) { /* لا يعطّل */ }
   res.json({ id: info.lastInsertRowid, token, follow: `/#/g/${token}` });
-});
-/* تفعيل ضمان الاستبدال من صفحة متابعة الضيف بعد فتح المسار آلياً */
-app.post('/api/guest/:token/activate-replacement', async (req, res) => {
-  const b = await guestBookingByToken(req.params.token);
-  if (!b) return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
-  if (!b.replacement_available) return res.status(400).json({ error: 'مسار الاستبدال غير مفتوح لهذا الحجز' });
-  if (b.replacement_activated) return res.status(400).json({ error: 'المسار مفعّل من قبل' });
-  await db.prepare('UPDATE bookings SET replacement_activated=1 WHERE id=?').run(b.id);
-  const r = await applyOpenDispute(await getBooking(b.id), 0, 'تفعيل ضمان الاستبدال (ضيف): تجاوز موعد التسليم المتفق بلا إثبات تنفيذ');
-  if (r.error) return res.status(400).json({ error: r.error });
-  await addBookingEvent(b.id, 'replacement_activated', '🔁 فعّل العميل الضيف «ضمان الاستبدال» — فُتح نزاع موثّق ومسار الاستبدال/الرد بقواعده المعتمدة');
-  res.json({ ok: true, booking: await guestBookingView(await getBooking(b.id)) });
 });
 /* علم «مستعجل — تنفيذ اليوم» من صفحة متابعة الضيف على حجزه. */
 app.post('/api/guest/:token/urgent', async (req, res) => {
@@ -4108,9 +4081,9 @@ const SUPPORT_KB = [
     a_ar: 'من لوحتك اطلب «كود الملكية» وضعه في بايو أحد حساباتك العلنية أو منشور مثبت، ثم أرسل رابط الحساب للفحص: التطابق يعني توثيقاً فورياً بشارة «موثّق Deal»، وأول موثّق في كل مدينة+مجال يأخذ لقب «رائد المدينة». توجد أيضاً شارات إنجاز تُمنح وتُسحب تلقائياً من سجلك (إتمام مثالي، الأعلى تقييماً، تنفيذ سريع، صانع صاعد، سفير Deal، مخضرم).',
     a_en: 'From your dashboard, request an "ownership code", place it in the bio of one of your public accounts or a pinned post, then submit the account link for checking: a match means instant verification with the "Deal Verified" badge, and the first verified creator in each city+niche earns "City Pioneer". Achievement badges (Perfect Completion, Top Rated, Fast Delivery, Rising Creator, Deal Ambassador, Veteran) are granted and revoked automatically from your record.' },
   { id: 'founder_member', q_ar: 'ما هي شارة «عضو مؤسس»؟', q_en: 'What is the "Founding Member" badge?',
-    keys: ['عضو مؤسس', 'مؤسس', 'اول 100', 'أول ١٠٠', 'founding member', 'first 100', 'founder member'],
-    a_ar: 'أول 100 صانع محتوى يسجلون على Deal يحصلون على شارة «عضو مؤسس» الدائمة في ملفهم — تمييز مبكر لا يُمنح لمن يسجل بعد اكتمال العدد.',
-    a_en: 'The first 100 creators to register on Deal receive a permanent "Founding Member" badge on their profile — an early distinction that is not granted once the first hundred is complete.' },
+    keys: ['عضو مؤسس', 'مؤسس', 'اول 50', 'أول ٥٠', 'founding member', 'first 50', 'founder member'],
+    a_ar: 'أول 50 صانع محتوى يسجلون على Deal يحصلون على شارة «عضو مؤسس» الدائمة في ملفهم — تمييز مبكر لا يُمنح لمن يسجل بعد اكتمال العدد.',
+    a_en: 'The first 50 creators to register on Deal receive a permanent "Founding Member" badge on their profile — an early distinction that is not granted once the first fifty is complete.' },
   { id: 'disputes', q_ar: 'كيف أفتح نزاعاً على حجز؟', q_en: 'How do I open a dispute on a booking?',
     keys: ['نزاع', 'مشكلة في حجز', 'اشتكي', 'شكوى', 'dispute', 'complaint', 'problem with booking'],
     a_ar: 'من داخل الحجز اضغط «فتح نزاع» واكتب السبب: يتجمّد تقدم الحجز فوراً في مرحلته الحالية (لا دفعات جديدة ولا تسليم ولا اكتمال) لحد قرار الإدارة (لصالح طرف + عقوبات موثّقة)، وبتتولّد «حزمة أدلة» تلقائياً من سجل الحجز تقدر تستخدمها في بلاغات حقوق النشر على المنصات. ثم يُحل النزاع إما بإرجاع الحجز لمساره أو إلغائه — وكل ذلك موثّق داخل الحجز نفسه. تنبيه مهم: محادثة الطلب داخل Deal هي قناة الأدلة الوحيدة — أي اتفاق خارجها لا يُقبل دليلاً في التحكيم.',
@@ -4161,8 +4134,8 @@ const SUPPORT_KB = [
     a_en: 'No — any agreement outside the platform does not happen and the platform is not bound by it: no guarantee, arbitration, evidence bundle or rating for anything not opened and documented as a booking inside Deal. The only step that happens outside is executing the transfer itself from your wallet; the agreement, proof, confirmation, delivery, rating and arbitration are all mandatorily inside the platform. Trying to pull the other party into an outside deal is a violation that escalates up to a ban.' },
   { id: 'replacement_deterrence', q_ar: 'ما هو ضمان الاستبدال؟ وما عقوبات الإخلال؟', q_en: 'What is the replacement guarantee? What are the breach penalties?',
     keys: ['ضمان الاستبدال', 'الاستبدال', 'بديل', 'المنفذ اخلف', 'المنفذ ما سلمش', 'عقوبات', 'غرامه اخلال', 'تجميد الحساب', 'حظر نهائي', 'replacement guarantee', 'substitute', 'breach penalty', 'account frozen', 'lifetime ban'],
-    a_ar: 'ضمان الاستبدال بيتفعّل في ٣ حالات بس: المنفذ أعلن عدم قدرته، أو موعد التسليم عدى بلا إثبات تنفيذ، أو المنفذ سكت في محادثة الحجز يوماً كاملاً بعد قبض العربون رغم تنبيهين آليين. ساعتها المنصة بتوفّر بديلاً واحداً موثّقاً من نفس مدينتك ومجالك بنفس السعر والشروط خلال يوم، وانت تقرر خلال ٣ ساعات؛ ولو مفيش بديل مناسب بيُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. والإخلال المالي بيجمّد الحساب آلياً مع علامة «مستحقات متأخرة» وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف عند التكرار)، والاحتيال = حظر نهائي للشخص نفسه. ولا استبدال بعد اعتماد المعاينة.',
-    a_en: 'The replacement guarantee activates in only 3 cases: the provider declares inability, the agreed delivery date passes with no execution proof, or the provider stays silent in the booking chat for a full day after receiving the deposit despite two automatic warnings. The platform then offers exactly one verified substitute from your city and niche at the identical price and terms within a day, and you decide within 3 hours; with no suitable substitute, the deposit is refunded in full by an arbitration decision within 72 hours. Money breaches freeze the account automatically with a public "late dues" marker and a breach penalty of 10% of the deal value (doubling on repetition), and fraud means a lifetime ban of the person. No replacement after the preview is approved.' },
+    a_ar: 'ضمان الاستبدال بيتفعّل في حالتين بس: المنفذ أعلن عدم قدرته، أو المنفذ سكت في محادثة الحجز يوماً كاملاً بعد قبض العربون رغم تنبيهين آليين. ومفيش موعد تسليم بتفرضه المنصة ولا عدّاد تسليم: التوقيت بتتفقوا عليه في محادثة الحجز، ولو حصل خلاف على التأخير فالتحكيم بيحسمه من أدلة المحادثة. ساعتها المنصة بتوفّر بديلاً واحداً موثّقاً من نفس مدينتك ومجالك بنفس السعر والشروط خلال يوم، وانت تقرر خلال ٣ ساعات؛ ولو مفيش بديل مناسب بيُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. والإخلال المالي بيجمّد الحساب آلياً مع علامة «مستحقات متأخرة» وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف عند التكرار)، والاحتيال = حظر نهائي للشخص نفسه. ولا استبدال بعد اعتماد المعاينة.',
+    a_en: 'The replacement guarantee activates in only 2 cases: the provider declares inability, or the provider stays silent in the booking chat for a full day after receiving the deposit despite two automatic warnings. The platform imposes no delivery date and runs no delivery countdown: timing is agreed between you in the booking chat, and any dispute over delay is decided by arbitration on the chat evidence. The platform then offers exactly one verified substitute from your city and niche at the identical price and terms within a day, and you decide within 3 hours; with no suitable substitute, the deposit is refunded in full by an arbitration decision within 72 hours. Money breaches freeze the account automatically with a public "late dues" marker and a breach penalty of 10% of the deal value (doubling on repetition), and fraud means a lifetime ban of the person. No replacement after the preview is approved.' },
   { id: 'quotes', q_ar: 'كيف تعمل عروض الأسعار على طلبي؟', q_en: 'How do price quotes on my request work?',
     keys: ['عروض الاسعار', 'عرض سعر', 'عروض أسعار', 'اقارن العروض', 'اختار عرض', 'quotes', 'price quote', 'compare quotes', 'accept a quote'],
     a_ar: 'لما تنشر «طلب خدمة»، الصناع بيقدّموا عروض أسعار مكتوبة على طلبك نفسه: سعر + مدة تسليم + ملحوظة. العروض بتوصلك في صفحة متابعة طلبك (أو «طلباتي» لو عضو) وبتقارنها جنب بعض وتختار عرضاً واحداً — فيتحول لحجز عادي بضمان Deal وكل قواعده، وبقية العروض بتترفض آلياً برسالة مهذبة. وفيه حد أقصى لعدد العروض على الطلب الواحد ضد الإغراق.',
@@ -6404,7 +6377,7 @@ const ACADEMY_TRACKS = [
     ] },
   { key: 'delivery', ar: 'سلّم واتحمى', en: 'Deliver & stay protected', audience: 'talent', task: 'delivery_apply', task_ar: 'أكمل صفقة واحدة على الأقل عبر Deal', task_en: 'Complete at least one deal through Deal',
     lessons: [
-      L('deadlines', 'المواعيد والعدّادات', 'Deadlines & timers', 'كل خطوة دفع ليها مهلة ٣ ساعات بعدّاد حي، وموعد التسليم المتفق لو عدى بلا إثبات بيفتح للعميل مسار الاستبدال. نظّم يومك حوالين العدّادات دي.', 'Every payment step has a 3-hour live-countdown deadline, and passing the agreed delivery date without proof opens the replacement path for the client. Organize your day around these timers.'),
+      L('deadlines', 'المواعيد والعدّادات', 'Deadlines & timers', 'كل خطوة دفع ليها مهلة ٣ ساعات بعدّاد حي — ودي عدّادات المنصة الوحيدة. مفيش عدّاد تسليم: توقيت التنفيذ بتتفق عليه مع العميل في محادثة الحجز، والاتفاق الموثّق بيحميك عند أي خلاف.', 'Every payment step has a 3-hour live-countdown deadline, — those are the platform\'s only timers. There is no delivery countdown: execution timing is agreed with the client in the booking chat, and the documented agreement protects you in any dispute.'),
       L('proof', 'المعاينة قبل النسخة النهائية', 'Preview before the final file', 'ارفع إثبات التنفيذ كمعاينة أولاً؛ النسخة النهائية ما تتسلمش إلا بعد تأكيد قبض الباقي — ده ضمانك الحقيقي، والمنصة ما بتحتجز فلوس.', 'Upload the delivery proof as a preview first; the final version is delivered only after you confirm receiving the rest — that is your real guarantee, and the platform never holds money.'),
       L('disputes', 'تجنب النزاعات', 'Avoid disputes', 'كل اتفاقك جوه محادثة الحجز بس — هي دليل التحكيم الوحيد. أي اتفاق خارج المنصة المنصة غير ملزمة بيه ومش هيتحسب لصالحك.', 'Keep every agreement inside the booking chat only — it is the sole arbitration evidence. Any agreement outside the platform does not bind the platform and will not count in your favour.'),
     ] },
@@ -6412,7 +6385,7 @@ const ACADEMY_TRACKS = [
     key: `svc_${s.key}`, ar: `احتراف خدمة: ${s.ar}`, en: `Mastering: ${s.en}`, audience: 'talent', task: 'delivery_apply', task_ar: 'أكمل صفقة واحدة على الأقل عبر Deal', task_en: 'Complete at least one deal through Deal',
     lessons: [
       L('intro', `تقديم «${s.ar}» باحتراف`, `Delivering "${s.en}" professionally`, `في خدمة «${s.ar}» العميل بيحكم من أول معاينة. اتفق على المخرجات بالظبط (عدد/صيغة/مدة) في محادثة الحجز قبل ما تبدأ، وسلّم معاينة أولاً دايماً.`, `In "${s.en}", the client judges from the first preview. Agree the exact deliverables (count/format/duration) in the booking chat before you start, and always deliver a preview first.`),
-      L('quality', 'الجودة والتسليم', 'Quality & delivery', 'جودة ثابتة في المعاد أهم من سرعة مرة واحدة: التزم موعد التسليم المنظّم، ولو اتأخرت بلّغ العميل في المحادثة قبل ما يعدي الموعد — التوثيق بيحميك.', 'Consistent on-time quality beats one fast delivery: respect the structured delivery date, and if you will be late, tell the client in the chat before it passes — documentation protects you.'),
+      L('quality', 'الجودة والتسليم', 'Quality & delivery', 'جودة ثابتة في المعاد أهم من سرعة مرة واحدة: اتفق على توقيت التنفيذ مع العميل داخل محادثة الحجز والتزم بيه، ولو هتتأخر بلّغه في المحادثة بدري — التوثيق بيحميك.', 'Consistent on-time quality beats one fast delivery: agree the execution timing with the client inside the booking chat and stick to it, and if you will be late, say so in the chat early — documentation protects you.'),
     ],
   })),
   { key: 'clients_general', ar: 'اطلب أي خدمة بنجاح', en: 'Order any service successfully', audience: 'client', task: 'client_apply', task_ar: 'انشر طلب خدمة واحد على الأقل', task_en: 'Post at least one service request',

@@ -67,6 +67,43 @@ app.use('/api', async (req, res, next) => {
   try { await init(); next(); } catch (e) { next(e); }
 });
 
+/* ---------------- وضع الصيانة (الجولة الأخيرة الشاملة — TESTING-FINAL.md) ----------------
+   مفتاح مالك في platform_settings ('maintenance_mode'). عند التفعيل: كل
+   مسارات API لغير المالك ترجع 503 MAINTENANCE فترسم الواجهة شاشة صيانة
+   واحدة موسومة. استثناءات مقصودة: /api/health (فحص الحياة)، /api/config
+   (سطح الإعداد العام نفسه — منه تعرف الواجهة الحالة)، ومسارات /api/auth/*
+   كلها (لازم المالك يقدر يسجّل دخوله)، وخطّافات الاختبار. المؤسس يتجاوز
+   بالكامل: جلسته تعمل طبيعياً وهو وحده من يفعّل/يوقف من لوحته. */
+async function maintenanceEnabled() {
+  try { return (await getSetting('maintenance_mode')) === '1'; } catch (e) { return false; }
+}
+app.use('/api', async (req, res, next) => {
+  // originalUrl: المسار الكامل دائماً (req.path داخل وسيط مُركَّب على /api يُجرَّد من البادئة).
+  const p = String(req.originalUrl || req.url || '').split('?')[0];
+  if (p === '/api/health' || p === '/api/config' || p.startsWith('/api/auth/') || p.includes('/_test/')) return next();
+  let on = false;
+  try { on = await maintenanceEnabled(); } catch (e) { on = false; }
+  if (!on) return next();
+  // تجاوز المؤسس: حلّ الجلسة اختيارياً هنا (نفس منطق auth بلا رفض).
+  try {
+    const token = (req.headers.authorization || '').replace('Bearer ', '');
+    if (token) {
+      const s = await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
+      if (s) { const u = await getUser(s.user_id); if (u && u.is_platform_founder && !u.banned && !u.deleted_at) return next(); }
+    }
+  } catch (e) { /* أي عطل في الحلّ = لا تجاوز */ }
+  return res.status(503).json({ error: 'بنعمل صيانة سريعة — راجعين قريباً', code: 'MAINTENANCE', maintenance: true });
+});
+/* سطح الإعداد العام: مفتاح Turnstile العلني (يظهر فقط عند ضبط متغير
+   البيئة — انضباط البوابات البيئية نفسه كبريد/ذكاء اصطناعي) + حالة
+   الصيانة الحالية لترسم الواجهة شاشتها من أول إقلاع. */
+app.get('/api/config', async (req, res) => {
+  res.json({
+    turnstile_site_key: process.env.TURNSTILE_SITE_KEY || null,
+    maintenance: await maintenanceEnabled(),
+  });
+});
+
 const now = () => Date.now();
 const rnd = (n) => crypto.randomBytes(n).toString('hex');
 
@@ -657,6 +694,26 @@ async function getSetting(key) {
 async function setSetting(key, value) {
   await db.prepare(`INSERT INTO platform_settings (key, value, updated_at) VALUES (?,?,?)
     ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at`).run(key, String(value || ''), now());
+}
+/* ---------------- سجلا الجولة الأخيرة: أخطاء الخادم + تدقيق المالك ----------------
+   logServerError: يُستدعى من معالج الأخطاء الأخير (وكل 500 ملتقط) فيسجّل
+   المسار والرسالة ومعرّف المستخدم إن وُجد — بلا أي حمولة طلب إطلاقاً
+   (لا كلمات سر ولا رموز ولا أجساد طلبات). فشله لا يعطّل الاستجابة أبداً.
+   logOwnerAction: تدقيق إجراءات المالك — يُخطَف في نهايات مسارات المالك
+   القائمة دون تغيير سلوكها (actor/action/target/timestamp). */
+async function logServerError(req, err) {
+  try {
+    const route = req ? `${req.method || ''} ${String(req.originalUrl || req.url || '').split('?')[0]}`.slice(0, 200) : '';
+    const message = String((err && err.message) || err || '').slice(0, 500);
+    const userId = req && req.user && req.user.id ? req.user.id : null;
+    await db.prepare('INSERT INTO error_log (route,message,user_id,created_at) VALUES (?,?,?,?)').run(route, message, userId, now());
+  } catch (e) { /* التسجيل نفسه لا يعطّل شيئاً أبداً */ }
+}
+async function logOwnerAction(req, action, target = '', detail = '') {
+  try {
+    await db.prepare('INSERT INTO owner_audit_log (actor_id,action,target,detail,created_at) VALUES (?,?,?,?,?)')
+      .run(req.user.id, String(action).slice(0, 60), String(target || '').slice(0, 120), String(detail || '').slice(0, 300), now());
+  } catch (e) { /* التدقيق لا يعطّل الإجراء نفسه أبداً */ }
 }
 /* تسوية مؤكدة صفقةً بصفقة لالتزام (صف obligation_settlements بحالة
    confirmed) — تُستخدم لحساب «المُسوّى» في وضع التسوية لكل التزام. */
@@ -1278,6 +1335,30 @@ app.post('/api/auth/register', async (req, res) => {
      وتأكيد سن ١٨+ يُرفض التسجيل خادمياً؛ القبول يُسجَّل بالإصدار والوقت. */
   if ((req.body || {}).tos_accepted !== true) return res.status(400).json({ error: 'لازم توافق على شروط الاستخدام الأول عشان تسجل', tos_required: true, tos_version: TOS_VERSION });
   if ((req.body || {}).age_confirmed !== true) return res.status(400).json({ error: 'التسجيل لمن هم ١٨ سنة أو أكثر فقط — أكّد سنك', age_required: true });
+  /* تحقق Cloudflare Turnstile عند التسجيل (الجولة الأخيرة — بوابة بيئية):
+     لا يعمل إطلاقاً إلا عند ضبط TURNSTILE_SECRET_KEY؛ بلا المتغير سلوك
+     التسجيل هو سلوك اليوم حرفياً. في بيئة الاختبار (DEAL_TEST_HOOKS=1)
+     يُحاكى التحقق محلياً برمز ثابت بدل نداء Cloudflare الحقيقي. */
+  if (process.env.TURNSTILE_SECRET_KEY) {
+    const tsToken = String((req.body || {}).turnstile_token || '');
+    let tsOk = false;
+    if (process.env.DEAL_TEST_HOOKS === '1') {
+      tsOk = tsToken === 'test-good-token';
+    } else if (tsToken) {
+      try {
+        const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 5000);
+        const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+          method: 'POST', signal: ctrl.signal,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ secret: process.env.TURNSTILE_SECRET_KEY, response: tsToken }),
+        });
+        clearTimeout(tm);
+        const vj = await vr.json().catch(() => null);
+        tsOk = !!(vj && vj.success);
+      } catch (e) { tsOk = false; }
+    }
+    if (!tsOk) return res.status(400).json({ error: 'أكمل تحقق الأمان أولاً ثم حاول تاني', code: 'TURNSTILE_FAILED' });
+  }
   const { name, role, niche = '', provider_category = null, provider_custom = '', city = '', followers = 0, price = 0, bio = '', links = '' } = req.body || {};
   // الدولة من القائمة المدعومة (افتراضي مصر)، والعملة تُشتق منها خادمياً
   // — لا تُقبل عملة من العميل أبداً حتى لا ينفصل السعر عن بلد صاحبه.
@@ -1682,6 +1763,9 @@ if (process.env.DEAL_TEST_HOOKS === '1') {
   app.get('/api/support/_test/ai-calls', (req, res) => {
     res.json({ calls: global.__dealAiCalls || [], configured: aiSupport.configured(), provider: aiSupport.provider, model: aiSupport.MODEL });
   });
+  /* خطّاف سجل الأخطاء (الجولة الأخيرة — بند ٢): خطأ مُستحدَث عمداً للتحقق
+     أن المعالج الأخير يرد رداً نظيفاً ويكتب صف سجل في آن واحد. */
+  app.post('/api/_test/boom', (req, res) => { throw new Error('induced test error (FIN)'); });
 }
 
 /* ---------------- البلاغات (محتوى وملفات) ----------------
@@ -2377,6 +2461,10 @@ app.post('/api/messages/:userId', auth, async (req, res) => {
   const other = await getUser(+req.params.userId);
   if (!other) return res.status(404).json({ error: 'غير موجود' });
   if (other.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك مراسلة نفسك' });
+  /* حظر عضو↔عضو (الجولة الأخيرة — بند ٩): حظر من أي جهة يمنع بدء/متابعة
+     المراسلة المباشرة بين الطرفين. محادثة الحجز داخل حجز قائم مسار منفصل
+     تماماً ولا يمسّه الحظر (أدلة وسلامة). */
+  if (await blockBetween(req.user.id, other.id)) return res.status(403).json({ error: BLOCKED_ERROR, code: 'BLOCKED' });
   if (other.banned || other.frozen) return res.status(400).json({ error: 'هذا الحساب غير متاح للمراسلة حالياً' });
   /* بوابة المراسلة (قرار المالك): عضو↔عضو للأصدقاء المقبولين فقط (المحادثات
      القائمة مع غير أصدقاء تبقى قابلة للقراءة، والإرسال وحده يُرفض). واستثناء
@@ -2702,6 +2790,14 @@ async function bookingView(b, viewer) {
   view.terms = await termsStateFor(b); // بوابة «شروط المعاملات»: قبول الطرفين قبل أول خطوة دفع
   if (viewer) view.terms.mine_accepted = viewer.id === b.client_id ? view.terms.client_accepted : viewer.id === b.talent_id ? view.terms.talent_accepted : false;
   view.events = await bookingEvents(b.id); // رسائل نظام محادثة الطلب
+  /* الخط الزمني الموحّد (الجولة الأخيرة — ١٣أ): نفس مصفوفة الأحداث نفسها
+     تُبنى مرة واحدة هنا وتُسلَّم للطرفين حرفياً — لا نسخة عميل ونسخة مقدم،
+     فما يراه الطرفان في أي لحظة متطابق حدثاً بحدث. */
+  view.timeline = view.events;
+  /* قرار التحكيم المسبّب (١٣ب): آخر نزاع محسوم على هذا الحجز — سببه ومراجع
+     أدلته ظاهرة للطرفين في عرض الحجز نفسه. */
+  { const rd = await db.prepare(`SELECT decision_reason, evidence_refs, decided_by, resolved_at FROM disputes WHERE booking_id=? AND status='resolved' ORDER BY id DESC LIMIT 1`).get(b.id);
+    view.arbitration = rd && rd.decision_reason ? { reason: rd.decision_reason, evidence_refs: (() => { try { return JSON.parse(rd.evidence_refs || '[]'); } catch (e) { return []; } })(), decided_by: rd.decided_by || null, decided_at: rd.resolved_at || 0 } : null; }
   view.official_report_available = viewer ? !!(await officialReportEligibility(b, viewer.id)) : false; // زر «تقرير أدلة رسمي» بعد ثبوت احتيال/إخلال
   /* نموذج التسليم (قرار المستخدم 2026-11-23): لا موعد تسليم منظّماً ولا عدّاد
      تسليم في Deal — التوقيت اتفاق بين الطرفين داخل محادثة الحجز (دليل تحكيم)،
@@ -2779,8 +2875,8 @@ async function addBookingEvent(bookingId, kind, body = '') {
   catch (e) { /* توثيق الحدث لا يعطّل الحركة نفسها أبداً */ }
 }
 async function bookingEvents(bookingId, limit = 100) {
-  const rows = await db.prepare('SELECT kind,body,created_at FROM booking_events WHERE booking_id=? ORDER BY created_at ASC, id ASC LIMIT ?').all(bookingId, limit);
-  return rows.map((e) => ({ sender: 'system', kind: e.kind, body: e.body, created_at: e.created_at }));
+  const rows = await db.prepare('SELECT id,kind,body,created_at FROM booking_events WHERE booking_id=? ORDER BY created_at ASC, id ASC LIMIT ?').all(bookingId, limit);
+  return rows.map((e) => ({ id: e.id, sender: 'system', kind: e.kind, body: e.body, created_at: e.created_at }));
 }
 
 /* ---- «شروط المعاملات» (deal-tx-terms-v6): الوثيقة التي يقبلها الطرفان قبل
@@ -3824,6 +3920,8 @@ app.post('/api/bookings', auth, async (req, res) => {
   if (talent.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً' });
   if (founderClientBlocked(req, res)) return;
   if (talent.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك حجز نفسك' });
+  /* حظر عضو↔عضو (الجولة الأخيرة — بند ٩): لا حجز جديداً بين طرفين بينهما حظر. */
+  if (await blockBetween(req.user.id, talent.id)) return res.status(403).json({ error: BLOCKED_ERROR, code: 'BLOCKED' });
   if (talent.penalty_level === 'suspended' || talent.frozen) return res.status(403).json({ error: 'هذا الحساب معلّق حالياً ولا يستقبل حجوزات' });
   if (onVacation(talent)) return res.status(400).json({ error: 'المنفذ في إجازة حالياً ولا يستقبل حجوزات جديدة حتى عودته' });
   if (req.user.frozen) return res.status(403).json({ error: 'حسابك مجمّد حالياً (مستحقات متأخرة أو عقوبة) — سدّد مستحقاتك الموثّقة أولاً فيُفكّ التجميد آلياً' });
@@ -3860,6 +3958,17 @@ app.get('/api/bookings/:id', auth, async (req, res) => {
   const b = await getBooking(+req.params.id);
   if (!b || (b.client_id !== req.user.id && b.talent_id !== req.user.id && !req.user.is_platform_founder)) return res.status(404).json({ error: 'غير موجود' });
   res.json({ booking: await bookingView(b, req.user) });
+});
+
+/* الخط الزمني الموحّد للحجز (الجولة الأخيرة — ١٣أ): مسار قراءة واحد يعيد
+   مصفوفة الأحداث نفسها لأي طرف — العميل والمقدم والمؤسس يرون البنية
+   ذاتها حدثاً بحدث (لا تشكيل حسب الرائي إطلاقاً)، ومعها قرار التحكيم
+   المسبّب إن وُجد. */
+app.get('/api/bookings/:id/timeline', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b || (b.client_id !== req.user.id && b.talent_id !== req.user.id && !req.user.is_platform_founder)) return res.status(404).json({ error: 'غير موجود' });
+  const view = await bookingView(b, req.user);
+  res.json({ booking_id: b.id, events: view.timeline, arbitration: view.arbitration });
 });
 
 /* إجراءات طرف العميل في آلة حالات الحجز — مشتركة بين العميل المسجل وعميل الضيف
@@ -6032,6 +6141,7 @@ app.post('/api/owner/ambassadors', auth, ownerOnly, async (req, res) => {
   if (target.banned) return res.status(400).json({ error: 'العضو محظور — لا يمكن تعيينه سفيراً' });
   const out = await appointAmbassadorCore({ target, city, country, collection_phone, compensation, settlement_method, byUserId: req.user.id });
   if (out.error) return res.status(400).json({ error: out.error });
+  await logOwnerAction(req, 'ambassador_appoint', `user:${target.id}`, `${country}/${city}`);
   res.json({ ok: true, appointment: await ambassadorView(out.appointment) });
 });
 app.post('/api/owner/ambassadors/:id/remove', auth, ownerOnly, async (req, res) => {
@@ -6109,6 +6219,7 @@ app.post('/api/owner/ambassador-applications/:id/approve', auth, ownerOnly, asyn
   if (out.error) return res.status(400).json({ error: out.error });
   await db.prepare(`UPDATE ambassador_applications SET status='approved', decided_at=?, decided_by=?, ambassador_id=? WHERE id=?`)
     .run(now(), req.user.id, out.appointment.id, a.id);
+  await logOwnerAction(req, 'ambassador_approve', `application:${a.id}`, `user:${a.user_id} ${a.country}/${a.city}`);
   const fresh = await db.prepare('SELECT * FROM ambassador_applications WHERE id=?').get(a.id);
   res.json({ ok: true, application: ambassadorApplicationView(fresh, target), appointment: await ambassadorView(out.appointment) });
 });
@@ -6117,6 +6228,7 @@ app.post('/api/owner/ambassador-applications/:id/reject', auth, ownerOnly, async
   if (!a || a.status !== 'open') return res.status(404).json({ error: 'الطلب غير موجود أو تم البت فيه' });
   await db.prepare(`UPDATE ambassador_applications SET status='rejected', decided_at=?, decided_by=? WHERE id=?`)
     .run(now(), req.user.id, a.id);
+  await logOwnerAction(req, 'ambassador_reject', `application:${a.id}`, `user:${a.user_id} ${a.country}/${a.city}`);
   await notify(a.user_id, 'ambassador_application', 'وصل قرار طلبك كسفير — لم يتم الاعتماد هذه المرة، وتقدر تتقدم تاني بعد تطوير ملفك', 'ambassador');
   const fresh = await db.prepare('SELECT * FROM ambassador_applications WHERE id=?').get(a.id);
   res.json({ ok: true, application: ambassadorApplicationView(fresh, await getUser(a.user_id)) });
@@ -6164,14 +6276,16 @@ async function composeOwnerDigest() {
 }
 app.post('/api/owner/send-digest', auth, ownerOnly, async (req, res) => {
   const { subject, text, stats } = await composeOwnerDigest();
-  if (!mailer.configured()) return res.json({ ok: true, sent: false, reason: 'email_not_configured', stats });
+  if (!mailer.configured()) { await logOwnerAction(req, 'digest_send', 'owner', 'sent:false reason:email_not_configured'); return res.json({ ok: true, sent: false, reason: 'email_not_configured', stats }); }
   const founder = req.user;
   const to = [founder.recovery_email, founder.contact].find((x) => x && String(x).includes('@'));
-  if (!to) return res.json({ ok: true, sent: false, reason: 'no_owner_email', stats });
+  if (!to) { await logOwnerAction(req, 'digest_send', 'owner', 'sent:false reason:no_owner_email'); return res.json({ ok: true, sent: false, reason: 'no_owner_email', stats }); }
   try {
     await mailer.sendMail({ to, subject, text });
+    await logOwnerAction(req, 'digest_send', 'owner', 'sent:true');
     res.json({ ok: true, sent: true, stats });
   } catch (e) {
+    await logOwnerAction(req, 'digest_send', 'owner', 'sent:false reason:send_failed');
     res.json({ ok: true, sent: false, reason: 'send_failed', stats });
   }
 });
@@ -6672,6 +6786,9 @@ async function acceptQuote(rq, quoteId, agr = { revisions: null, deliveryAt: 0 }
   if (!talent || talent.banned) return { error: 'الصانع غير متاح' };
   const clientU = (!rq.is_guest && rq.shop_user_id) ? await getUser(rq.shop_user_id) : null;
   if (clientU && clientU.is_platform_founder) return { error: FOUNDER_NO_CLIENT_ERROR };
+  /* حظر عضو↔عضو (الجولة الأخيرة — بند ٩): قبول عرض يفتح حجزاً = بدء تعامل
+     جديد، فيُمنع بين طرفين بينهما حظر (مسار الضيف بلا حساب خارج الحظر). */
+  if (clientU && await blockBetween(clientU.id, talent.id)) return { error: BLOCKED_ERROR, status: 403 };
   // بوابة الهوية المالية (محرك المخاطر الحي): تُفحص على طرفي الحجز الجديد
   // (المنفذ دائماً، والعميل العضو حين يوجد — الضيف بلا حساب خارج النقاط).
   if (+q.price > RISK_FIN_IDENTITY_THRESHOLD) {
@@ -7661,6 +7778,7 @@ app.post('/api/owner/reports/:id/resolve', auth, ownerOnly, async (req, res) => 
   }
   await db.prepare(`UPDATE reports SET status=?, action=?, resolved_at=?, resolved_by=? WHERE id=?`)
     .run(action === 'ignore' ? 'ignored' : 'actioned', action, now(), req.user.id, r.id);
+  await logOwnerAction(req, 'moderation', `report:${r.id}`, `action:${action} target_user:${r.target_user_id || ''}`);
   res.json({ ok: true });
 });
 app.get('/api/owner/dashboard', auth, ownerOnly, async (req, res) => {
@@ -7700,6 +7818,23 @@ app.post('/api/owner/disputes/:id/resolve', auth, ownerOnly, async (req, res) =>
   const d = await db.prepare('SELECT * FROM disputes WHERE id=?').get(+req.params.id);
   if (!d || d.status !== 'open') return res.status(404).json({ error: 'نزاع غير مفتوح' });
   const { action = 'restore', note = '' } = req.body || {};
+  /* قرار تحكيم مسبّب (الجولة الأخيرة — ١٣ب): لا قرار بلا سبب مكتوب ومرجع
+     دليل واحد على الأقل من سجل هذا الحجز نفسه (حدث خط زمني «event:<id>»
+     أو التزام مالي «obligation:<id>») — السبب والمراجع تُحفظ على النزاع
+     وتظهر للطرفين في عرض الحجز، فلا حسم صامتاً في Deal. */
+  const reason = String((req.body || {}).reason || note || '').trim();
+  if (!reason) return res.status(400).json({ error: 'قرار التحكيم لازم يكون مسبّباً — اكتب سبب القرار أولاً', code: 'REASON_REQUIRED' });
+  const rawRefs = Array.isArray((req.body || {}).evidence_refs) ? (req.body || {}).evidence_refs : [];
+  const evidenceRefs = rawRefs.map((x) => String(x || '').trim()).filter(Boolean);
+  if (!evidenceRefs.length) return res.status(400).json({ error: 'قرار التحكيم لازم يستند لدليل واحد على الأقل من سجل الحجز', code: 'EVIDENCE_REQUIRED' });
+  for (const ref of evidenceRefs) {
+    const m = /^(event|obligation):(\d+)$/.exec(ref);
+    if (!m) return res.status(400).json({ error: `مرجع دليل غير مفهوم: ${ref}`, code: 'EVIDENCE_INVALID' });
+    const row = m[1] === 'event'
+      ? await db.prepare('SELECT id FROM booking_events WHERE id=? AND booking_id=?').get(+m[2], d.booking_id)
+      : await db.prepare('SELECT id FROM money_obligations WHERE id=? AND booking_id=?').get(+m[2], d.booking_id);
+    if (!row) return res.status(400).json({ error: `مرجع الدليل ${ref} لا يخص هذا الحجز`, code: 'EVIDENCE_INVALID' });
+  }
   const b = await getBooking(d.booking_id);
   const target = action === 'cancel' ? 'cancelled' : (b.prev_status || 'pending_agreement');
   if (action === 'cancel') {
@@ -7747,7 +7882,9 @@ app.post('/api/owner/disputes/:id/resolve', auth, ownerOnly, async (req, res) =>
     }
     await establishBreach(b.client_id, await getBooking(b.id), `ادعاء عدم استلام كاذب ثبّته تحكيم المالك في نزاع #${d.id}`);
   }
-  await db.prepare(`UPDATE disputes SET status='resolved', resolution=?, resolved_at=? WHERE id=?`).run(note || action, now(), d.id);
+  await db.prepare(`UPDATE disputes SET status='resolved', resolution=?, decision_reason=?, evidence_refs=?, decided_by=?, resolved_at=? WHERE id=?`).run(reason, reason, JSON.stringify(evidenceRefs), req.user.id, now(), d.id);
+  await addBookingEvent(b.id, 'arbitration_decision', `⚖️ قرار تحكيم مسبّب (${action === 'cancel' ? 'إلغاء الحجز' : 'استئناف الحجز'}): ${reason} — مراجع الأدلة: ${evidenceRefs.join('، ')}`);
+  await logOwnerAction(req, 'arbitration_decision', `dispute:${d.id}`, `booking:${b.id} action:${action} refs:${evidenceRefs.join(',')}`);
   await notify(b.client_id, 'dispute', `اتحل نزاع حجز #${b.id}`, `booking:${b.id}`);
   await notify(b.talent_id, 'dispute', `اتحل نزاع حجز #${b.id}`, `booking:${b.id}`);
   res.json({ ok: true });
@@ -7767,6 +7904,7 @@ app.post('/api/owner/bookings/:id/void-protection', auth, ownerOnly, async (req,
   const flagIds = Array.isArray((req.body || {}).flag_user_ids) ? (req.body.flag_user_ids || []).map((x) => +x).filter((x) => x === b.client_id || x === b.talent_id) : [];
   await db.prepare('UPDATE bookings SET protection_voided=1, protection_voided_at=?, protection_voided_by=?, prev_status=status, status=? WHERE id=?')
     .run(now(), req.user.id, 'cancelled', b.id);
+  await logOwnerAction(req, 'void_protection', `booking:${b.id}`, `flagged:${flagIds.join(',') || 'none'}`);
   await closeOpenAppeal(b.id, 'closed_dispute');
   await addBookingEvent(b.id, 'protection_voided', `🚫 أُلغيت حماية هذا الحجز بقرار المالك: ${note} — قاعدة Deal: خدمات المنصة (الضمان والتحكيم وحزمة الأدلة والتقييمات) للصفقات المفتوحة والموثّقة داخل المنصة فقط، ولا تغطية رجعية لأي اتفاق خارجي`);
   for (const uid of flagIds) {
@@ -7817,12 +7955,218 @@ app.post('/api/owner/bookings/:id/reject-fee', auth, ownerOnly, async (req, res)
   res.json({ ok: true });
 });
 
+/* ================= الجولة الأخيرة الشاملة (TESTING-FINAL.md) =================
+   بنود ١–١٣: صيانة، سجل أخطاء، تدقيق مالك، نسخ احتياطي، قائمة إكمال
+   الملف، قمع النمو، تنزيل البيانات، الحظر، إعلان المالك، تصدير مالي. */
+
+/* ---- بند ٩: الحظر بين الأعضاء ---- */
+const BLOCKED_ERROR = 'لا يمكن بدء تواصل أو تعامل جديد — يوجد حظر بينك وبين هذا العضو · Blocked — neither side can start new contact';
+async function blockBetween(a, b) {
+  if (!a || !b || a === b) return false;
+  const r = await db.prepare('SELECT id FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?) LIMIT 1').get(a, b, b, a);
+  return !!r;
+}
+app.post('/api/users/:id/block', auth, async (req, res) => {
+  const other = await getUser(+req.params.id);
+  if (!other) return res.status(404).json({ error: 'غير موجود' });
+  if (other.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك حظر نفسك' });
+  await db.prepare('INSERT INTO user_blocks (blocker_id,blocked_id,created_at) VALUES (?,?,?) ON CONFLICT DO NOTHING').run(req.user.id, other.id, now());
+  res.json({ ok: true, blocked: true });
+});
+app.delete('/api/users/:id/block', auth, async (req, res) => {
+  await db.prepare('DELETE FROM user_blocks WHERE blocker_id=? AND blocked_id=?').run(req.user.id, +req.params.id);
+  res.json({ ok: true, blocked: false });
+});
+app.get('/api/me/blocks', auth, async (req, res) => {
+  const rows = await db.prepare('SELECT blocked_id, created_at FROM user_blocks WHERE blocker_id=? ORDER BY id DESC').all(req.user.id);
+  const items = [];
+  for (const r of rows) { const u = await getUser(r.blocked_id); if (u) items.push({ id: u.id, name: u.name, blocked_at: r.created_at }); }
+  res.json({ items });
+});
+
+/* ---- بند ١: مفتاح وضع الصيانة بيد المالك ---- */
+app.get('/api/owner/maintenance', auth, ownerOnly, async (req, res) => {
+  res.json({ on: await maintenanceEnabled() });
+});
+app.post('/api/owner/maintenance', auth, ownerOnly, async (req, res) => {
+  const on = !!(req.body || {}).on;
+  await setSetting('maintenance_mode', on ? '1' : '0');
+  await logOwnerAction(req, on ? 'maintenance_on' : 'maintenance_off', 'platform', '');
+  res.json({ ok: true, on });
+});
+
+/* ---- بند ٢: سجل الأخطاء الداخلي (قراءة المالك فقط) ---- */
+app.get('/api/owner/error-log', auth, ownerOnly, async (req, res) => {
+  const items = await db.prepare('SELECT id,route,message,user_id,created_at FROM error_log ORDER BY id DESC LIMIT 100').all();
+  res.json({ items });
+});
+
+/* ---- بند ٣: سجل تدقيق إجراءات المالك (قراءة فقط) ---- */
+app.get('/api/owner/audit-log', auth, ownerOnly, async (req, res) => {
+  const items = await db.prepare('SELECT id,actor_id,action,target,detail,created_at FROM owner_audit_log ORDER BY id DESC LIMIT 100').all();
+  res.json({ items });
+});
+
+/* ---- بند ٤: النسخ الاحتياطي الأسبوعي ----
+   تصدير JSON كامل لكل الجداول (عدا جدول النسخ نفسه حتى لا تتناسخ النسخ
+   داخل بعضها) يُحفظ في جدول backups وتُبقى أحدث ٤ نسخ فقط. الاستعادة
+   خارج النطاق في هذه الجولة (موثّق في TESTING-FINAL.md). نداء مجدوَل
+   أسبوعي خارجي يضرب POST /api/owner/backup-now بنفس جلسة المالك — مثل
+   الملخص الأسبوعي تماماً. */
+async function createBackup() {
+  const trows = (await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name<>'backups' ORDER BY table_name`)).rows;
+  const tables = {};
+  for (const t of trows) {
+    const name = t.table_name;
+    tables[name] = (await pool.query(`SELECT * FROM "${name}"`)).rows;
+  }
+  const payload = JSON.stringify({ app: 'deal', created_at: now(), tables });
+  const size = Buffer.byteLength(payload, 'utf8');
+  const info = await db.prepare('INSERT INTO backups (created_at,size_bytes,tables_count,data) VALUES (?,?,?,?)').run(now(), size, trows.length, payload);
+  await db.prepare('DELETE FROM backups WHERE id NOT IN (SELECT id FROM backups ORDER BY id DESC LIMIT 4)').run();
+  return { id: info.lastInsertRowid, created_at: now(), size_bytes: size, tables_count: trows.length };
+}
+app.post('/api/owner/backup-now', auth, ownerOnly, async (req, res) => {
+  const b = await createBackup();
+  await logOwnerAction(req, 'backup_create', `backup:${b.id}`, `${b.tables_count} tables, ${b.size_bytes} bytes`);
+  res.json({ ok: true, backup: b });
+});
+app.get('/api/owner/backups', auth, ownerOnly, async (req, res) => {
+  const items = await db.prepare('SELECT id,created_at,size_bytes,tables_count FROM backups ORDER BY id DESC').all();
+  res.json({ items, last_backup_at: items.length ? items[0].created_at : 0 });
+});
+app.get('/api/owner/backups/latest/download', auth, ownerOnly, async (req, res) => {
+  const b = await db.prepare('SELECT * FROM backups ORDER BY id DESC LIMIT 1').get();
+  if (!b) return res.status(404).json({ error: 'لا توجد نسخة احتياطية بعد' });
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="deal-backup-${b.id}.json"`);
+  res.send(b.data);
+});
+
+/* ---- بند ٥: «أكمِل ملفك» + إشارة نسخ الرابط الشخصي ----
+   الإشارة المختارة لنسخ الرابط (موثّقة في TESTING-FINAL.md): ختم خادمي
+   users.link_copied_at يُكتب عند أول نداء POST /api/me/link-copied من
+   أزرار نسخ الرابط الشخصي في الواجهة — إشارة حقيقية من فعل المستخدم
+   نفسه، لا تخمين. القائمة تُبنى من حالة حقيقية فقط، والمؤسس مستثنى. */
+app.post('/api/me/link-copied', auth, async (req, res) => {
+  if (!req.user.link_copied_at) await db.prepare('UPDATE users SET link_copied_at=? WHERE id=?').run(now(), req.user.id);
+  res.json({ ok: true, link_copied_at: req.user.link_copied_at || now() });
+});
+app.get('/api/me/profile-checklist', auth, async (req, res) => {
+  const u = req.user;
+  if (u.is_platform_founder || !['creator', 'provider'].includes(u.role)) return res.json({ applicable: false, items: [], progress_pct: 100 });
+  const samples = (await db.prepare('SELECT COUNT(*) c FROM portfolio_items WHERE user_id=?').get(u.id)).c;
+  const packages = (await db.prepare('SELECT COUNT(*) c FROM creator_packages WHERE user_id=?').get(u.id)).c;
+  const items = [
+    { key: 'photo', done: !!String(u.avatar || '').trim() },
+    { key: 'bio', done: !!String(u.bio || '').trim() },
+    { key: 'samples', done: samples > 0 },
+    { key: 'packages', done: packages > 0 },
+    { key: 'fin_identity', done: !!u.fin_declared_at },
+    { key: 'link_copied', done: !!u.link_copied_at },
+  ];
+  const doneCount = items.filter((i) => i.done).length;
+  res.json({ applicable: true, items, done: doneCount, total: items.length, progress_pct: Math.round((doneCount / items.length) * 100) });
+});
+
+/* ---- بند ٦: عدّاد مشاهدات أولي + قمع نمو المالك ----
+   page_views: بصمة زائر مجهولة (نفس مفتاح الزائر المحلي) + يوم — بلا أي
+   تحليلات خارجية وبلا بيانات شخصية. القمع من سجلات حقيقية فقط. */
+app.post('/api/page-view', async (req, res) => {
+  const vid = String((req.body || {}).vid || '').slice(0, 80);
+  if (!vid) return res.status(400).json({ error: 'vid required' });
+  const vidHash = crypto.createHash('sha256').update(`deal-pv:${vid}`).digest('hex');
+  const day = new Date().toISOString().slice(0, 10);
+  await db.prepare('INSERT INTO page_views (vid_hash,day,created_at) VALUES (?,?,?)').run(vidHash, day, now());
+  res.json({ ok: true });
+});
+app.get('/api/owner/growth-funnel', auth, ownerOnly, async (req, res) => {
+  const cnt = async (sql, ...args) => +(await db.prepare(sql).get(...args)).c || 0;
+  const views = await cnt('SELECT COUNT(*) c FROM page_views');
+  const visitors = await cnt('SELECT COUNT(DISTINCT vid_hash) c FROM page_views');
+  const registrations = await cnt('SELECT COUNT(*) c FROM users WHERE is_platform_founder=0');
+  const emailVerified = await cnt('SELECT COUNT(*) c FROM users WHERE is_platform_founder=0 AND email_verified=1');
+  const firstBookingCreators = await cnt('SELECT COUNT(DISTINCT talent_id) c FROM bookings');
+  const completedBookings = await cnt(`SELECT COUNT(*) c FROM bookings WHERE status='completed'`);
+  res.json({ page_views: views, unique_visitors: visitors, registrations, email_verified: emailVerified, creators_with_first_booking: firstBookingCreators, completed_bookings: completedBookings });
+});
+
+/* ---- بند ٧: «نزّل بياناتي» ----
+   القاعدة المختارة (موثّقة في TESTING-FINAL.md): قاعدة العضو نفسها تسرى
+   على الجميع بمن فيهم المؤسس — كل حساب ينزّل بياناته هو فقط. الرسائل
+   ببياناتها الوصفية فقط (من/إلى/متى — بلا نصوص)، والحجوزات بلا رمز
+   الضيف، والملف بلا كلمة السر إطلاقاً. */
+app.get('/api/me/export-data', auth, async (req, res) => {
+  const u = req.user;
+  const profile = { ...u };
+  delete profile.password_hash; delete profile.guest_token;
+  const stripBooking = (b) => { const x = { ...b }; delete x.guest_token; return x; };
+  const bookingsAsClient = (await db.prepare('SELECT * FROM bookings WHERE client_id=? ORDER BY id DESC').all(u.id)).map(stripBooking);
+  const bookingsAsTalent = (await db.prepare('SELECT * FROM bookings WHERE talent_id=? ORDER BY id DESC').all(u.id)).map(stripBooking);
+  const messages = await db.prepare('SELECT id,sender_id,recipient_id,created_at FROM messages WHERE sender_id=? OR recipient_id=? ORDER BY id DESC LIMIT 1000').all(u.id, u.id);
+  const obligations = await db.prepare('SELECT * FROM money_obligations WHERE user_id=? OR payer_user_id=? OR payee_user_id=? ORDER BY id DESC').all(u.id, u.id, u.id);
+  const obIds = obligations.map((o) => o.id);
+  const ledger = obIds.length ? await db.prepare(`SELECT * FROM money_ledger WHERE obligation_id IN (${obIds.map(() => '?').join(',')}) ORDER BY id DESC`).all(...obIds) : [];
+  const notifications = await db.prepare('SELECT id,type,text,ref,is_read,created_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 1000').all(u.id);
+  const payload = { app: 'deal', exported_at: now(), profile, bookings_as_client: bookingsAsClient, bookings_as_talent: bookingsAsTalent, messages_metadata: messages, money_obligations: obligations, money_ledger: ledger, notifications };
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="deal-my-data.json"');
+  res.send(JSON.stringify(payload, null, 2));
+});
+
+/* ---- بند ١٠: إعلان المالك (بثّ لكل الأعضاء) ----
+   إشعار داخلي لكل عضو مسجل (notify يرآه Web Push تلقائياً عبر البنية
+   القائمة) + سجل إرسال + تدقيق مالك. الضيوف بلا حسابات فلا يصلهم شيء. */
+app.post('/api/owner/broadcast', auth, ownerOnly, async (req, res) => {
+  const title = String((req.body || {}).title || '').trim().slice(0, 120);
+  const body = String((req.body || {}).body || '').trim().slice(0, 1000);
+  const bodyEn = String((req.body || {}).body_en || '').trim().slice(0, 1000);
+  if (!title || !body) return res.status(400).json({ error: 'عنوان الإعلان ونصه مطلوبان' });
+  const info = await db.prepare('INSERT INTO broadcasts (title,body,body_en,recipients,created_by,created_at) VALUES (?,?,?,?,?,?)').run(title, body, bodyEn, 0, req.user.id, now());
+  const members = await db.prepare('SELECT id FROM users WHERE is_platform_founder=0 AND banned=0 AND COALESCE(deleted_at,0)=0').all();
+  for (const m of members) { await notify(m.id, 'broadcast', `📣 ${title} — ${body}`, `broadcast:${info.lastInsertRowid}`); }
+  await db.prepare('UPDATE broadcasts SET recipients=? WHERE id=?').run(members.length, info.lastInsertRowid);
+  await logOwnerAction(req, 'broadcast', `broadcast:${info.lastInsertRowid}`, `recipients:${members.length}`);
+  res.json({ ok: true, id: info.lastInsertRowid, recipients: members.length });
+});
+app.get('/api/owner/broadcasts', auth, ownerOnly, async (req, res) => {
+  const items = await db.prepare('SELECT id,title,body,body_en,recipients,created_at FROM broadcasts ORDER BY id DESC LIMIT 50').all();
+  res.json({ items });
+});
+
+/* ---- بند ١١: التصدير المالي للمالك (SpreadsheetML) ----
+   الصيغة المختارة (موثّقة في TESTING-FINAL.md): SpreadsheetML 2003 XML
+   بامتداد .xls — ملف جداول حقيقي يفتحه Excel وLibreOffice بلا أي مكتبة
+   جديدة، بورقتي «السجل» و«الالتزامات» وسطر إجماليات في كل ورقة. */
+function xmlEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function ssCell(v, num) { return `<Cell><Data ss:Type="${num ? 'Number' : 'String'}">${xmlEsc(v)}</Data></Cell>`; }
+function ssRow(cells) { return `<Row>${cells.join('')}</Row>`; }
+app.get('/api/owner/financial-export', auth, ownerOnly, async (req, res) => {
+  const from = +req.query.from || 0;
+  const to = +req.query.to || now();
+  const ledger = await db.prepare(`SELECT l.id, l.created_at, l.from_status, l.to_status, l.actor, l.note, o.code, o.kind, o.exact_amount, o.currency FROM money_ledger l JOIN money_obligations o ON o.id=l.obligation_id WHERE l.created_at>=? AND l.created_at<=? ORDER BY l.id ASC`).all(from, to);
+  const obligations = await db.prepare(`SELECT id, code, kind, booking_id, base_amount, exact_amount, currency, status, created_at FROM money_obligations WHERE created_at>=? AND created_at<=? ORDER BY id ASC`).all(from, to);
+  const obTotal = obligations.reduce((s, o) => s + (+o.exact_amount || 0), 0);
+  const ledgerRows = ledger.map((l) => ssRow([ssCell(l.id, 1), ssCell(new Date(l.created_at).toISOString()), ssCell(l.code), ssCell(l.kind), ssCell(l.from_status), ssCell(l.to_status), ssCell(l.actor), ssCell(l.exact_amount, 1), ssCell(l.currency), ssCell(l.note)]));
+  ledgerRows.push(ssRow([ssCell('الإجمالي'), ssCell(''), ssCell(''), ssCell(''), ssCell(''), ssCell(''), ssCell(''), ssCell(Math.round(ledger.reduce((s, l) => s + (+l.exact_amount || 0), 0) * 100) / 100, 1), ssCell(''), ssCell(`صفوف السجل: ${ledger.length}`)]));
+  const obRows = obligations.map((o) => ssRow([ssCell(o.id, 1), ssCell(o.code), ssCell(o.kind), ssCell(o.booking_id || '', 1), ssCell(o.base_amount, 1), ssCell(o.exact_amount, 1), ssCell(o.currency), ssCell(o.status), ssCell(new Date(o.created_at).toISOString())]));
+  obRows.push(ssRow([ssCell('الإجمالي'), ssCell(''), ssCell(''), ssCell(''), ssCell(''), ssCell(Math.round(obTotal * 100) / 100, 1), ssCell(''), ssCell(`الالتزامات: ${obligations.length}`), ssCell('')]));
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n<Worksheet ss:Name="Ledger"><Table>${ssRow(['ID', 'Date', 'Code', 'Kind', 'From', 'To', 'Actor', 'Amount', 'Currency', 'Note'].map((h) => ssCell(h)))}${ledgerRows.join('')}</Table></Worksheet>\n<Worksheet ss:Name="Obligations"><Table>${ssRow(['ID', 'Code', 'Kind', 'Booking', 'Base', 'Exact amount', 'Currency', 'Status', 'Date'].map((h) => ssCell(h)))}${obRows.join('')}</Table></Worksheet>\n</Workbook>`;
+  res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="deal-financial-export.xls"');
+  res.send(xml);
+});
+
 app.get('/api/health', (req, res) => res.json({ ok: true, app: 'Deal — Vercel + Supabase' }));
 
-/* معالج أخطاء أخير: أي خطأ من قاعدة البيانات أو المنطق يرجع 500 بدل تعليق الطلب. */
+/* معالج أخطاء أخير: أي خطأ من قاعدة البيانات أو المنطق يرجع 500 بدل تعليق الطلب.
+   الجولة الأخيرة (بند ٢): كل خطأ يصل هنا يُسجَّل داخلياً في error_log
+   (مسار + رسالة + مستخدم إن وُجد — بلا حمولات حساسة) قبل الرد النظيف،
+   فلا يرى المستخدم أي أثر تقني أبداً. */
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('Deal server error:', err);
+  logServerError(req, err);
   if (!res.headersSent) res.status(500).json({ error: 'خطأ في الخادم' });
 });
 

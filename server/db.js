@@ -1166,6 +1166,34 @@ CREATE TABLE IF NOT EXISTS ambassador_applications (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_amb_app_one_open ON ambassador_applications(user_id) WHERE status='open';
 CREATE INDEX IF NOT EXISTS idx_amb_app_status ON ambassador_applications(status, id);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS founder_welcomed_at BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_star_granted_at BIGINT DEFAULT 0;
+ALTER TABLE star_subscriptions ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'paid';
+`;
+
+/* ترحيلات جولة «محركات النمو والأمان» (TESTING-ENGINES.md): جدول تدخلات منع
+   تسرّب الصناع (تدخل واحد لكل «حلقة خمول» — يُختم بآخر نشاط معروف قبل
+   التدخل ليُستدل منه على نهاية الحلقة)، وجدول أحداث تجربة التحسين الذاتي
+   (تُحفظ بصمة مفتاح الزائر لا المفتاح نفسه، وحدث واحد لكل زائر/نوع/يوم —
+   فهرس فريد يمنع العدّ المكرر). كل عبارة idempotent. */
+const ENGINES_MIGRATIONS_SQL = `
+CREATE TABLE IF NOT EXISTS churn_interventions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  step TEXT DEFAULT '',
+  last_activity_at BIGINT DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_churn_user ON churn_interventions(user_id, created_at);
+CREATE TABLE IF NOT EXISTS exp_events (
+  id SERIAL PRIMARY KEY,
+  vid_hash TEXT NOT NULL,
+  variant TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  day TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_exp_unique ON exp_events(vid_hash, kind, day);
+CREATE INDEX IF NOT EXISTS idx_exp_variant ON exp_events(variant, kind);
 `;
 
 let readyPromise = null;
@@ -1185,6 +1213,7 @@ function init() {
       await pool.query(AUDIT_MIGRATIONS_SQL);
       await pool.query(REVIEW_MIGRATIONS_SQL);
       await pool.query(POLISH_MIGRATIONS_SQL);
+      await pool.query(ENGINES_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -1217,7 +1246,7 @@ const ID_TABLES = new Set([
   'user_templates', 'directory_impressions', 'request_matches',
   'request_quotes', 'creator_packages', 'waitlist_entries', 'daily_videos',
   'contracts', 'profile_questions', 'seasons_custom', 'academy_progress',
-  'ambassador_applications',
+  'ambassador_applications', 'churn_interventions', 'exp_events',
 ]);
 
 function toPgSql(sql) {

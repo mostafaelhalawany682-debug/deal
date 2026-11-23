@@ -647,6 +647,101 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_appeals_one_open ON release_appeals(bookin
 CREATE INDEX IF NOT EXISTS idx_appeals_booking ON release_appeals(booking_id, id);
 `;
 
+/* ترحيلات جولة «المحاذاة الحرفية مع Binance P2P» (TESTING-BINANCE-ALIGN.md):
+   طور تفاوض موقوت للتحكيم + إعادة تحكيم بمهلة، خطأ الإلغاء لصالح/ضد طرف،
+   تنبيه إفراج، التزامات فرق ورفض طرف ثالث، أحداث نظام لمحادثة الطلب،
+   بلاغات دفع متأخر، أعلام سلوك، وبوابة قبول «شروط المعاملات». كلها idempotent. */
+const ALIGN_MIGRATIONS_SQL = `
+ALTER TABLE release_appeals ADD COLUMN IF NOT EXISTS phase TEXT DEFAULT 'owner_review';
+ALTER TABLE release_appeals ADD COLUMN IF NOT EXISTS phase_deadline BIGINT DEFAULT 0;
+ALTER TABLE release_appeals ADD COLUMN IF NOT EXISTS escalated_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancel_fault TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS escrow_alert_sent INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deemed_at BIGINT DEFAULT 0;
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS reject_kind TEXT DEFAULT '';
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS is_difference INTEGER DEFAULT 0;
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS parent_obligation_id INTEGER DEFAULT NULL;
+CREATE TABLE IF NOT EXISTS booking_events (
+  id SERIAL PRIMARY KEY,
+  booking_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  body TEXT DEFAULT '',
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_booking_events_booking ON booking_events(booking_id, created_at);
+CREATE TABLE IF NOT EXISTS late_payment_reports (
+  id SERIAL PRIMARY KEY,
+  booking_id INTEGER NOT NULL,
+  reporter TEXT DEFAULT 'member',
+  user_id INTEGER DEFAULT NULL,
+  ref TEXT DEFAULT '',
+  note TEXT DEFAULT '',
+  status TEXT DEFAULT 'open',
+  created_at BIGINT NOT NULL,
+  decided_at BIGINT DEFAULT 0,
+  decided_by INTEGER DEFAULT NULL,
+  decision_note TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_late_reports_booking ON late_payment_reports(booking_id, status);
+CREATE TABLE IF NOT EXISTS behavior_flags (
+  id SERIAL PRIMARY KEY,
+  booking_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  created_by INTEGER DEFAULT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_behavior_flags_user ON behavior_flags(user_id);
+CREATE TABLE IF NOT EXISTS booking_terms_acceptances (
+  id SERIAL PRIMARY KEY,
+  booking_id INTEGER NOT NULL,
+  side TEXT NOT NULL,
+  user_id INTEGER DEFAULT NULL,
+  guest_token TEXT DEFAULT '',
+  version TEXT NOT NULL,
+  accepted_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_terms_acc_unique ON booking_terms_acceptances(booking_id, side, version);
+CREATE INDEX IF NOT EXISTS idx_terms_acc_booking ON booking_terms_acceptances(booking_id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tos_version TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tos_accepted_at BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at BIGINT DEFAULT 0;
+ALTER TABLE money_obligations ADD COLUMN IF NOT EXISTS warn_sent INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deemed_warn_sent INTEGER DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_delivered_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_confirmed_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_auto INTEGER DEFAULT 0;
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+ALTER TABLE ambassadors ADD COLUMN IF NOT EXISTS settlement_method TEXT DEFAULT '';
+CREATE TABLE IF NOT EXISTS obligation_settlements (
+  id SERIAL PRIMARY KEY,
+  obligation_id INTEGER NOT NULL,
+  ambassador_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  method TEXT DEFAULT '',
+  transfer_ref TEXT DEFAULT '',
+  status TEXT DEFAULT 'declared',
+  declared_at BIGINT NOT NULL,
+  confirmed_at BIGINT DEFAULT 0,
+  confirmed_by INTEGER DEFAULT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_obsettle_ob_live ON obligation_settlements(obligation_id) WHERE status IN ('declared','confirmed');
+CREATE INDEX IF NOT EXISTS idx_obsettle_amb ON obligation_settlements(ambassador_id, status);
+CREATE TABLE IF NOT EXISTS platform_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT DEFAULT '',
+  updated_at BIGINT DEFAULT 0
+);
+`;
+
 /* تطبيع وسيلة التواصل (contact): إيميل بأحرف صغيرة، وهاتف مصري بصيغة محلية
    موحّدة (0xxxxxxxxxx) مهما كانت الصيغة المدخلة (+20 / 0020 / مسافات).
    يُستخدم في التسجيل والدخول معاً حتى لا يتكرر حساب لنفس الشخص أبداً. */
@@ -671,6 +766,7 @@ function init() {
       await pool.query(SOCIAL_MIGRATIONS_SQL);
       await pool.query(AMBASSADOR_MIGRATIONS_SQL);
       await pool.query(BINANCE_MIGRATIONS_SQL);
+      await pool.query(ALIGN_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -696,7 +792,8 @@ const ID_TABLES = new Set([
   'portfolio_items', 'support_messages', 'messages', 'star_subscriptions',
   'friendships', 'profile_posts',
   'money_obligations', 'money_ledger', 'money_receipts', 'ambassadors',
-  'release_appeals',
+  'release_appeals', 'booking_events', 'late_payment_reports', 'behavior_flags',
+  'booking_terms_acceptances', 'push_subscriptions', 'obligation_settlements',
 ]);
 
 function toPgSql(sql) {

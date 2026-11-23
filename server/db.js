@@ -554,7 +554,7 @@ CREATE INDEX IF NOT EXISTS idx_money_receipts_ob ON money_receipts(obligation_id
    ومنشورات البروفايل وتفاعلاتها. كل عبارة idempotent، وإسناد المقاعد بأثر
    رجعي حتمي: الرقم = ترتيب التسجيل (id) بين المؤهلين (صانع/مقدم، بلا المؤسس
    صاحب المنصة) — فلا يتغير رقم أي عضو أبداً مهما تكرر التشغيل، والفئة تُغلق
-   عند ١٠٠ لأن من ترتيبه بعد المئة لا يأخذ رقماً إطلاقاً. */
+   عند ٥٠ لأن من ترتيبه بعد الخمسين لا يأخذ رقماً إطلاقاً. */
 const SOCIAL_MIGRATIONS_SQL = `
 ALTER TABLE users ADD COLUMN IF NOT EXISTS cover TEXT DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS accent TEXT DEFAULT '';
@@ -591,7 +591,7 @@ CREATE INDEX IF NOT EXISTS idx_post_reactions_post ON post_reactions(post_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_founder_seat ON users(founder_seat) WHERE founder_seat IS NOT NULL;
 UPDATE users u SET founder_seat = sub.rn
 FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY id ASC) AS rn FROM users WHERE role IN ('creator','provider') AND is_platform_founder=0) sub
-WHERE u.id = sub.id AND sub.rn <= 100 AND u.founder_seat IS NULL;
+WHERE u.id = sub.id AND sub.rn <= 50 AND u.founder_seat IS NULL;
 `;
 
 /* ترحيلات جولة «سفير المدينة = نقطة التحصيل» (اقتراح ٤): جدول تعيينات
@@ -756,6 +756,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set_at BIGINT DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email TEXT DEFAULT '';
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_agent TEXT DEFAULT '';
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_seen_at BIGINT DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scope TEXT DEFAULT 'full';
 CREATE TABLE IF NOT EXISTS password_resets (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL,

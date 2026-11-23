@@ -247,6 +247,7 @@ CREATE TABLE IF NOT EXISTS support_messages (
   lang TEXT DEFAULT 'ar',
   is_read INTEGER DEFAULT 0,
   priority INTEGER DEFAULT 0,
+  ai_answer TEXT DEFAULT '',
   created_at BIGINT NOT NULL
 );
 
@@ -475,6 +476,7 @@ ALTER TABLE shop_requests ADD COLUMN IF NOT EXISTS target_talent_id INTEGER DEFA
 CREATE INDEX IF NOT EXISTS idx_shop_requests_target ON shop_requests(target_talent_id) WHERE target_talent_id IS NOT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_custom TEXT DEFAULT '';
 ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 0;
+ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS ai_answer TEXT DEFAULT '';
 CREATE TABLE IF NOT EXISTS star_subscriptions (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL,
@@ -1144,6 +1146,28 @@ INSERT INTO platform_settings (key,value,updated_at)
 UPDATE users SET email_verified=1 WHERE email_verified=0 AND created_at <= (SELECT NULLIF(value,'')::bigint FROM platform_settings WHERE key='email_verify_cutoff_ms');
 `;
 
+/* ترحيلات جولة «التلميع والنمو» (TESTING-POLISH.md): جدول طلبات السفير
+   (طلب مفتوح واحد لكل عضو — فهرس فريد جزئي على الحالة open)، وعمود ختم
+   رسالة ترحيب المؤسس على المستخدم (يُختم ذرّياً مرة واحدة عند أول تحقق
+   إيميل فلا تتكرر الرسالة أبداً). كل عبارة idempotent. */
+const POLISH_MIGRATIONS_SQL = `
+CREATE TABLE IF NOT EXISTS ambassador_applications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  city TEXT NOT NULL,
+  country TEXT NOT NULL DEFAULT 'EG',
+  note TEXT DEFAULT '',
+  status TEXT DEFAULT 'open',
+  created_at BIGINT NOT NULL,
+  decided_at BIGINT DEFAULT 0,
+  decided_by INTEGER DEFAULT NULL,
+  ambassador_id INTEGER DEFAULT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_amb_app_one_open ON ambassador_applications(user_id) WHERE status='open';
+CREATE INDEX IF NOT EXISTS idx_amb_app_status ON ambassador_applications(status, id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS founder_welcomed_at BIGINT DEFAULT 0;
+`;
+
 let readyPromise = null;
 function init() {
   if (!readyPromise) {
@@ -1160,6 +1184,7 @@ function init() {
       await pool.query(EXPANSION_MIGRATIONS_SQL);
       await pool.query(AUDIT_MIGRATIONS_SQL);
       await pool.query(REVIEW_MIGRATIONS_SQL);
+      await pool.query(POLISH_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -1192,6 +1217,7 @@ const ID_TABLES = new Set([
   'user_templates', 'directory_impressions', 'request_matches',
   'request_quotes', 'creator_packages', 'waitlist_entries', 'daily_videos',
   'contracts', 'profile_questions', 'seasons_custom', 'academy_progress',
+  'ambassador_applications',
 ]);
 
 function toPgSql(sql) {

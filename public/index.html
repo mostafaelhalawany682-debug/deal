@@ -910,6 +910,11 @@ html,body{overflow-x:clip}
       <div id="calcOut" style="margin-top:6px"></div>
       <div class="mut" style="margin-top:8px" data-i18n="calc_note">العمولة تُدفع أولاً إلى Deal، والعربون والباقي بين العميل والمنفّذ مباشرة — Deal لا تستلم ولا تحتجز أموال المعاملات.</div></div>
       <div class="step rv" style="margin-top:10px"><b data-i18n="rights_t">حقوقك عند أي خلاف</b><div class="mut" data-i18n="rights_d">١) اطلب تحكيم من صفحة طلبك ← ٢) القرار مسبب خلال ٧٢ ساعة من اكتمال الأدلة ← ٣) حمّل حزمة الأدلة الرسمية بهوية الطرف الآخر للمسار القانوني</div></div>
+      <div class="step rv" id="transparencySec" style="border-color:var(--gold);margin-top:12px"><b>🔍 <span data-i18n="fin_tr_t">الشفافية والأمان</span></b>
+      <div class="mut" style="margin-top:6px" data-i18n="fin_tr_1">Deal لا تستلم ولا تحتجز أموال المعاملات أبداً: كل تحويل يتحرك بين محفظتي العميل والمنفّذ مباشرة، ودور المنصة التنظيم والتوثيق والتحكيم فقط.</div>
+      <div class="mut" style="margin-top:6px" data-i18n="fin_tr_2">كل رقم تشوفه في Deal حقيقي من قاعدة بياناتها: عدد الصناع والصفقات والمقاعد والتقييمات — لا أرقام تجميلية ولا إحصاءات مخترعة.</div>
+      <div class="mut" style="margin-top:6px" data-i18n="fin_tr_3">كل مهلة وكل عقوبة معلنة في شروط المعاملات قبل أن تبدأ أي خطوة: مهلات الدفع ٣ ساعات، ومهلة المعاينة ٢٤ ساعة، وسلّم العقوبات منشور بالكامل — لا قواعد خفية أبداً.</div>
+      <div class="mut" style="margin-top:6px" data-i18n="fin_tr_4">التحكيم عند أي خلاف يتم من أدلة التطبيق وحدها (المحادثة والإيصالات وسجل الخطوات)، وقراره مسبّب دائماً: السبب مكتوب ومراجع الأدلة ظاهرة للطرفين في صفحة الحجز نفسها.</div></div>
       <div class="trust-head rv" style="margin-top:30px">
         <h3 data-i18n="tc_g_t">الضمانات المعلنة</h3>
         <p class="mut" data-i18n="tc_g_sub">كل ضمان هنا مربوط بآلية شغالة فعلاً داخل المنصة — لا وعود معلّقة في الهواء.</p>
@@ -1040,6 +1045,16 @@ html,body{overflow-x:clip}
   <button data-tbtab="account" onclick="tbAccount()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg><span data-i18n="tb_account">الحساب</span></button>
 </nav>
 <div class="toast" id="toast"></div>
+<!-- شاشة الصيانة الموحّدة (الجولة الأخيرة — بند ١): تظهر للزوار والأعضاء
+     عند تفعيل المالك وضع الصيانة، والمؤسس وحده يتجاوزها. بلا أي وعد بموعد. -->
+<div id="maintenanceScreen" style="display:none;position:fixed;inset:0;z-index:2000;background:#0a0a0c;align-items:center;justify-content:center;padding:20px">
+  <div style="text-align:center;max-width:420px">
+    <img src="/icons/icon-512.png" alt="Deal" style="width:96px;height:96px;border-radius:22px">
+    <h2 style="color:var(--gold);margin:16px 0 8px" data-i18n="fin_maint_t">بنعمل صيانة سريعة — راجعين قريباً</h2>
+    <p class="mut" data-i18n="fin_maint_d">بنظبط حاجات صغيرة عشان تجربتك تبقى أحسن — شكراً لصبرك، جرّب تاني كمان شوية.</p>
+    <button class="btn ghost sm" style="margin-top:10px" onclick="openAuth()"><span data-i18n="fin_maint_login">دخول المالك</span></button>
+  </div>
+</div>
 <button class="fab" id="supportFab" onclick="openSupport()" title="الدعم"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4.5" height="6.5" rx="2"/><rect x="16.5" y="14" width="4.5" height="6.5" rx="2"/><path d="M19.5 20.5a3 3 0 0 1-3 2h-3"/></svg></button>
 
 <dialog id="authDlg"><form method="dialog">
@@ -1069,6 +1084,9 @@ html,body{overflow-x:clip}
     <label data-i18n="f_links">روابط حساباتك العلنية (للتوثيق)</label><input id="aLinks" placeholder="https://…">
     <label class="row" style="align-items:center;gap:8px;margin-top:10px"><input type="checkbox" id="aTos" style="width:auto"><span data-i18n="reg_tos">أوافق على شروط الاستخدام وسياسة الخصوصية</span></label>
     <label class="row" style="align-items:center;gap:8px"><input type="checkbox" id="aAge" style="width:auto"><span data-i18n="reg_age">أؤكد أن عمري ١٨ سنة أو أكثر</span></label>
+    <!-- ويدجت Turnstile (الجولة الأخيرة — بند ١٢): يبقى فارغاً تماماً ولا
+         يُبنى فيه أي عنصر إلا عند وجود مفتاح موقع في /api/config. -->
+    <div id="turnstileBox" style="margin-top:10px"></div>
   </div>
   <label data-i18n="f_contact">رقم الهاتف أو الإيميل (هو وسيلة الدخول)</label><input id="aContact" data-i18n-ph="contact_ph" placeholder="01xxxxxxxxx أو you@mail.com">
   <label data-i18n="f_password">كلمة السر</label><input id="aPassword" type="password" autocomplete="current-password">
@@ -1261,6 +1279,14 @@ html,body{overflow-x:clip}
 <div class="row" style="margin-top:10px"><button class="btn" id="lateGo" onclick="submitLate(this)"></button><button class="btn ghost" onclick="document.getElementById('lateDlg').close()">✕</button></div></dialog>
 <dialog id="revDlg"><h3>⏱️ <span data-i18n="ow_reverse_deemed">عكس الاستلام المُعتبَر</span></h3><input id="revReason"><p class="err hide" id="revErr"></p>
 <div class="row" style="margin-top:10px"><button class="btn" id="revGo" onclick="doReverseDeemed(this)"></button><button class="btn ghost" onclick="document.getElementById('revDlg').close()">✕</button></div></dialog>
+<!-- حوار قرار التحكيم المسبّب (الجولة الأخيرة — ١٣ب): سبب إلزامي + مرجع
+     دليل واحد على الأقل من خط زمن الحجز نفسه — القرار يظهر للطرفين. -->
+<dialog id="arbDlg"><h3>⚖️ <span data-i18n="fin_arb_dlg_t">قرار تحكيم مسبّب</span></h3>
+<textarea id="arbReason" data-i18n-ph="fin_arb_reason_ph" placeholder="سبب القرار (إلزامي — يظهر للطرفين)" style="min-height:70px"></textarea>
+<div class="mut" style="margin-top:8px" data-i18n="fin_arb_evidence">اختر دليلاً واحداً على الأقل من خط زمن الحجز</div>
+<div id="arbEvidence" style="max-height:200px;overflow:auto;margin-top:6px"></div>
+<p class="err hide" id="arbErr"></p>
+<div class="row" style="margin-top:10px"><button class="btn" id="arbGo" onclick="doResolveD(this)"><span data-i18n="fin_arb_go">تأكيد القرار</span></button><button class="btn ghost" onclick="document.getElementById('arbDlg').close()">✕</button></div></dialog>
 <dialog id="legalDlg"><h3 id="legalTitle"></h3><div id="legalBody" style="max-height:62vh;overflow:auto"></div>
 <div class="row" style="margin-top:10px"><button class="btn ghost" onclick="document.getElementById('legalDlg').close()">✕</button></div></dialog>
 
@@ -1340,7 +1366,7 @@ html,body{overflow-x:clip}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 let ME=null, TOKEN=localStorage.getItem('deal_token')||'';
 const api=async(p,o={})=>{const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{})}});
-  const j=await r.json().catch(()=>({})); if(!r.ok){ const e=new Error(j.error||'خطأ'); e.code=j.code||''; e.status=r.status; throw e; } return j;};
+  const j=await r.json().catch(()=>({})); if(!r.ok){ if(j.code==='MAINTENANCE'&&typeof showMaintenance==='function') showMaintenance(); const e=new Error(j.error||'خطأ'); e.code=j.code||''; e.status=r.status; throw e; } return j;};
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3200)}
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 /* حالة تحميل موحّدة: أي زر ينفّذ إجراءً غير متزامن يُعطَّل ويعرض «جارٍ…» حتى ينتهي — لا زر يبدو ميتاً. */
@@ -1399,6 +1425,9 @@ Object.assign(DICT.en,{f_password:'Password',sec_pw_hint:'At least 8 characters 
 /* مفاتيح بوابة تأكيد الإيميل (إصلاح حي ٢-١): لافتة تقود لمسار التأكيد نفسه. */
 Object.assign(DICT.ar,{evgate_t:'أكّد إيميلك عشان تكمل',evgate_d:'تقديم عروض الأسعار وقبول الحجوزات محتاج إيميل مؤكد. لو حسابك برقم موبايل وبلا إيميل، أضف إيميلك وهنبعتلك كود تأكيد من ٦ أرقام — دقيقة واحدة وترجع تكمل من مكانك.',evgate_btn:'أضف إيميلك وأكّده'});
 Object.assign(DICT.en,{evgate_t:'Verify your email to continue',evgate_d:'Submitting quotes and accepting bookings requires a verified email. If your account uses a phone number with no email, add your email and we will send you a 6-digit verification code — one minute and you are back where you left off.',evgate_btn:'Add & verify your email'});
+/* الجولة الأخيرة الشاملة (TESTING-FINAL.md): صيانة/إكمال ملف/بياناتي/حظر/لوحة مالك موسّعة/خط زمني/شفافية */
+Object.assign(DICT.ar,{fin_maint_t:'بنعمل صيانة سريعة — راجعين قريباً',fin_maint_d:'بنظبط حاجات صغيرة عشان تجربتك تبقى أحسن — شكراً لصبرك، جرّب تاني كمان شوية.',fin_maint_login:'دخول المالك',fin_chk_t:'أكمِل ملفك',fin_chk_d:'كل خطوة بتكمّلها بتقرّب ملفك من الظهور الكامل قدام العملاء.',fin_chk_photo:'صورة شخصية لملفك',fin_chk_bio:'نبذة تعريفية عنك',fin_chk_samples:'أضف نماذجك عشان العملاء يشوفوا شغلك',fin_chk_packages:'باقة أسعار واحدة على الأقل',fin_chk_fin:'خطوة الهوية المالية المؤكدة',fin_chk_link:'انسخ رابطك الشخصي مرة على الأقل',fin_chk_fix:'أكملها',fin_data_t:'بياناتي',fin_data_d:'نزّل نسخة JSON من بياناتك عندنا: ملفك وحجوزاتك وسجلك المالي وإشعاراتك وبيانات رسائلك الوصفية.',fin_data_btn:'⬇️ نزّل بياناتي',fin_blocks_t:'المحظورون',fin_blocks_none:'لا أحد محظور.',fin_block_btn:'حظر',fin_unblock_btn:'فك الحظر',fin_blocked_t:'اتحظر — مش هتقدروا تبدأوا تواصل أو حجوزات جديدة',fin_unblocked_t:'اتفك الحظر',fin_tl_t:'الخط الزمني الموحّد للصفقة',fin_arb_t:'قرار التحكيم المسبّب',fin_arb_refs:'مراجع الأدلة',fin_tr_t:'الشفافية والأمان',fin_tr_1:'Deal لا تستلم ولا تحتجز أموال المعاملات أبداً: كل تحويل يتحرك بين محفظتي العميل والمنفّذ مباشرة، ودور المنصة التنظيم والتوثيق والتحكيم فقط.',fin_tr_2:'كل رقم تشوفه في Deal حقيقي من قاعدة بياناتها: عدد الصناع والصفقات والمقاعد والتقييمات — لا أرقام تجميلية ولا إحصاءات مخترعة.',fin_tr_3:'كل مهلة وكل عقوبة معلنة في شروط المعاملات قبل أن تبدأ أي خطوة: مهلات الدفع ٣ ساعات، ومهلة المعاينة ٢٤ ساعة، وسلّم العقوبات منشور بالكامل — لا قواعد خفية أبداً.',fin_tr_4:'التحكيم عند أي خلاف يتم من أدلة التطبيق وحدها (المحادثة والإيصالات وسجل الخطوات)، وقراره مسبّب دائماً: السبب مكتوب ومراجع الأدلة ظاهرة للطرفين في صفحة الحجز نفسها.',fin_ow_ops_t:'تشغيل المنصة',fin_ow_maint:'وضع الصيانة',fin_ow_maint_on:'مفعّل الآن — الزوار والأعضاء يرون شاشة الصيانة',fin_ow_maint_off:'متوقف — المنصة تعمل طبيعياً',fin_ow_maint_toggle:'تبديل وضع الصيانة',fin_ow_funnel_t:'قمع النمو (أرقام حقيقية)',fin_ow_views:'مشاهدات الصفحات',fin_ow_visitors:'زوار فريدون',fin_ow_regs:'تسجيلات',fin_ow_verified_emails:'إيميلات مؤكدة',fin_ow_first_booking:'صناع بأول حجز',fin_ow_completed:'صفقات مكتملة',fin_ow_backup_t:'النسخ الاحتياطي',fin_ow_backup_now:'اعمل نسخة دلوقتي',fin_ow_backup_last:'آخر نسخة',fin_ow_backup_none:'لا نسخ بعد',fin_ow_backup_dl:'تنزيل أحدث نسخة',fin_ow_broadcast_t:'إعلان لكل الأعضاء',fin_ow_bc_title_ph:'عنوان الإعلان',fin_ow_bc_body_ph:'نص الإعلان (عربي)',fin_ow_bc_body_en_ph:'نص الإعلان (إنجليزي — اختياري)',fin_ow_bc_send:'إرسال الإعلان',fin_ow_bc_sent:'اتبعت الإعلان',fin_ow_bc_hist:'سجل الإعلانات',fin_ow_bc_recipients:'مستلماً',fin_ow_fin_t:'التصدير المالي',fin_ow_fin_d:'سجل الأموال والالتزامات لفترة من اختيارك — ملف جداول (SpreadsheetML .xls) بإجماليات.',fin_ow_fin_btn:'⬇️ تصدير مالي',fin_ow_errlog_t:'سجل الأخطاء الداخلي (آخر ١٠٠)',fin_ow_errlog_none:'لا أخطاء مسجلة.',fin_ow_audit_t:'سجل تدقيق إجراءات المالك (آخر ١٠٠)',fin_ow_audit_none:'لا إجراءات مدققة بعد.',fin_arb_dlg_t:'قرار تحكيم مسبّب',fin_arb_reason_ph:'سبب القرار (إلزامي — يظهر للطرفين)',fin_arb_evidence:'اختر دليلاً واحداً على الأقل من خط زمن الحجز',fin_arb_go:'تأكيد القرار'});
+Object.assign(DICT.en,{fin_maint_t:'Quick maintenance — we will be back soon',fin_maint_d:'We are fine-tuning a few things to make your experience better — thanks for your patience, try again shortly.',fin_maint_login:'Owner login',fin_chk_t:'Complete your profile',fin_chk_d:'Every step you finish brings your profile closer to full visibility in front of clients.',fin_chk_photo:'A profile photo',fin_chk_bio:'A short bio about you',fin_chk_samples:'Add your samples so clients can see your work',fin_chk_packages:'At least one price package',fin_chk_fin:'The verified financial-identity step',fin_chk_link:'Copy your personal link at least once',fin_chk_fix:'Complete it',fin_data_t:'My data',fin_data_d:'Download a JSON copy of your data with us: your profile, bookings, money ledger, notifications and message metadata.',fin_data_btn:'⬇️ Download my data',fin_blocks_t:'Blocked members',fin_blocks_none:'Nobody is blocked.',fin_block_btn:'Block',fin_unblock_btn:'Unblock',fin_blocked_t:'Blocked — neither of you can start new messages or bookings',fin_unblocked_t:'Unblocked',fin_tl_t:'Unified deal timeline',fin_arb_t:'Reasoned arbitration decision',fin_arb_refs:'Evidence references',fin_tr_t:'Transparency & security',fin_tr_1:'Deal never receives or holds transaction money: every transfer moves directly between the client wallet and the provider wallet, and the platform only organizes, documents and arbitrates.',fin_tr_2:'Every number you see on Deal is real from its database: creators, deals, seats and ratings — no cosmetic figures and no invented statistics.',fin_tr_3:'Every deadline and every penalty is published in the transaction terms before any step begins: payment deadlines are 3 hours, the preview window is 24 hours, and the full penalty ladder is public — no hidden rules, ever.',fin_tr_4:'Arbitration in any dispute works from in-app evidence only (the chat, receipts and the step log), and its decision is always reasoned: the written reason and the evidence references are visible to both parties on the booking page itself.',fin_ow_ops_t:'Platform operations',fin_ow_maint:'Maintenance mode',fin_ow_maint_on:'ON now — guests and members see the maintenance screen',fin_ow_maint_off:'Off — the platform runs normally',fin_ow_maint_toggle:'Toggle maintenance mode',fin_ow_funnel_t:'Growth funnel (real numbers)',fin_ow_views:'Page views',fin_ow_visitors:'Unique visitors',fin_ow_regs:'Registrations',fin_ow_verified_emails:'Verified emails',fin_ow_first_booking:'Creators with a first booking',fin_ow_completed:'Completed deals',fin_ow_backup_t:'Database backup',fin_ow_backup_now:'Back up now',fin_ow_backup_last:'Last backup',fin_ow_backup_none:'No backups yet',fin_ow_backup_dl:'Download latest backup',fin_ow_broadcast_t:'Broadcast to all members',fin_ow_bc_title_ph:'Announcement title',fin_ow_bc_body_ph:'Announcement text (Arabic)',fin_ow_bc_body_en_ph:'Announcement text (English — optional)',fin_ow_bc_send:'Send announcement',fin_ow_bc_sent:'Announcement sent',fin_ow_bc_hist:'Announcement history',fin_ow_bc_recipients:'recipients',fin_ow_fin_t:'Financial export',fin_ow_fin_d:'The money ledger and obligations for a period you choose — a spreadsheet file (SpreadsheetML .xls) with totals.',fin_ow_fin_btn:'⬇️ Financial export',fin_ow_errlog_t:'Internal error log (latest 100)',fin_ow_errlog_none:'No errors recorded.',fin_ow_audit_t:'Owner action audit log (latest 100)',fin_ow_audit_none:'No audited actions yet.',fin_arb_dlg_t:'Reasoned arbitration decision',fin_arb_reason_ph:'Decision reason (required — visible to both parties)',fin_arb_evidence:'Pick at least one evidence item from the booking timeline',fin_arb_go:'Confirm decision'});
 Object.assign(ERR_EN,{'بيانات الدخول غير صحيحة — راجع وسيلة التواصل وكلمة السر':'Incorrect login details — check your contact and password','محاولات دخول كثيرة — استنى شوية وحاول تاني':'Too many login attempts — wait a bit and try again','محاولات كثيرة — استنى شوية وحاول تاني':'Too many attempts — wait a bit and try again','كلمة السر مطلوبة — ٨ أحرف على الأقل':'A password is required — at least 8 characters','كلمة السر الجديدة مطلوبة — ٨ أحرف على الأقل':'A new password is required — at least 8 characters','كلمة السر الحالية غير صحيحة':'The current password is incorrect','عيّن كلمة سر لحسابك أولاً لإتمام هذا الإجراء':'Set a password for your account first to complete this action','عندك كلمة سر بالفعل — استخدم «تغيير كلمة السر»':'You already have a password — use "Change password"','لا كلمة سر بعد — استخدم «تعيين كلمة سر»':'No password yet — use "Set a password"','اكتب إيميلاً صحيحاً':'Enter a valid email','الإيميل ده مربوط بحساب آخر':'This email is linked to another account','اكتب إيميل الحساب':'Enter the account email','استرجاع كلمة السر بالإيميل غير مفعّل حالياً — استخدم الأكواد الاحتياطية أو تواصل مع الدعم':'Email password recovery is not enabled yet — use your backup codes or contact support','تعذّر إرسال الإيميل حالياً — حاول بعد قليل أو استخدم الأكواد الاحتياطية':'Could not send the email right now — try again shortly or use your backup codes','الكود غير صحيح أو منتهي — اطلب كوداً جديداً':'The code is incorrect or expired — request a new one','الكود الاحتياطي غير صحيح أو مستخدم من قبل':'The backup code is incorrect or already used','عيّن كلمة سر أولاً قبل توليد أكواد احتياطية':'Set a password first before generating backup codes','دي جلستك الحالية — استخدم «خروج» لإنهائها':'This is your current session — use Logout to end it','هدف إبلاغ غير صحيح':'Invalid report target','اختر سبب الإبلاغ':'Choose a report reason','لا يمكنك الإبلاغ عن منشورك':'You cannot report your own post','لا يمكنك الإبلاغ عن ملفك':'You cannot report your own profile','أبلغت عن هذا من قبل وهو قيد المراجعة':'You already reported this — it is under review','حذف المحتوى للمنشورات فقط — للملفات استخدم تجميد الحساب':'Content deletion is for posts only — use account freeze for profiles','إجراء غير صحيح':'Invalid action'});
 function applyI18n(){
   document.documentElement.lang=LANG;document.documentElement.dir=LANG==='ar'?'rtl':'ltr';
@@ -1431,7 +1460,7 @@ function avatarHtml(u,big=false){
   /* صورة المؤسس العامة محجوبة من الخادم أصلاً — ميداليته الذهبية بإطارها المزدوج
      هي «صورته» العلنية في كل مكان، ولا يحصل عليها أي حساب آخر. */
   if(u.is_platform_founder)return `<span class="founder-ava${big?' big':''}">👑</span>`;
-  if(u.avatar)return `<img class="avatar${big?' big':''}" src="${u.avatar}" alt="">`;
+  if(u.avatar)return `<img class="avatar${big?' big':''}" src="${u.avatar}" alt="" loading="lazy" decoding="async">`;
   return `<span class="avatar-fb${big?' big':''}">${esc((u.name||'?').trim().charAt(0)||'?')}</span>`}
 /* زر المتابعة: يظهر لكل صانع (والمؤسس استثناءً وحيداً مسموحاً على بطاقته) —
    للضيف يفتح الدخول، وللمسجل يبدّل الحالة في مكانه بلا إعادة تحميل الصفحة. */
@@ -1520,6 +1549,12 @@ function msgBtn(u){
   if(ME.user.is_platform_founder) return `<button class="btn ghost sm" onclick="openThread(this,${u.id})">${t('msg_btn')}</button>`;
   if(u.friend_state && u.friend_state!=='friends') return '';
   return `<button class="btn ghost sm" onclick="openThread(this,${u.id})">${t('msg_btn')}</button>`;
+}
+/* زر الحظر (الجولة الأخيرة — بند ٩): يظهر لعضو مسجل على ملف عضو آخر
+   (لا زائر، لا نفسك، لا المؤسس من أي جهة — المؤسس خارج التواصل أصلاً). */
+function blockBtn(u){
+  if(!ME||ME.user.id===u.id||u.is_platform_founder||ME.user.is_platform_founder) return '';
+  return `<button class="btn ghost sm" onclick="finBlockUser(this,${u.id})">🚫 ${t('fin_block_btn')}</button>`;
 }
 /* لون غلاف البطاقة مشتق حتمياً من اسم المجال — كل مجال له هويته اللونية الثابتة. */
 function nicheHue(s){const str=String(s||'عام');if(str==='videoproduction')return 42;let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))%360;return h}
@@ -1707,7 +1742,7 @@ function talentCard(u,i){
   <div class="row" style="margin:7px 0">${rateChip(u.completion_rate)}
   <span class="chip"><span class="rate-star"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.5l-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z"/></svg></span> ${u.avg_stars??'—'} (${u.positive_pct??'—'}% ${t('positive_w')})</span>${badgeDots(u)}</div>
   <div class="row"><span class="price">${money(u.price, u.currency)}</span><div class="sp"></div>
-  ${followBtn(u)}<span data-fzone="${u.id}">${friendBtn(u)}${msgBtn(u)}</span>${favBtn(u)}
+  ${followBtn(u)}<span data-fzone="${u.id}">${friendBtn(u)}${msgBtn(u)}</span>${blockBtn(u)}${favBtn(u)}
   <button class="btn ghost sm" onclick="openTalent(this,${u.id})">${t('profile_btn')}</button>
   ${ME?(ME.user.is_platform_founder?'':`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_btn')}</button>`):guestOrderBtn(u)}</div></div></div>`}
 
@@ -1963,6 +1998,7 @@ async function openBooking(btn,id){
     h+=`<div class="mut" style="margin-top:6px">${t('chat_evidence_note')}</div>`;
     h+=termsBoxHtml(b,'member');
     h+=agreementLineHtml(b)+recordLineHtml(b);
+    h+=finTimelineHtml(b);
     h+=step(t('step1'),b.status!=='pending_agreement'?'done':(isClient||isTalent?'open':''),
       b.status==='pending_agreement'?`<div class="row" style="margin-top:6px"><span class="chip">${t('client_w')} ${b.agreed_client?t('agreed_w'):t('waiting_w')}</span><span class="chip">${t('talent_w')} ${b.agreed_talent?t('agreed_w'):t('waiting_w')}</span>
       ${((isClient&&!b.agreed_client)||(isTalent&&!b.agreed_talent))?`<button class="btn sm" onclick="act(this,${b.id},'agree')">${t('agree_btn')}</button>`:''}</div>`:'');
@@ -2340,7 +2376,7 @@ async function openTalent(btn,id){
     <h4>${t('work_gallery')}</h4>${u.portfolio&&u.portfolio.length?u.portfolio.map(l=>`<div><a target="_blank" href="${esc(l)}">${esc(l)}</a></div>`).join(''):`<div class="mut">${t('no_work')}</div>`}
     <h4>${t('reviews_t')}</h4>${d.reviews.length?d.reviews.map(r=>`<div class="step">${r.sentiment==='positive'?'👍':'👎'} ⭐${r.stars} — ${esc(r.comment||'')} <span class="mut">(${esc(r.reviewer_name)})</span></div>`).join(''):`<div class="mut">${t('no_reviews')}</div>`}
     <div class="row" style="margin-top:12px">${ME&&(ME.user.id===u.id||ME.user.is_platform_founder)?'':(ME?`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_for')} ${money(u.price, u.currency)}</button>`:guestOrderBtn(u))}
-    ${followBtn(u)}<span data-fzone="${u.id}">${friendBtn(u)}${msgBtn(u)}</span>
+    ${followBtn(u)}<span data-fzone="${u.id}">${friendBtn(u)}${msgBtn(u)}</span>${blockBtn(u)}
     ${ME&&ME.user.id!==u.id?reportBtnHtml('profile',u.id):''}
     <button class="btn ghost sm" onclick="document.getElementById('talentDlg').close()">${t('close')}</button></div>`;
     $('#talentDlg').showModal();
@@ -2523,7 +2559,24 @@ async function loadDash(){
       ${wm.granted?`<div style="margin-top:8px"><span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('wm_granted')}</span></div>`:''}</div>`;
     }catch(e){ /* بطاقة المهام إضافية */ }
   }
-  $('#dashBody').innerHTML=`${ovStrip}${starCard}${welcomeCard}<div class="card dash-hero${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
+  /* بطاقة «أكمِل ملفك» (الجولة الأخيرة — بند ٥): قائمة إكمال موحّدة من
+     حالة حقيقية خادمية، تحل محل بطاقة تذكير النماذج المنفصلة (طُويت
+     داخلها: سطر النماذج نفسه بزره نفسه). المؤسس مستثنى خادمياً وواجهةً. */
+  let checklistCard='';
+  if(['creator','provider'].includes(u.role)&&!u.is_platform_founder){
+    try{
+      const ck=await api('/api/me/profile-checklist');
+      if(ck.applicable){
+        const fixFor={photo:`openProfile(this)`,bio:`openProfile(this)`,samples:`openSamplesDlg()`,packages:`document.getElementById('dashExtras')&&document.getElementById('dashExtras').scrollIntoView({behavior:'smooth'})`,fin_identity:`document.getElementById('dashSecurity')&&document.getElementById('dashSecurity').scrollIntoView({behavior:'smooth'})`,link_copied:`copyProfileLink(this,${u.id})`};
+        const ckRow=(it)=>`<div class="step ${it.done?'done':''}" style="margin-bottom:6px"><div class="row"><span>${it.done?'✅':'⬜'}</span><span style="flex:1">${t('fin_chk_'+it.key)}</span>${it.done?`<span class="chip" style="border-color:var(--em);color:var(--em)">${t('done_t')}</span>`:`<button class="btn ghost sm" onclick="${fixFor[it.key]||''}">${t('fin_chk_fix')}</button>`}</div></div>`;
+        checklistCard=`<div class="card" id="dashChecklist" style="margin-top:12px"><h3 style="margin-top:0">🧩 ${t('fin_chk_t')} <span class="chip" style="border-color:var(--gold);color:var(--gold)">${ck.progress_pct}%</span></h3>
+        <div class="mut">${t('fin_chk_d')}</div>
+        <div class="bdg-bar" style="margin-top:8px"><div class="bdg-fill" style="width:${ck.progress_pct}%"></div></div>
+        <div style="margin-top:10px">${(ck.items||[]).map(ckRow).join('')}</div></div>`;
+      }
+    }catch(e){ /* بطاقة الإكمال إضافية */ }
+  }
+  $('#dashBody').innerHTML=`${ovStrip}${starCard}${welcomeCard}${checklistCard}<div class="card dash-hero${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
     <div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}${u.is_platform_founder?'':` · <span class="price">${money(u.price, u.currency)}</span>`}</div>
     <div class="row" style="margin-top:5px">${u.is_platform_founder?seal(u,'big'):''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}
@@ -2566,6 +2619,7 @@ async function loadDash(){
   const qc=document.getElementById('bookQr');
   if(qc&&BOOK_URL){ try{ drawQr(qc,BOOK_URL); }catch(e){ /* رابط أطول من سعة QR — يبقى الرابط النصي وأزرار النسخ */ } }
   fillTools();
+  finLoadBlocks();
   const dbSnap=$('#dashBody'); if(dbSnap) DASH_HTML=dbSnap.innerHTML;
 }
 async function vReq(btn){await withBusy(btn,async()=>{try{const r=await api('/api/verify/request',{method:'POST',body:'{}'});
@@ -2634,7 +2688,7 @@ function pickAvatar(input){
     const side=Math.min(img.width,img.height), sx=(img.width-side)/2, sy=(img.height-side)/2;
     ctx.drawImage(img,sx,sy,side,side,0,0,S,S);
     PF_AVATAR=c.toDataURL('image/jpeg',0.85); PF_AVATAR_DIRTY=true;
-    $('#pfAvatarPreview').innerHTML=`<img class="avatar big" src="${PF_AVATAR}" alt="">`;
+    $('#pfAvatarPreview').innerHTML=`<img class="avatar big" src="${PF_AVATAR}" alt="" loading="lazy" decoding="async">`;
     URL.revokeObjectURL(img.src);
   };
   img.src=URL.createObjectURL(f);
@@ -2704,6 +2758,31 @@ async function loadOwner(){
   try{ oset=await api('/api/owner/settings'); }catch(e){ /* إعدادات المالك إضافية */ }
   let late={items:[]};
   try{ late=await api('/api/owner/late-payments'); }catch(e){ /* قسم الدفع المتأخر إضافي */ }
+  /* أقسام الجولة الأخيرة: صيانة + قمع نمو + نسخ احتياطي + إعلانات + سجلا
+     الأخطاء والتدقيق — كلها إضافية، غياب أيٍّ منها لا يعطّل اللوحة. */
+  let finMaint={on:false}; try{ finMaint=await api('/api/owner/maintenance'); }catch(e){}
+  let funnel=null; try{ funnel=await api('/api/owner/growth-funnel'); }catch(e){}
+  let backups={items:[],last_backup_at:0}; try{ backups=await api('/api/owner/backups'); }catch(e){}
+  let bcasts={items:[]}; try{ bcasts=await api('/api/owner/broadcasts'); }catch(e){}
+  let errlog={items:[]}; try{ errlog=await api('/api/owner/error-log'); }catch(e){}
+  let auditlog={items:[]}; try{ auditlog=await api('/api/owner/audit-log'); }catch(e){}
+  const finOpsSection=`<h4>🛠️ ${t('fin_ow_ops_t')}</h4>
+  <div class="step"><b>🔧 ${t('fin_ow_maint')}</b> <span class="chip" style="border-color:${finMaint.on?'#e03131':'var(--em)'};color:${finMaint.on?'#ff9d9d':'var(--em)'}">${finMaint.on?t('fin_ow_maint_on'):t('fin_ow_maint_off')}</span>
+  <div class="row" style="margin-top:6px"><button class="btn ghost sm" onclick="finMaintToggle(this,${finMaint.on?0:1})">${t('fin_ow_maint_toggle')}</button></div></div>
+  ${funnel?`<div class="step"><b>📈 ${t('fin_ow_funnel_t')}</b><div class="row" style="margin-top:6px;flex-wrap:wrap;gap:8px"><span class="chip">${t('fin_ow_views')}: <b>${funnel.page_views}</b></span><span class="chip">${t('fin_ow_visitors')}: <b>${funnel.unique_visitors}</b></span><span class="chip">${t('fin_ow_regs')}: <b>${funnel.registrations}</b></span><span class="chip">${t('fin_ow_verified_emails')}: <b>${funnel.email_verified}</b></span><span class="chip">${t('fin_ow_first_booking')}: <b>${funnel.creators_with_first_booking}</b></span><span class="chip">${t('fin_ow_completed')}: <b>${funnel.completed_bookings}</b></span></div></div>`:''}
+  <div class="step"><b>💾 ${t('fin_ow_backup_t')}</b> <span class="mut">${t('fin_ow_backup_last')}: ${backups.last_backup_at?new Date(backups.last_backup_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US'):t('fin_ow_backup_none')}</span>
+  <div class="row" style="margin-top:6px"><button class="btn sm" onclick="finBackupNow(this)">${t('fin_ow_backup_now')}</button>${backups.items.length?`<button class="btn ghost sm" onclick="finDownloadBackup(this)">${t('fin_ow_backup_dl')}</button>`:''}</div>
+  ${backups.items.length?`<div class="mut" style="margin-top:4px">${backups.items.map(bk=>`#${bk.id} · ${new Date(bk.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')} · ${bk.tables_count} · ${bk.size_bytes}B`).join('<br>')}</div>`:''}</div>
+  <div class="step"><b>📣 ${t('fin_ow_broadcast_t')}</b>
+  <input id="bcTitle" placeholder="${t('fin_ow_bc_title_ph')}" style="margin-top:6px">
+  <textarea id="bcBody" placeholder="${t('fin_ow_bc_body_ph')}" style="margin-top:6px"></textarea>
+  <textarea id="bcBodyEn" placeholder="${t('fin_ow_bc_body_en_ph')}" style="margin-top:6px"></textarea>
+  <div class="row" style="margin-top:6px"><button class="btn sm" onclick="finBroadcastSend(this)">${t('fin_ow_bc_send')}</button></div>
+  ${bcasts.items.length?`<div style="margin-top:8px"><b>${t('fin_ow_bc_hist')}</b>${bcasts.items.map(x=>`<div class="mut" style="margin-top:3px">📣 ${esc(x.title)} — ${x.recipients} ${t('fin_ow_bc_recipients')} · ${new Date(x.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}</div>`).join('')}</div>`:''}</div>
+  <div class="step"><b>🧾 ${t('fin_ow_fin_t')}</b><div class="mut">${t('fin_ow_fin_d')}</div>
+  <div class="row" style="margin-top:6px"><input id="finFrom" type="date" style="flex:1"><input id="finTo" type="date" style="flex:1"><button class="btn ghost sm" onclick="finFinExport(this)">${t('fin_ow_fin_btn')}</button></div></div>
+  <div class="step"><b>🐞 ${t('fin_ow_errlog_t')}</b>${errlog.items.length?errlog.items.slice(0,20).map(x=>`<div class="mut" style="margin-top:3px">${new Date(x.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')} · ${esc(x.route)} · ${esc(x.message)}${x.user_id?` · #${x.user_id}`:''}</div>`).join(''):`<div class="mut">${t('fin_ow_errlog_none')}</div>`}</div>
+  <div class="step"><b>📜 ${t('fin_ow_audit_t')}</b>${auditlog.items.length?auditlog.items.slice(0,20).map(x=>`<div class="mut" style="margin-top:3px">${new Date(x.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')} · ${esc(x.action)} · ${esc(x.target)}${x.detail?` · ${esc(x.detail)}`:''}</div>`).join(''):`<div class="mut">${t('fin_ow_audit_none')}</div>`}</div>`;
   const ambRow=(a)=>`<div class="step"><span class="chip" style="border-color:${a.active?'#c92a2a':'var(--mut)'};color:${a.active?'#ff8787':'var(--mut)'}">${a.active?t('ow_amb_active'):t('ow_amb_history')}</span> <b>${esc(a.user_name)}</b> <span class="mut">📍 ${esc(a.city)} · ${esc(a.country)} · ${t('ow_amb_phone')}: <b>${esc(a.collection_phone)}</b>${a.compensation?` · ${esc(a.compensation)}`:''}</span>
   <div class="mut">${t('ow_amb_collected')}: <b>${a.collected.total} ${esc(a.collected.currency)}</b> · ${t('amb_pending_amt')}: ${a.collected.pending}${a.settled_at?` · ✔ ${new Date(a.settled_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}`:''} · ${new Date(a.created_at).toLocaleDateString(LANG==='ar'?'ar-EG':'en-US')}</div>
   ${a.active?`<div class="row" style="margin-top:6px"><button class="btn sm" onclick="ambSettle(this,${a.id})">${t('ow_amb_settle')}</button><button class="btn ghost sm" onclick="ambRemove(this,${a.id})">${t('ow_amb_remove')}</button></div>`:''}</div>`;
@@ -2747,7 +2826,7 @@ async function loadOwner(){
     <div class="card"><div class="n">${d.commissions.total}</div><div class="mut">${t('ow_total')}</div></div>
     <div class="card"><div class="n">${d.platform.creators}</div><div class="mut">${t('ow_creators')} (${d.platform.founders} ${t('ow_founders')} · ${d.platform.verified} ${t('ow_verified')})</div></div>
     <div class="card"><div class="n">${d.platform.completed}/${d.platform.bookings}</div><div class="mut">${t('ow_completed')}</div></div></div>
-  <h4>${t('ow_disputes')}</h4>${d.disputes.length?d.disputes.map(x=>`<div class="step">${t('bk_w')} #${x.booking_id} — ${esc(x.reason)} <button class="btn sm" onclick="resolveD(this,${x.id},'restore')">${t('ow_restore')}</button> <button class="btn ghost sm" onclick="resolveD(this,${x.id},'cancel')">${t('ow_cancel')}</button></div>`).join(''):`<div class="mut">${t('ow_no_disputes')}</div>`}
+  <h4>${t('ow_disputes')}</h4>${d.disputes.length?d.disputes.map(x=>`<div class="step">${t('bk_w')} #${x.booking_id} — ${esc(x.reason)} <button class="btn sm" onclick="resolveD(this,${x.id},${x.booking_id},'restore')">${t('ow_restore')}</button> <button class="btn ghost sm" onclick="resolveD(this,${x.id},${x.booking_id},'cancel')">${t('ow_cancel')}</button></div>`).join(''):`<div class="mut">${t('ow_no_disputes')}</div>`}
   <h4>${t('ow_exceptional')}</h4>${d.exceptional.length?d.exceptional.map(x=>`<div class="step">${esc(x.name)} — ${esc(x.city)}/${esc(x.niche)} <a target="_blank" href="${esc(x.verify_url)}">${t('ow_link')}</a> <button class="btn sm" onclick="vExc(this,${x.id},true)">${t('ow_accept')}</button> <button class="btn ghost sm" onclick="vExc(this,${x.id},false)">${t('ow_reject')}</button></div>`).join(''):`<div class="mut">${t('ow_no_requests')}</div>`}
   <h4>${t('ow_penalized')}</h4>${d.penalized.length?d.penalized.map(x=>`<div class="step">${esc(x.name)} — ${x.penalty_level}${x.frozen?' · '+t('ow_frozen'):''}${x.banned?' · '+t('ow_banned'):''} <button class="btn sm" onclick="pen(this,${x.id})">${t('ow_unfreeze')}</button></div>`).join(''):`<div class="mut">${t('ow_no_penalized')}</div>`}
   <h4>${t('ow_support')}${support.unread?` <span class="chip" style="border-color:var(--gold);color:var(--gold)">${support.unread} ${t('ow_unread')}</span>`:''}</h4>
@@ -2759,7 +2838,8 @@ async function loadOwner(){
   ${escrowSection}
   ${moneySection}
   ${settleSection}
-  ${ambSection}`;
+  ${ambSection}
+  ${finOpsSection}`;
 }
 /* عكس استلام مُعتبَر عند ثبوت احتيال: حوار داخل الصفحة لسبب العكس —
    يعيد الحجز لمرحلة إثبات التنفيذ ويلغي أثر التأكيد المُعتبَر. */
@@ -2810,7 +2890,7 @@ async function moneyReceipt(btn,id){
       const r=await api(`/api/owner/money/${id}/receipt`);
       const ex=r.extracted||{};
       $('#moneyBody').innerHTML=`<h3>🧾 ${esc(r.code||'')}</h3>
-      ${r.image?`<img src="${r.image}" style="max-width:100%;border-radius:12px" alt="">`:`<div class="mut">—</div>`}
+      ${r.image?`<img src="${r.image}" style="max-width:100%;border-radius:12px" alt="" loading="lazy" decoding="async">`:`<div class="mut">—</div>`}
       <div class="step" style="margin-top:8px">${t('rc_amount')}: <b>${ex.amount??'—'}</b><br>${t('rc_recipient')}: <b>${esc(ex.recipient_digits||'—')}</b><br>${t('rc_ref')}: <b>${esc(ex.transfer_ref||'—')}</b><br>${t('rc_date')}: <b>${esc(ex.date||'—')}</b></div>
       <div class="row" style="margin-top:10px"><button class="btn ghost sm" onclick="document.getElementById('moneyDlg').close()">${t('close')}</button></div>`;
       $('#moneyDlg').showModal();
@@ -2819,7 +2899,34 @@ async function moneyReceipt(btn,id){
 }
 async function starConfirm(btn,id){await withBusy(btn,async()=>{try{await api(`/api/owner/star/${id}/confirm`,{method:'POST',body:'{}'});toast(t('done_t'));loadOwner()}catch(e){toast(errT(e.message))}})}
 async function starReject(btn,id){await withBusy(btn,async()=>{try{await api(`/api/owner/star/${id}/reject`,{method:'POST',body:JSON.stringify({reason:'مرجع التحويلة غير صحيح'})});toast(t('done_t'));loadOwner()}catch(e){toast(errT(e.message))}})}
-async function resolveD(btn,id,a){await withBusy(btn,async()=>{await api(`/api/owner/disputes/${id}/resolve`,{method:'POST',body:JSON.stringify({action:a})});toast(t('ow_resolved'));loadOwner()})}
+/* قرار التحكيم المسبّب (الجولة الأخيرة — ١٣ب): الحوار يجمع سبباً مكتوباً
+   ومرجع دليل واحداً على الأقل من خط زمن الحجز نفسه قبل أي إرسال — نفس
+   ما يفرضه الخادم، فلا قرار صامتاً من أي طريق. */
+let ARB=null;
+async function resolveD(btn,disputeId,bookingId,action){
+  ARB={disputeId,bookingId,action};
+  hideErr('arbErr'); $('#arbReason').value='';
+  const box=$('#arbEvidence'); box.innerHTML=`<div class="mut">${t('loading')}</div>`;
+  $('#arbDlg').showModal();
+  try{
+    const tl=await api(`/api/bookings/${bookingId}/timeline`);
+    const evs=tl.events||[];
+    box.innerHTML=evs.length?evs.map(e=>`<label class="row" style="align-items:flex-start;gap:8px;margin-top:5px"><input type="checkbox" class="arbEv" value="event:${e.id}" style="width:auto;margin-top:3px"><span style="flex:1"><b>${esc(e.kind||'')}</b> <span class="mut">${new Date(e.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}</span><div class="mut">${esc(String(e.body||'').slice(0,140))}</div></span></label>`).join(''):`<div class="mut">—</div>`;
+  }catch(e){ box.innerHTML=`<div class="mut">${errT(e.message)}</div>`; }
+}
+async function doResolveD(btn){
+  hideErr('arbErr');
+  const reason=$('#arbReason').value.trim();
+  const refs=[...document.querySelectorAll('.arbEv:checked')].map(x=>x.value);
+  if(!reason) return showErr('arbErr',t('fin_arb_reason_ph'));
+  if(!refs.length) return showErr('arbErr',t('fin_arb_evidence'));
+  await withBusy(btn,async()=>{
+    try{
+      await api(`/api/owner/disputes/${ARB.disputeId}/resolve`,{method:'POST',body:JSON.stringify({action:ARB.action,reason,evidence_refs:refs})});
+      $('#arbDlg').close(); toast(t('ow_resolved')); loadOwner();
+    }catch(e){ showErr('arbErr',errT(e.message)) }
+  });
+}
 async function vExc(btn,id,ok){await withBusy(btn,async()=>{await api(`/api/owner/verify-exceptional/${id}`,{method:'POST',body:JSON.stringify({approve:ok})});toast(t('done_t'));loadOwner()})}
 async function pen(btn,id){await withBusy(btn,async()=>{await api(`/api/owner/users/${id}/penalty`,{method:'POST',body:JSON.stringify({level:'none',frozen:false})});toast(t('ow_penalty_lifted'));loadOwner()})}
 async function markSupportRead(btn){await withBusy(btn,async()=>{await api('/api/owner/support-messages/read',{method:'POST',body:'{}'});loadOwner()})}
@@ -2848,10 +2955,11 @@ async function doAuth(btn){
       const nicheVal=$('#aNiche').value==='__other'?$('#aNicheCustom').value.trim():$('#aNiche').value;
       const provCat=$('#aProvCat').value;
       const r=AMODE==='register'
-        ?await api('/api/auth/register',{method:'POST',body:JSON.stringify({name:$('#aName').value,role:$('#aRole').value,niche:nicheVal,provider_category:provCat,provider_custom:provCat==='other'?$('#aProvCustom').value.trim():'',city:$('#aCity').value,country:$('#aCountry').value,country_name:$('#aCountry').value==='OTHER'?($('#aCountryName').value||'').trim():'',currency:$('#aCurr').value,contact:$('#aContact').value,password:$('#aPassword').value,device_id:guestDeviceId(),followers:+$('#aFollowers').value||0,price:+$('#aPrice').value||0,links:$('#aLinks').value,tos_accepted:!!(document.getElementById('aTos')||{}).checked,age_confirmed:!!(document.getElementById('aAge')||{}).checked,ref:currentRef()||undefined})})
+        ?await api('/api/auth/register',{method:'POST',body:JSON.stringify({name:$('#aName').value,role:$('#aRole').value,niche:nicheVal,provider_category:provCat,provider_custom:provCat==='other'?$('#aProvCustom').value.trim():'',city:$('#aCity').value,country:$('#aCountry').value,country_name:$('#aCountry').value==='OTHER'?($('#aCountryName').value||'').trim():'',currency:$('#aCurr').value,contact:$('#aContact').value,password:$('#aPassword').value,device_id:guestDeviceId(),followers:+$('#aFollowers').value||0,price:+$('#aPrice').value||0,links:$('#aLinks').value,tos_accepted:!!(document.getElementById('aTos')||{}).checked,age_confirmed:!!(document.getElementById('aAge')||{}).checked,ref:currentRef()||undefined,turnstile_token:window.__tsToken||''})})
         :await api('/api/auth/login',{method:'POST',body:JSON.stringify({contact:$('#aContact').value,password:$('#aPassword').value,device_id:guestDeviceId()})});
       if(AMODE==='register'){ try{localStorage.removeItem('deal_ref')}catch(e){} }
       TOKEN=r.token;localStorage.setItem('deal_token',TOKEN);ME={user:r.user};
+      if(r.user&&r.user.is_platform_founder) hideMaintenance();
       $('#authDlg').close();renderAuth();toast(t('welcome_t'));FILTERS_READY=false;refresh();
       /* ترحيل الحسابات القديمة: دخول ناجح بلا كلمة سر يفتح فرض التعيين. */
       if(r.needs_password) openSetPassword(true);
@@ -3028,6 +3136,9 @@ function securityCardHtml(u){
   <label class="row" style="align-items:flex-start;gap:8px;margin-top:6px"><input type="checkbox" id="finDecl" style="width:auto;margin-top:3px"><span class="mut">${X('أقرّ أن المحفظة دي باسمي القانوني المسجل وأن البيانات صحيحة','I declare this wallet is registered under my legal name and the data is correct')}</span></label>
   <div class="row" style="margin-top:6px"><button class="btn sm" onclick="saveFinIdentity(this)">${X('تسجيل الهوية المالية','Record financial identity')}</button></div>`}
   </div>`:''}
+  <div style="margin-top:14px"><b>📦 ${t('fin_data_t')}</b><div class="mut" style="margin-top:3px">${t('fin_data_d')}</div>
+  <div class="row" style="margin-top:6px"><button class="btn ghost sm" onclick="downloadMyData(this)">${t('fin_data_btn')}</button></div></div>
+  <div style="margin-top:14px"><b>🚫 ${t('fin_blocks_t')}</b><div id="myBlocks" style="margin-top:6px"><span class="mut">${t('loading')}</span></div></div>
   </div>`;
 }
 async function verifyEmailStart(btn){await withBusy(btn,async()=>{try{await api('/api/me/verify-email/start',{method:'POST',body:JSON.stringify({email:($('#evEmail')||{}).value||''})});toast(X('اتبعت الكود — شوف إيميلك','Code sent — check your email'))}catch(e){toast(errT(e.message))}})}
@@ -3691,6 +3802,9 @@ async function copyTextValue(val){
 function personalLink(id){ return location.origin+location.pathname+'#/u/'+id+'?book=1'; }
 async function copyProfileLink(btn,id){
   await copyTextValue(personalLink(id));
+  /* إشارة «أكمِل ملفك» (الجولة الأخيرة — بند ٥): نسخ رابطك الشخصي بنفسك
+     يُختم خادمياً من أول مرة — إشارة فعل حقيقي لا تخمين. */
+  if(ME&&ME.user&&ME.user.id===id){ try{ await api('/api/me/link-copied',{method:'POST',body:'{}'}); }catch(e){} }
   if(btn){ const old=btn.innerHTML; btn.textContent=t('copied'); btn.disabled=true;
     setTimeout(()=>{btn.innerHTML=old;btn.disabled=false},2200); }
   toast(t('copied'));
@@ -3843,7 +3957,7 @@ function showDealCardRoute(id){ loadDealCardPage(id); }
 
 /* ===== رابط الحجز الشخصي + QR مولّد عميلاً (بلا أي خدمة خارجية) ===== */
 let BOOK_URL='';
-async function copyVal(btn,val){ await copyTextValue(val); toast(t('copied')); }
+async function copyVal(btn,val){ await copyTextValue(val); if(ME&&ME.user&&String(val||'').includes('#/u/'+ME.user.id)){ try{ await api('/api/me/link-copied',{method:'POST',body:'{}'}); }catch(e){} } toast(t('copied')); }
 function bioText(){ return (LANG==='ar'?'احجز إعلانك عندي عبر Deal 👇\n':'Book your ad with me on Deal 👇\n')+BOOK_URL; }
 /* مشفّر QR مبسّط ذاتي: وضع بايت، تصحيح M، إصدارات ١–٧، قناع ثابت (قناع صالح
    قياسياً)، معلومات الصيغة والإصدار محسوبة بـBCH. كافٍ لروابط الحجز القصيرة. */
@@ -4000,7 +4114,7 @@ function profilePageHtml(d){
     <div class="row" style="margin:8px 0"><span class="chip">${t('stat_completed')} ${d.stats.completed_deals}</span><span class="chip">✅ ${u.verified_deals??d.stats.completed_deals} ${t('verified_deals_w')}</span>${rateChip(d.stats.completion_rate)}<span class="chip">${t('stat_positive')} ${d.stats.positive_pct??'—'}%</span><span class="chip">⭐ ${d.stats.avg_stars??'—'}</span><span class="chip"><span data-fcount="${u.id}">${u.followers_count||0}</span> ${t('deal_followers')}</span>${seatChip(u)}${ambChip(u)}${u.late_dues?`<span class="chip" style="border-color:#c92a2a;color:#ff6b6b">${t('late_dues_chip')}</span>`:''}${u.reply_speed?`<span class="chip">⚡ ${t('rs_'+u.reply_speed.bucket)}</span>`:`<span class="chip">⚡ ${t('rs_new')}</span>`}${u.featured?`<span class="chip" style="border-color:var(--gold);color:var(--gold)">${t('featured_chip')}</span>`:''}${starChips(u)}</div>
     ${u.bio?`<p>${esc(u.bio)}</p>`:''}
     <div class="row" style="margin-top:10px">${mine||(ME&&ME.user.is_platform_founder)?'':(ME?`<button class="btn sm" onclick="quickBook(this,${u.id})">${t('book_for')} ${money(u.price, u.currency)}</button>`:`<button class="btn" style="font-size:16px;padding:12px 22px" onclick="openGuest(${u.id},decodeURIComponent('${encodeURIComponent(u.name).replace(/'/g,'%27')}'))">${t('book_me_btn')}</button>`)}
-    ${followBtn(u)}<span data-fzone="${u.id}">${friendBtn(u)}${msgBtn(u)}</span>${mine?'':favBtn(u)}</div>
+    ${followBtn(u)}<span data-fzone="${u.id}">${friendBtn(u)}${msgBtn(u)}</span>${blockBtn(u)}${mine?'':favBtn(u)}</div>
     </div>
   </div>
   <div class="posts-host" id="profilePosts"></div>
@@ -4571,7 +4685,7 @@ function proofHtml(b){
   const u=String(b.proof_url||'');
   const stamp=`<div class="proof-stamp"><span>${t('proof_stamp')}</span></div>`;
   let media='';
-  if(/\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(u)) media=`<img src="${esc(u)}" alt="">`;
+  if(/\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(u)) media=`<img src="${esc(u)}" alt="" loading="lazy" decoding="async">`;
   else if(/\.(mp4|webm|mov)(\?|#|$)/i.test(u)) media=`<video controls src="${esc(u)}"></video>`;
   const inner=media?`<div class="proof-wrap">${media}${stamp}</div>`:`<div class="proof-wrap" style="padding:12px"><a target="_blank" href="${esc(u)}">${esc(u)}</a>${stamp}</div>`;
   return `<div class="mut">${t('proof_w')}: ${b.proof_check==='verified'?t('proof_verified'):''}</div>${inner}`;
@@ -4661,11 +4775,69 @@ async function tplAdd(btn){ const inp=document.getElementById('tplNew'); const t
   await withBusy(btn,async()=>{ try{ if(TPL_EDIT){ await api('/api/my/templates/'+TPL_EDIT,{method:'PUT',body:JSON.stringify({text})}); TPL_EDIT=0; } else await api('/api/my/templates',{method:'POST',body:JSON.stringify({text})}); inp.value=''; fillTools(); }catch(e){ toast(errT(e.message)) } }); }
 async function tplDel(btn,id){ await withBusy(btn,async()=>{ try{ await api('/api/my/templates/'+id,{method:'DELETE'}); fillTools(); }catch(e){ toast(errT(e.message)) } }); }
 
+/* ================= الجولة الأخيرة الشاملة — واجهات (TESTING-FINAL.md) ================= */
+function showMaintenance(){ const el=document.getElementById('maintenanceScreen'); if(el) el.style.display='flex'; }
+function hideMaintenance(){ const el=document.getElementById('maintenanceScreen'); if(el) el.style.display='none'; }
+/* Turnstile (بند ١٢): لا يُبنى أي عنصر ولا يُحمَّل أي سكربت إلا عند وصول
+   مفتاح موقع من /api/config — بلا المفتاح يبقى نموذج التسجيل كما هو. */
+function finSetupTurnstile(siteKey){
+  window.__tsSiteKey=siteKey;
+  if(window.__tsRendered) return; window.__tsRendered=true;
+  const render=()=>{ try{ if(window.turnstile&&document.getElementById('turnstileBox')) window.turnstile.render('#turnstileBox',{sitekey:siteKey,callback:tok=>{ window.__tsToken=tok; }}); }catch(e){} };
+  if(window.turnstile){ render(); return; }
+  const s=document.createElement('script'); s.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; s.async=true; s.defer=true; s.onload=render; document.head.appendChild(s);
+}
+/* الخط الزمني الموحّد + قرار التحكيم (١٣أ/١٣ب): مكوّن واحد من حمولة
+   الحجز نفسها — الطرفان يريان البنية ذاتها لأن الخادم يبنيها مرة واحدة. */
+function finTimelineHtml(b){
+  let h='';
+  if(b.arbitration){
+    h+=`<div class="step" style="border-color:var(--gold)"><b>⚖️ ${t('fin_arb_t')}</b><div style="margin-top:4px">${esc(b.arbitration.reason||'')}</div><div class="mut" style="margin-top:3px">${t('fin_arb_refs')}: ${esc((b.arbitration.evidence_refs||[]).join('، '))}${b.arbitration.decided_at?` · ${new Date(b.arbitration.decided_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')}`:''}</div></div>`;
+  }
+  const evs=b.timeline||b.events||[];
+  if(evs.length){
+    h+=`<div class="step"><b>🕘 ${t('fin_tl_t')}</b>${evs.map(e=>`<div class="mut" style="margin-top:4px"><span style="color:var(--gold)">•</span> ${new Date(e.created_at).toLocaleString(LANG==='ar'?'ar-EG':'en-US')} — ${esc(e.body||'')}</div>`).join('')}</div>`;
+  }
+  return h;
+}
+async function finDownload(path,filename){
+  const r=await fetch(path,{headers:TOKEN?{Authorization:'Bearer '+TOKEN}:{}});
+  if(!r.ok) throw new Error(t('fin_data_t'));
+  const blob=await r.blob();
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>{ try{ URL.revokeObjectURL(a.href); }catch(e){} },4000);
+}
+async function downloadMyData(btn){ await withBusy(btn,async()=>{ try{ await finDownload('/api/me/export-data','deal-my-data.json'); }catch(e){ toast(errT(e.message)) } }); }
+async function finBlockUser(btn,id){ await withBusy(btn,async()=>{ try{ await api(`/api/users/${id}/block`,{method:'POST',body:'{}'}); toast(t('fin_blocked_t')); }catch(e){ toast(errT(e.message)) } }); }
+async function finUnblock(btn,id){ await withBusy(btn,async()=>{ try{ await api(`/api/users/${id}/block`,{method:'DELETE'}); toast(t('fin_unblocked_t')); finLoadBlocks(); }catch(e){ toast(errT(e.message)) } }); }
+async function finLoadBlocks(){
+  const box=document.getElementById('myBlocks'); if(!box||!ME) return;
+  try{
+    const d=await api('/api/me/blocks');
+    box.innerHTML=d.items&&d.items.length?d.items.map(x=>`<div class="row" style="margin-bottom:6px"><span style="flex:1">${esc(x.name)}</span><button class="btn ghost sm" onclick="finUnblock(this,${x.id})">${t('fin_unblock_btn')}</button></div>`).join(''):`<span class="mut">${t('fin_blocks_none')}</span>`;
+  }catch(e){ box.innerHTML=''; }
+}
+async function finMaintToggle(btn,on){ await withBusy(btn,async()=>{ try{ await api('/api/owner/maintenance',{method:'POST',body:JSON.stringify({on:!!on})}); toast(t('done_t')); loadOwner(); }catch(e){ toast(errT(e.message)) } }); }
+async function finBackupNow(btn){ await withBusy(btn,async()=>{ try{ const r=await api('/api/owner/backup-now',{method:'POST',body:'{}'}); toast(`${t('done_t')} — #${r.backup.id}`); loadOwner(); }catch(e){ toast(errT(e.message)) } }); }
+async function finDownloadBackup(btn){ await withBusy(btn,async()=>{ try{ await finDownload('/api/owner/backups/latest/download','deal-backup.json'); }catch(e){ toast(errT(e.message)) } }); }
+async function finBroadcastSend(btn){ await withBusy(btn,async()=>{ try{ const r=await api('/api/owner/broadcast',{method:'POST',body:JSON.stringify({title:$('#bcTitle').value.trim(),body:$('#bcBody').value.trim(),body_en:$('#bcBodyEn').value.trim()})}); toast(`${t('fin_ow_bc_sent')} — ${r.recipients} ${t('fin_ow_bc_recipients')}`); loadOwner(); }catch(e){ toast(errT(e.message)) } }); }
+async function finFinExport(btn){ await withBusy(btn,async()=>{ try{ const f=($('#finFrom')||{}).value, tv=($('#finTo')||{}).value; const q=[]; if(f) q.push('from='+new Date(f).getTime()); if(tv) q.push('to='+(new Date(tv).getTime()+86399999)); await finDownload('/api/owner/financial-export'+(q.length?'?'+q.join('&'):''),'deal-financial-export.xls'); }catch(e){ toast(errT(e.message)) } }); }
+
 /* ================= التهيئة + PWA ================= */
 (async()=>{ routeHash(); applyI18n();
   buildTaxUI(); loadTaxonomy();
-  if(TOKEN){try{const m=await api('/api/me');ME={user:m.user};}catch(e){TOKEN='';localStorage.removeItem('deal_token')}}
+  if(TOKEN){try{const m=await api('/api/me');ME={user:m.user};}catch(e){ if(e.code!=='MAINTENANCE'){ TOKEN='';localStorage.removeItem('deal_token'); } }}
   renderAuth();
+  /* الجولة الأخيرة: إعداد عام من الخادم — حالة الصيانة (شاشة موحّدة لغير
+     المؤسس) + مفتاح Turnstile العلني (الويدجت يُبنى فقط عند وجوده) +
+     عدّاد مشاهدة أولي خفيف ببصمة الزائر المحلية نفسها. */
+  try{
+    const cfg=await (await fetch('/api/config')).json();
+    if(cfg.maintenance&&!(ME&&ME.user&&ME.user.is_platform_founder)) showMaintenance();
+    if(cfg.turnstile_site_key) finSetupTurnstile(cfg.turnstile_site_key);
+    if(!cfg.maintenance){ try{ fetch('/api/page-view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vid:guestDeviceId()})}).catch(()=>{}); }catch(e){} }
+  }catch(e){ /* الإعداد العام إضافي — غيابه لا يعطّل الإقلاع */ }
   initHeroFx();
   loadSeatsState();
   if(!routeHash()){ /* التحميل الأول بعد اكتمال تحليل كل كتل السكربت
@@ -4797,7 +4969,7 @@ async function loadDashExtras(){
     cd.innerHTML=`<b>👑 ${t('fv_owner_t')}</b><div class="row" style="margin-top:8px;gap:14px;flex-wrap:wrap"><span>${t('fv_samples_t')}: ${t('fv_samples_with')} <b>${ss.with_samples}</b> · ${t('fv_samples_without')} <b>${ss.without_samples}</b></span>${seatsLine}</div>`;
     host.prepend(cd);
   }catch(e){} }
-  if(isTalent && !u.is_platform_founder){ try{ const pf=await api('/api/me/portfolio'); if(!(pf.items||[]).length){ const al=document.createElement('div'); al.className='card'; al.style.marginTop='12px'; al.style.borderColor='var(--gold)'; al.innerHTML=`<b>🎬 ${X('أضف نماذجك عشان العملاء يشوفوا شغلك','Add your samples so clients can see your work')}</b><div class="mut" style="margin-top:4px">${X('من غير نماذج، ملفك مش هيظهر في معرض الأعمال للعملاء.','Without samples, your profile will not appear in the client work gallery.')}</div><div class="row" style="margin-top:6px"><button class="btn sm" onclick="openSamplesDlg()">${X('أضف نماذج من شغلك','Add work samples')}</button></div>`; host.prepend(al); } }catch(e){ console.error('[deal-extras] samples alert:',e); } }
+  /* تذكير النماذج المنفصل طُوِي داخل بطاقة «أكمِل ملفك» في اللوحة (الجولة الأخيرة — بند ٥): نفس الدعوة ونفس الزر، من حالة القائمة الخادمية. */
   if(isTalent){ xInsights(7); xLoadPkgEditor(); xLoadFlashVac(); xLoadMyVideos(); xLoadOpenReqs(); }
   xLoadMyReqs(); xLoadWaitlist(); xLoadContracts(); xLoadAcademy();
 }
@@ -4949,7 +5121,24 @@ function xPickTpl(key){ const tp=(TPL_CACHE||[]).find(x=>x.key===key); if(!tp) r
   toast(X('اتملى القالب — كمّل الباقي وانشر','Template filled — complete the rest and post')); }
 
 /* ---- أغلفة حول الدوال القائمة (بلا تعديل في منطقها) ---- */
-const _xLoadMarket=loadMarket; loadMarket=async function(b){ await _xLoadMarket(b); try{ await loadMarketExtras(); }catch(e){ console.error('[deal-extras]',e); } };
+const _xLoadMarket=loadMarket; loadMarket=async function(b){ await _xLoadMarket(b); finLazyMarketExtras(); };
+/* تحميل كسول لأقسام السوق تحت الطية (الجولة الأخيرة — بند ٨): بيانات
+   الأقسام الإضافية (ستوريز/مواسم/شغل جديد/جدار/نماذج/تحدي) لا تُجلب إلا
+   عند اقترابها من الشاشة (IntersectionObserver بهامش ٦٠٠px) أو بعد
+   ١٫٢ ثانية كحد أقصى — المحتوى نفسه وسلوكه لم يتغيرا، تأجيل الجلب فقط. */
+let __finExtrasTimer=null, __finExtrasObs=null;
+function finLazyMarketExtras(){
+  const run=()=>{ if(__finExtrasTimer){ clearTimeout(__finExtrasTimer); __finExtrasTimer=null; } if(__finExtrasObs){ try{ __finExtrasObs.disconnect(); }catch(e){} __finExtrasObs=null; } try{ const p=loadMarketExtras(); if(p&&p.catch) p.catch(e=>console.error('[deal-extras]',e)); }catch(e){ console.error('[deal-extras]',e); } };
+  if(__finExtrasTimer) clearTimeout(__finExtrasTimer);
+  __finExtrasTimer=setTimeout(run,1200);
+  try{
+    if('IntersectionObserver' in window){
+      if(__finExtrasObs) __finExtrasObs.disconnect();
+      __finExtrasObs=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) run(); },{rootMargin:'600px'});
+      ['storiesStrip','seasonSec','newWorkSec','dealsWallSec','samplesSec','challengeSec'].forEach(id=>{ const el=document.getElementById(id); if(el) __finExtrasObs.observe(el); });
+    }
+  }catch(e){}
+}
 const _xLoadProfilePage=loadProfilePage; loadProfilePage=async function(id){ await _xLoadProfilePage(id); try{ await loadProfileExtras(id); }catch(e){ console.error('[deal-extras]',e); } };
 const _xLoadDash=loadDash; loadDash=async function(){ await _xLoadDash(); try{ await loadDashExtras(); }catch(e){ console.error('[deal-extras]',e); } };
 const _xLoadOwner=loadOwner; loadOwner=async function(){ await _xLoadOwner(); try{ await loadOwnerExtras(); }catch(e){ console.error('[deal-extras]',e); } };

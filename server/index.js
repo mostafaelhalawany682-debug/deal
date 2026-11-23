@@ -167,6 +167,10 @@ async function sweepStar() {
   const done = await db.prepare(`SELECT * FROM star_subscriptions WHERE status='active' AND expires_at<=?`).all(t);
   for (const s of done) {
     await db.prepare(`UPDATE star_subscriptions SET status='expired' WHERE id=?`).run(s.id);
+    /* اشتراك لاحق ما زال نشطاً لنفس العضو (مثال: شهر ترحيب مُلحق بعد اشتراك
+       مدفوع) = المزايا مستمرة — فلا إشعار «انتهى اشتراكك» المضلّل. */
+    const later = await db.prepare(`SELECT id FROM star_subscriptions WHERE user_id=? AND status='active' AND expires_at>? LIMIT 1`).get(s.user_id, t);
+    if (later) continue;
     if (!s.reminded_expired) {
       await db.prepare('UPDATE star_subscriptions SET reminded_expired=1 WHERE id=?').run(s.id);
       await notify(s.user_id, 'star_expired', 'انتهى اشتراكك في «نجم Deal» — انطفأت مزايا النجم. جدّد في أي وقت من صفحة الباقة ⭐', 'star');
@@ -194,6 +198,63 @@ async function myStarState(userId) {
   if (!latest) return { state: 'none', subscription: null, is_week_star: false };
   return { state: latest.status, subscription: starSubView(latest), is_week_star: false };
 }
+
+/* ---------------- مهام الترحيب (جولة مهام الترحيب والانتشار) ----------------
+   أربع مهام للصانع/مقدم الخدمة الجديد (المؤسس مستثنى)، كل واحدة تُقرأ من
+   حالة منصة حقيقية فقط — لا إعلان ذاتي ولا زر «أنجزت»: (١) تأكيد الإيميل
+   من عمود email_verified نفسه، (٢) نموذج شغل = صف فعلي في portfolio_items،
+   (٣) أول درس أكاديمية = صف فعلي في academy_progress، (٤) أول عرض سعر =
+   صف فعلي في request_quotes باسم الصانع. اكتمال الأربع = شهر مجاني من
+   «نجم Deal» (٣٠ يوماً) يُفعَّل عبر آلية الاشتراكات نفسها: صف star_subscriptions
+   نشط بسعر صفر ووسم source='welcome' وبلا أي التزام مالي أو قيد في سجل
+   الأموال (لا obligation إطلاقاً). المنح مرة واحدة أبداً لكل حساب: ختم
+   welcome_star_granted_at بشرط أنه صفر (ذرياً، مثل ختم ترحيب المؤسس).
+   سلوك الإلحاق الموثّق: إن كان للعضو اشتراك مدفوع نشط لحظة المنح، يبدأ
+   شهر الترحيب من نهاية الاشتراك النشط (activated_at = نهايته) وينتهي بعد
+   ٣٠ يوماً منها — فالمزايا مستمرة بلا فجوة وبلا تداخل مهدر، وحارس sweepStar
+   يمنع إشعار انتهاء مضلّلاً عند انقضاء المدفوع أولاً. */
+async function welcomeMissionsState(u) {
+  const email = !!u.email_verified;
+  const sample = (await db.prepare('SELECT COUNT(*) c FROM portfolio_items WHERE user_id=?').get(u.id)).c > 0;
+  const academy = (await db.prepare('SELECT COUNT(*) c FROM academy_progress WHERE user_id=?').get(u.id)).c > 0;
+  const quote = (await db.prepare('SELECT COUNT(*) c FROM request_quotes WHERE talent_id=?').get(u.id)).c > 0;
+  const missions = { email, sample, academy, quote };
+  return { missions, done_count: Object.values(missions).filter(Boolean).length };
+}
+async function maybeGrantWelcomeStar(u) {
+  if (!u || u.is_platform_founder || !['creator', 'provider'].includes(u.role)) return null;
+  if (u.welcome_star_granted_at) return null;
+  const st = await welcomeMissionsState(u);
+  if (st.done_count < 4) return null;
+  const t = now();
+  const claim = await db.prepare('UPDATE users SET welcome_star_granted_at=? WHERE id=? AND welcome_star_granted_at=0').run(t, u.id);
+  if (!claim.changes) return null; // خُتمت من قبل — لا منح ثانٍ أبداً
+  const active = await activeStarSub(u.id);
+  const startAt = active && active.expires_at > t ? active.expires_at : t;
+  const info = await db.prepare(`INSERT INTO star_subscriptions (user_id,amount,currency,ref,status,terms_version,terms_accepted_at,created_at,decided_at,decided_by,activated_at,expires_at,obligation_id,source)
+    VALUES (?,?,?, '', 'active', '', ?, ?, ?, NULL, ?, ?, NULL, 'welcome')`)
+    .run(u.id, 0, STAR_CURRENCY, t, t, t, startAt, startAt + STAR_DURATION_MS);
+  await notify(u.id, 'welcome_star', '🎉 مبروك! أكملت مهام الترحيب الأربع — هديتك: شهر كامل من باقة «نجم Deal» اتفعّل لحسابك (٣٠ يوماً من المزايا: شارة ذهبية وأولوية ظهور وترشيح أول). بالتوفيق!', 'star');
+  return await db.prepare('SELECT * FROM star_subscriptions WHERE id=?').get(info.lastInsertRowid);
+}
+app.get('/api/me/welcome-missions', auth, async (req, res) => {
+  const u = req.user;
+  if (u.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس عرض فقط — لا مهام ترحيب له', code: 'FOUNDER_EXCLUDED' });
+  if (!['creator', 'provider'].includes(u.role)) return res.status(400).json({ error: 'مهام الترحيب للصناع ومقدمي الخدمة فقط' });
+  const grant = await maybeGrantWelcomeStar(u);
+  const fresh = grant ? await getUser(u.id) : u;
+  const st = await welcomeMissionsState(fresh);
+  let sub = grant;
+  if (!sub && fresh.welcome_star_granted_at) {
+    sub = await db.prepare(`SELECT * FROM star_subscriptions WHERE user_id=? AND source='welcome' ORDER BY id DESC LIMIT 1`).get(u.id);
+  }
+  res.json({
+    missions: st.missions, done_count: st.done_count, total: 4,
+    granted: !!fresh.welcome_star_granted_at, granted_at: fresh.welcome_star_granted_at || 0,
+    just_granted: !!grant,
+    subscription: sub ? { ...starSubView(sub), source: 'welcome' } : null,
+  });
+});
 
 /* ---------------- المرجع المالي الموحد + نظام أمان المعاملات ----------------
    قرار المالك الملزم: كل التزام مالي في المنصة (اشتراك باقة، عمولة حجز،
@@ -1837,7 +1898,9 @@ app.get('/api/me/financial-identity', auth, async (req, res) => {
 app.post('/api/me/financial-identity', auth, async (req, res) => {
   const u = req.user;
   if (u.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس عرض فقط' });
-  if (!['creator', 'provider'].includes(u.role)) return res.status(400).json({ error: 'الهوية المالية المؤكدة للصناع ومقدمي الخدمة فقط' });
+  /* الإقرار متاح لكل حساب مسجل (صانع/مقدم/عميل): الإقرار عن محفظة التحويل
+     التي يتعامل بها الحساب نفسه، وبوابة المخاطر الحية (محركات النمو والأمان)
+     قد تطلبه من أي طرف في حجز كبير — فلا بد أن يقدر كل طرف على إكماله. */
   const { wallet_number, legal_name, wallet_owner_name, declaration_accepted } = req.body || {};
   const wallet = String(wallet_number || '').trim();
   if (!/^\+?[\d\s-]{8,24}$/.test(wallet) || wallet.replace(/\D/g, '').length < 8 || wallet.replace(/\D/g, '').length > 20) return res.status(400).json({ error: 'رقم محفظة تحويل صحيح مطلوب (أرقام فقط، ٨–٢٠ رقماً)' });
@@ -2191,6 +2254,27 @@ app.get('/api/deals/:bookingId', async (req, res) => {
       founder_seat: talent.founder_seat ?? null, verified: !!talent.verified,
     },
     client_first_name: firstName,
+  });
+});
+
+/* ---------------- بطاقات إنجاز الصانع (جولة مهام الترحيب والانتشار) ----------------
+   قائمة بطاقات إنجاز العضو نفسه كمقدم/صانع: حجز مكتمل واحد = بطاقة واحدة.
+   حقائق علنية فقط من ملف المقدم نفسه (المجال/فئة الخدمة + المدينة) + تاريخ
+   الإتمام + رابط الصفقة الموثقة القائم نفسه (#/d/<id>) — بلا أي مبلغ وبلا
+   هوية عميل إطلاقاً (لا يُختار عمود السعر أصلاً). العميل/الضيف لا يحصل
+   على بطاقات هنا: الاستعلام مقيد بـ talent_id = صاحب الجلسة نفسه. */
+app.get('/api/me/achievements', auth, async (req, res) => {
+  const u = req.user;
+  if (u.is_platform_founder || !['creator', 'provider'].includes(u.role)) return res.json({ items: [] });
+  const rows = await db.prepare(`SELECT id, completed_at FROM bookings WHERE talent_id=? AND status='completed' ORDER BY completed_at DESC, id DESC`).all(u.id);
+  res.json({
+    items: rows.map((b) => ({
+      booking_id: b.id,
+      niche: u.niche || '', provider_category: u.provider_category || '', provider_custom: u.provider_custom || '',
+      city: u.city || '', country: u.country || '',
+      completed_at: b.completed_at || 0,
+      deal_path: `#/d/${b.id}`,
+    })),
   });
 });
 
@@ -2914,6 +2998,7 @@ async function runAllSweeps() {
   try { out.contracts = await sweepContracts(); } catch (e) { out.contracts = -1; }
   try { out.challenge = await sweepChallenge() ? 1 : 0; } catch (e) { out.challenge = -1; }
   try { out.academy_reminders = await sweepAcademyReminders(); } catch (e) { out.academy_reminders = -1; }
+  try { out.churn_prevention = await sweepChurnPrevention(); } catch (e) { out.churn_prevention = -1; }
   return out;
 }
 async function sweepStepExpiryCount() {
@@ -3238,12 +3323,15 @@ async function replySpeedFor(userId) {
 
 /* ---- درجة الظهور (محرك الترتيب الصامت) — الصيغة كاملة في وثيقة البناء ---- */
 async function visibilityScore(u, ctx = {}) {
-  const parts = { verified: 0, reply: 0, completion: 0, profile: 0, activity: 0, star: 0, new_boost: 0, academy: 0, rotation_penalty: 0 };
+  const parts = { verified: 0, reply: 0, completion: 0, profile: 0, activity: 0, star: 0, new_boost: 0, academy: 0, closing: 0, rotation_penalty: 0 };
   if (u.verified) parts.verified = 25;
   const rs = await replySpeedFor(u.id);
   if (rs) parts.reply = rs.median_minutes < 60 ? 20 : rs.median_minutes < 180 ? 14 : rs.median_minutes < 1440 ? 7 : 2;
   const st = await talentStats(u.id);
   if (st && st.completion_rate != null) parts.completion = Math.round((st.completion_rate / 100) * 20);
+  // مكوّن توقع الإغلاق (محركات النمو والأمان): إشارة من سجل عروض/حجوزات حقيقي
+  // فقط، محايدة تماماً (٠) عند غياب حد أدنى من السجل — فلا تمسّ دفعة الجديد.
+  parts.closing = (await closingSignalFor(u.id)).points;
   let prof = 0;
   if (u.avatar) prof += 4;
   if (u.price > 0) prof += 3;
@@ -3266,7 +3354,7 @@ async function visibilityScore(u, ctx = {}) {
       .get(u.id, ctx.viewerKey, ctx.city || '', ctx.niche || '', day);
     if (imp && imp.hits > 3) parts.rotation_penalty = -Math.min(20, (imp.hits - 3) * 4);
   }
-  const score = parts.verified + parts.reply + parts.completion + parts.profile + parts.activity + parts.star + parts.new_boost + parts.academy + parts.rotation_penalty;
+  const score = parts.verified + parts.reply + parts.completion + parts.profile + parts.activity + parts.star + parts.new_boost + parts.academy + parts.closing + parts.rotation_penalty;
   return { score, parts };
 }
 
@@ -3300,8 +3388,11 @@ async function matchRequest(reqRow) {
   for (const u of candidates) {
     if (reqRow.shop_user_id && u.id === reqRow.shop_user_id) continue;
     const rs = await replySpeedFor(u.id);
-    const score = target ? 100 : matchScoreFor(u, reqRow, rs);
-    if (!target && score <= 0) continue;
+    const base = target ? 100 : matchScoreFor(u, reqRow, rs);
+    if (!target && base <= 0) continue;
+    // مكوّن توقع الإغلاق في المطابقة أيضاً (نفس إشارة الترتيب وبنفس الوزن
+    // المحدود) — يُضاف فقط فوق ملاءمة موجبة أصلاً فلا يُدخل صانعاً غير ملائم.
+    const score = target ? 100 : base + (await closingSignalFor(u.id)).points;
     scored.push({ user_id: u.id, score });
   }
   scored.sort((a, b) => b.score - a.score);
@@ -3338,6 +3429,221 @@ async function sweepRequestRescue() {
   }
   return rescued;
 }
+
+/* =====================================================================
+   محركات النمو والأمان (قرار المالك 2026-11-23 «الكل» — TESTING-ENGINES.md)
+   خمسة محركات فوق إشارات حقيقية مسجلة فقط: لا رقم مُخترع يُعرض لأي مستخدم
+   أبداً، وعند صفر بيانات يتصرف كل محرك بحياد/فراغ صادق. تقديرات المالك
+   موسومة «إشارة/تقدير» في واجهته. الثوابت كلها موثقة في وثيقة الجولة.
+   ===================================================================== */
+const ENG_DAY_MS = 24 * 3600 * 1000;
+
+/* ---- ١) إشارة توقع الإغلاق: عروض → حجوزات → مكتملة ----
+   rate = ½×(حجوزات من عروض ÷ عروض مُرسلة) + ½×(مكتملة ÷ حجوزات من عروض).
+   بلا حد أدنى من العروض (٣) الإشارة محايدة: rate=null ونقاط=٠ — فلا تُكافئ
+   ولا تُعاقب، ودفعة الصانع الجديد (١٤ يوماً) لا تُمسّ. الوزن محدود: حتى
+   +١٠ نقاط في درجة الظهور ونفسها في درجة المطابقة فوق ملاءمة موجبة فقط. */
+const CLOSING_MIN_QUOTES = 3;
+const CLOSING_MAX_POINTS = 10;
+async function closingSignalFor(userId) {
+  const quotes = (await db.prepare('SELECT COUNT(*) c FROM request_quotes WHERE talent_id=?').get(userId)).c || 0;
+  if (quotes < CLOSING_MIN_QUOTES) return { quotes, bookings: 0, completed: 0, rate: null, points: 0 };
+  const bookings = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND source='quote'`).get(userId)).c || 0;
+  const completed = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND source='quote' AND status='completed'`).get(userId)).c || 0;
+  const rate = 0.5 * (bookings / quotes) + 0.5 * (bookings ? completed / bookings : 0);
+  return { quotes, bookings, completed, rate, points: Math.round(rate * CLOSING_MAX_POINTS) };
+}
+
+/* ---- ٤) نقاط مخاطر الحساب الحية + بوابة الهوية المالية للقيم الكبيرة ----
+   إشارات حقيقية فقط (الأوزان موثقة في TESTING-ENGINES.md): إيميل غير مؤكد
+   ٢٠، حساب أحدث من ٧ أيام ١٠، كل علامة سلوك ١٥ (بسقف ٣٠)، كل إعلان دفع
+   كاذب موثّق برفض المالك (reject_kind='false_claim') ٢٥ (بسقف ٥٠)، كل
+   نتيجة خطأ مسجلة على الطرف (cancel_fault) ٢٠ (بسقف ٤٠)، مستوى عقوبة
+   قائم ١٠. الشريط العالي >= ٥٠. الدرجة نفسها لا تُعرض لأي مستخدم أبداً؛
+   الإنفاذ الوحيد: الشريط العالي + حجز أعلى من العتبة (٢٠٠٠ بوحدات عملة
+   الحجز — نفس اصطلاح عتبة تقسيم العربون المسطّحة) ⇒ إكمال خطوة «الهوية
+   المالية المؤكدة» القائمة أولاً. تحت العتبة لا يتغير شيء (مرونة). */
+const RISK_HIGH_BAND = 50;
+const RISK_WATCH_BAND = 25;
+const RISK_FIN_IDENTITY_THRESHOLD = 2000;
+async function accountRiskFor(u) {
+  const inputs = { email_unverified: 0, new_account: 0, behavior_flags: 0, false_claims: 0, fault_outcomes: 0, penalty_level: 0 };
+  if (!u) return { score: 0, band: 'low', inputs };
+  let score = 0;
+  if (!u.is_platform_founder && !u.email_verified) { inputs.email_unverified = 20; score += 20; }
+  if (now() - (u.created_at || 0) < 7 * ENG_DAY_MS) { inputs.new_account = 10; score += 10; }
+  const flags = (await db.prepare('SELECT COUNT(*) c FROM behavior_flags WHERE user_id=?').get(u.id)).c || 0;
+  inputs.behavior_flags = Math.min(30, flags * 15); score += inputs.behavior_flags;
+  const fc = (await db.prepare(`SELECT COUNT(*) c FROM money_obligations WHERE payer_user_id=? AND reject_kind='false_claim'`).get(u.id)).c || 0;
+  inputs.false_claims = Math.min(50, fc * 25); score += inputs.false_claims;
+  const ft = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND cancel_fault='talent'`).get(u.id)).c || 0;
+  const fl = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE client_id=? AND cancel_fault='client'`).get(u.id)).c || 0;
+  inputs.fault_outcomes = Math.min(40, (ft + fl) * 20); score += inputs.fault_outcomes;
+  if (u.penalty_level && u.penalty_level !== 'none') { inputs.penalty_level = 10; score += 10; }
+  return { score, band: score >= RISK_HIGH_BAND ? 'high' : score >= RISK_WATCH_BAND ? 'watch' : 'low', inputs };
+}
+const FIN_GATE_SELF = 'لإتمام حجز بهذه القيمة، أكمل أولاً خطوة «الهوية المالية المؤكدة» من لوحتك (إقرار مسجّل مرة واحدة برقم محفظتك وباسمك القانوني) — الخطوة دي بتحميك وبتحمي الطرف الآخر في الصفقات الكبيرة، وبعد إكمالها كمّل الحجز عادي';
+const FIN_GATE_OTHER = 'لإتمام حجز بهذه القيمة، الطرف الآخر محتاج يكمل خطوة «الهوية المالية المؤكدة» من لوحته أولاً (إقرار مسجّل مرة واحدة) — بلّغه يكملها من لوحته ثم حاولوا إتمام الحجز تاني';
+/* يعيد رسالة المنع المناسبة (لنفسه/للطرف الآخر) أو null إن مرّ الحجز. */
+async function riskGateError(self, other, price) {
+  if (!(+price > RISK_FIN_IDENTITY_THRESHOLD)) return null;
+  const parties = [{ u: self, who: 'self' }, { u: other, who: 'other' }];
+  for (const p of parties) {
+    if (!p.u || p.u.is_platform_founder || p.u.fin_declared_at) continue;
+    const r = await accountRiskFor(p.u);
+    if (r.band === 'high') return p.who === 'self' ? FIN_GATE_SELF : FIN_GATE_OTHER;
+  }
+  return null;
+}
+
+/* ---- ٣) منع تسرّب الصناع: خمول >= ٧ أيام ⇒ تدخل واحد لكل حلقة خمول ----
+   آخر نشاط = أحدث إشارة مسجلة فعلاً (جلسة/حجز/عرض سعر/إنشاء الحساب).
+   الخطوة المقترحة من حالة الصانع نفسه: بلا نماذج ⇒ «أضف نموذج شغل»؛
+   ملف ناقص (صورة/بايو/سعر) ⇒ «كمّل ملفك»؛ غير ذلك ⇒ «فعّل متاح اليوم».
+   الحلقة تنتهي بأي نشاط بعد التدخل — خمول جديد بعد عودة = تدخل جديد. */
+const CHURN_INACTIVE_MS = 7 * ENG_DAY_MS;
+const CHURN_TEXTS = {
+  sample: '👋 وحشتنا على Deal — ملفك لسه من غير نماذج شغل. أضف نموذجاً واحداً على الأقل من لوحتك: النماذج جزء من قوة ملفك قدام العملاء ومن درجة ظهورك في السوق',
+  profile: '👋 وحشتنا على Deal — كمّل ملفك من لوحتك (صورة شخصية + بايو واضح + سعرك المعلن)؛ الملف المكتمل جزء من درجة ظهورك في السوق وبيقدّمك للعميل بثقة أكبر',
+  available_today: '👋 وحشتنا على Deal — فعّل «متاح اليوم» من لوحتك عشان تظهر في شريط المتاحين النهارده قدام العملاء اللي بيدوّروا في مجالك ومدينتك',
+};
+async function lastActivityFor(userId, u) {
+  const s = await db.prepare('SELECT MAX(CASE WHEN last_seen_at>0 THEN last_seen_at ELSE created_at END) m FROM sessions WHERE user_id=?').get(userId);
+  const b = await db.prepare('SELECT MAX(created_at) m FROM bookings WHERE talent_id=? OR client_id=?').get(userId, userId);
+  const q = await db.prepare('SELECT MAX(created_at) m FROM request_quotes WHERE talent_id=?').get(userId);
+  return Math.max((s && s.m) || 0, (b && b.m) || 0, (q && q.m) || 0, (u && u.created_at) || 0);
+}
+async function churnStepFor(u) {
+  const samples = (await db.prepare('SELECT COUNT(*) c FROM portfolio_items WHERE user_id=?').get(u.id)).c || 0;
+  if (!samples) return 'sample';
+  if (!u.avatar || !String(u.bio || '').trim() || !(u.price > 0)) return 'profile';
+  return 'available_today';
+}
+async function churnCandidates() {
+  return await db.prepare(`SELECT * FROM users WHERE role IN ('creator','provider') AND banned=0 AND frozen=0 AND is_platform_founder=0 AND COALESCE(deleted_at,0)=0 AND created_at<=?`).all(now() - CHURN_INACTIVE_MS);
+}
+async function sweepChurnPrevention() {
+  let fired = 0;
+  for (const u of await churnCandidates()) {
+    const last = await lastActivityFor(u.id, u);
+    if (now() - last < CHURN_INACTIVE_MS) continue;
+    const prev = await db.prepare('SELECT * FROM churn_interventions WHERE user_id=? ORDER BY created_at DESC, id DESC LIMIT 1').get(u.id);
+    if (prev && prev.created_at >= last) continue; // تدخل قائم في حلقة الخمول نفسها
+    const step = await churnStepFor(u);
+    await notify(u.id, 'churn_prevention', CHURN_TEXTS[step], 'churn');
+    await db.prepare('INSERT INTO churn_interventions (user_id,step,last_activity_at,created_at) VALUES (?,?,?,?)').run(u.id, step, last, now());
+    fired++;
+  }
+  return fired;
+}
+async function churnReport() {
+  let atRisk = 0;
+  for (const u of await churnCandidates()) {
+    const last = await lastActivityFor(u.id, u);
+    if (now() - last >= CHURN_INACTIVE_MS) atRisk++;
+  }
+  const fired7 = (await db.prepare('SELECT COUNT(*) c FROM churn_interventions WHERE created_at>=?').get(now() - 7 * ENG_DAY_MS)).c || 0;
+  return { inactive_days: CHURN_INACTIVE_MS / ENG_DAY_MS, at_risk: atRisk, interventions_7d: fired7 };
+}
+
+/* ---- ٢) توازن العرض والطلب: تجميع حقيقي + تقويم المواسم الـ١٦ ----
+   طلب آخر ٣٠ يوماً (طلبات مفتوحة/محجوزة) مقابل عرض فعّال (صناع/مقدمون
+   غير مجمّدين/محظورين/في إجازة) لكل خلية مجال×مدينة. رايات موثقة:
+   no_supply: طلب>=٢ بلا أي عرض · demand_pressure: طلب>=٤ وطلب>=ضعف العرض
+   · seasonal: موسم نشط أو يبدأ خلال ٤٥ يوماً يغطي المجال وطلب>=٢ وطلب>=العرض.
+   للمالك فقط — لا سطح مواجهاً للمستخدمين. */
+async function upcomingSeasons(daysAhead = 45) {
+  const byKey = new Map();
+  for (let d = 0; d <= daysAhead; d++) {
+    const act = await activeSeasons(now() + d * ENG_DAY_MS);
+    for (const s of act) {
+      const cur = byKey.get(s.key);
+      if (!cur) byKey.set(s.key, { key: s.key, ar: s.ar, en: s.en, niches: s.niches || [], countries: s.countries || null, start: s.start, end: s.end, active_now: d === 0 });
+      else if (s.start < cur.start) { cur.start = s.start; cur.end = s.end; }
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.start - b.start);
+}
+async function supplyDemandReport() {
+  const since = now() - 30 * ENG_DAY_MS;
+  const demRows = await db.prepare(`SELECT niche, city, COUNT(*) c FROM shop_requests WHERE created_at>=? AND status IN ('open','booked') GROUP BY niche, city`).all(since);
+  const supRows = await db.prepare(`SELECT * FROM users WHERE role IN ('creator','provider') AND banned=0 AND frozen=0 AND is_platform_founder=0 AND COALESCE(deleted_at,0)=0`).all();
+  const cells = new Map();
+  const cellOf = (niche, city) => { const k = `${niche}||${city}`; if (!cells.has(k)) cells.set(k, { niche, city, demand: 0, supply: 0 }); return cells.get(k); };
+  let totalDemand = 0;
+  for (const r of demRows) { const n = String(r.niche || '').trim(); if (!n) continue; cellOf(n, String(r.city || '')).demand += r.c; totalDemand += r.c; }
+  let totalSupply = 0;
+  for (const u of supRows) {
+    if (onVacation(u)) continue;
+    totalSupply++;
+    const keys = new Set();
+    if (u.niche && String(u.niche).trim()) keys.add(String(u.niche).trim());
+    if (u.provider_category && String(u.provider_category).trim()) keys.add(String(u.provider_category).trim());
+    for (const n of keys) cellOf(n, String(u.city || '')).supply += 1;
+  }
+  const seasons = await upcomingSeasons(45);
+  const flags = [];
+  for (const c of cells.values()) {
+    if (c.supply === 0 && c.demand >= 2) { flags.push({ ...c, reason: 'no_supply', level: 'high' }); continue; }
+    if (c.supply > 0 && c.demand >= 4 && c.demand >= 2 * c.supply) { flags.push({ ...c, reason: 'demand_pressure', level: 'high' }); continue; }
+    const season = seasons.find((s) => (!s.niches || !s.niches.length || s.niches.includes(c.niche)) && c.demand >= 2 && c.demand >= c.supply);
+    if (season) flags.push({ ...c, reason: 'seasonal', level: 'watch', season: { key: season.key, ar: season.ar, en: season.en, start: season.start, active_now: season.active_now } });
+  }
+  return {
+    window_days: 30, generated_at: now(),
+    totals: { demand: totalDemand, supply: totalSupply },
+    cells: [...cells.values()].sort((a, b) => (b.demand - a.demand) || (b.supply - a.supply)),
+    flags,
+    seasons: seasons.map((s) => ({ key: s.key, ar: s.ar, en: s.en, start: s.start, end: s.end, active_now: s.active_now })),
+  };
+}
+
+/* ---- ٥) التحسين الذاتي: تجربة A/B واحدة آمنة على سطر الصانع في شريط
+   المسارين (نصّان صادقان معتمدان بلا فرق وعود). التعيين ببصمة ثابتة من
+   مفتاح الزائر (نفس المفتاح ⇒ نفس النسخة دائماً وغير ظاهر). المقياس
+   الأساسي الوحيد: بدء تسجيل صانع من الشريط لكل مشاهدة شريط (زائر/يوم).
+   تقرير فقط — لا تبديل تلقائياً للفائز في هذه الجولة. */
+function expVariantFor(vid) {
+  const h = crypto.createHash('sha256').update(`deal-exp:${String(vid || '')}`).digest();
+  return h[0] % 2 === 0 ? 'A' : 'B';
+}
+async function experimentReport() {
+  const rows = await db.prepare('SELECT variant, kind, COUNT(*) c FROM exp_events GROUP BY variant, kind').all();
+  const out = { A: { views: 0, reg_starts: 0, rate_pct: null }, B: { views: 0, reg_starts: 0, rate_pct: null }, metric: 'reg_start_per_view', auto_switch: false };
+  for (const r of rows) {
+    if (!out[r.variant]) continue;
+    if (r.kind === 'view') out[r.variant].views = r.c;
+    if (r.kind === 'reg_start') out[r.variant].reg_starts = r.c;
+  }
+  for (const v of ['A', 'B']) { const x = out[v]; x.rate_pct = x.views ? Math.round((x.reg_starts / x.views) * 1000) / 10 : null; }
+  return out;
+}
+app.get('/api/exp/assignment', (req, res) => {
+  const vid = String((req.query || {}).vid || '').slice(0, 80);
+  if (!vid) return res.status(400).json({ error: 'vid required' });
+  res.json({ variant: expVariantFor(vid) });
+});
+app.post('/api/exp/event', async (req, res) => {
+  const { vid, kind } = req.body || {};
+  if (!vid || !['view', 'reg_start'].includes(kind)) return res.status(400).json({ error: 'بيانات غير صحيحة' });
+  const vidHash = crypto.createHash('sha256').update(String(vid)).digest('hex');
+  const day = new Date().toISOString().slice(0, 10);
+  await db.prepare('INSERT INTO exp_events (vid_hash,variant,kind,day,created_at) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING')
+    .run(vidHash, expVariantFor(vid), kind, day, now());
+  res.json({ ok: true });
+});
+
+/* لوحة محركات النمو والأمان للمالك: تجميعات حقيقية فقط + عدّ حسابات
+   الشريط العالي (الدرجات نفسها لا تُعرض لأحد — ولا حتى هنا). */
+app.get('/api/owner/engines', auth, ownerOnly, async (req, res) => {
+  const supply_demand = await supplyDemandReport();
+  const churn = await churnReport();
+  const experiment = await experimentReport();
+  let highAccounts = 0;
+  const us = await db.prepare(`SELECT * FROM users WHERE banned=0 AND is_platform_founder=0 AND COALESCE(deleted_at,0)=0 LIMIT 500`).all();
+  for (const u of us) { if ((await accountRiskFor(u)).band === 'high') highAccounts++; }
+  res.json({ supply_demand, churn, experiment, risk: { threshold: RISK_FIN_IDENTITY_THRESHOLD, high_band: RISK_HIGH_BAND, high_accounts: highAccounts } });
+});
 
 /* ---- الملخص الأسبوعي الآلي لكل صانع ---- */
 async function sweepWeeklySummaries() {
@@ -3419,6 +3725,8 @@ app.post('/api/bookings/:id/order-again', auth, async (req, res) => {
   const talent = await getUser(b.talent_id);
   if (!talent || talent.banned) return res.status(400).json({ error: 'المنفّذ غير متاح حالياً' });
   const price = (req.body && +req.body.price > 0) ? +req.body.price : b.price;
+  const gateOA = await riskGateError(req.user, talent, price);
+  if (gateOA) return res.status(403).json({ error: gateOA, fin_identity_required: true });
   const title = (req.body && String(req.body.title || '').trim()) || b.title;
   const agrOA = (req.body && (req.body.agreed_revisions !== undefined || req.body.agreed_delivery_at !== undefined)) ? agreementFromBody(req.body) : { revisions: b.agreed_revisions !== undefined ? b.agreed_revisions : null, deliveryAt: b.agreed_delivery_at || 0 };
   if (agrOA.error) return res.status(400).json({ error: agrOA.error });
@@ -3531,6 +3839,9 @@ app.post('/api/bookings', auth, async (req, res) => {
   }
   if (!p || p <= 0) return res.status(400).json({ error: 'حدد سعراً صحيحاً' });
   const agrD = agreementFromBody(req.body || {}); if (agrD.error) return res.status(400).json({ error: agrD.error });
+  // بوابة الهوية المالية (محرك المخاطر الحي): شريط عالٍ + قيمة فوق العتبة فقط.
+  const gateD = await riskGateError(req.user, talent, p);
+  if (gateD) return res.status(403).json({ error: gateD, fin_identity_required: true });
   const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,package_tier,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(req.user.id, talent.id, source, ref_id, title || `حجز مع ${talent.name}`, p, talent.currency, now() + deadline_days * 24 * 3600 * 1000, urgent ? 1 : 0, pkgTier, agrD.revisions, agrD.deliveryAt, now());
   await addBookingEvent(info.lastInsertRowid, 'created', 'أُنشئ الحجز — الضمان والمراحل موثّقة داخل Deal');
@@ -4112,6 +4423,10 @@ app.post('/api/guest-requests/:id/book', auth, async (req, res) => {
       p = pkg.price; pkgTier = pkg.tier;
     }
     if (!p || p <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'حدد سعراً صحيحاً' }); }
+    // بوابة الهوية المالية (محرك المخاطر الحي): المنفذ هنا هو صاحب الحساب
+    // الوحيد (العميل ضيف بلا حساب — هويته تُسجَّل عند كل إعلان دفع أصلاً).
+    const gateGB = await riskGateError(req.user, null, p);
+    if (gateGB) { await client.query('ROLLBACK'); return res.status(403).json({ error: gateGB, fin_identity_required: true }); }
     const ins = await client.query(
       `INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,urgent,package_tier,agreed_revisions,agreed_delivery_at,created_at)
        VALUES (NULL,$1,'guest_request',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
@@ -4473,6 +4788,9 @@ app.post('/api/applications/:id/accept', auth, async (req, res) => {
   const applicant = await getUser(a.creator_id);
   if (applicant && applicant.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل حجوزات أو تواصلاً' });
   const agrC = agreementFromBody(req.body || {}); if (agrC.error) return res.status(400).json({ error: agrC.error });
+  // بوابة الهوية المالية (محرك المخاطر الحي) على طرفي حجز الحملة.
+  const gateC = await riskGateError(req.user, applicant, c.budget || (applicant ? applicant.price : 0));
+  if (gateC) return res.status(403).json({ error: gateC, fin_identity_required: true });
   const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
     .run(req.user.id, a.creator_id, 'campaign', c.id, c.title, c.budget || (await getUser(a.creator_id)).price, c.currency, now() + 7 * 24 * 3600 * 1000, agrC.revisions, agrC.deliveryAt, now());
   await db.prepare(`UPDATE campaign_applications SET status='accepted', booking_id=? WHERE id=?`).run(info.lastInsertRowid, a.id);
@@ -4681,6 +4999,18 @@ async function tryAiSupportReply(req, viewer, question, lang) {
   aiSupportReplyLog.set(key, recent);
   return r.text;
 }
+/* ---------------- الأسئلة الشائعة العامة للزوار (جولة الترحيب والانتشار) ----------------
+   صفحة علنية بلا أي دخول: مختارات من قاعدة معرفة الدعم نفسها (SUPPORT_KB)
+   حرفياً — مصدر واحد للحقائق فلا تناقض بين ما يقرأه الزائر وما يجيب به
+   الدعم. لا وعود مضافة ولا أي عبارة أوسع من الحماية الحقيقية (مختبرة). */
+const PUBLIC_FAQ_IDS = ['what', 'guest_post', 'fee_why', 'stages', 'guarantee', 'p2p', 'auto_confirm', 'off_platform', 'replacement_deterrence', 'star', 'founder_member', 'countries'];
+app.get('/api/faq', (req, res) => {
+  const items = PUBLIC_FAQ_IDS
+    .map((id) => SUPPORT_KB.find((x) => x.id === id))
+    .filter(Boolean)
+    .map((x) => ({ id: x.id, q_ar: x.q_ar, q_en: x.q_en, a_ar: x.a_ar, a_en: x.a_en }));
+  res.json({ items });
+});
 app.get('/api/support/topics', (req, res) => {
   const lang = req.query.lang === 'en' ? 'en' : 'ar';
   res.json({ items: SUPPORT_KB.map(x => ({ id: x.id, q: lang === 'en' ? x.q_en : x.q_ar })) });
@@ -6335,14 +6665,22 @@ app.get('/api/my/requests/:id/quotes', auth, async (req, res) => {
   if (!rq || !(await requestOwnerCheck(rq, req.user))) return res.status(404).json({ error: 'غير موجود' });
   res.json({ items: await quotesView(rq.id) });
 });
-async function acceptQuote(rq, quoteId, agr = { revisions: null, deliveryAt: 0 }) {
+async function acceptQuote(rq, quoteId, agr = { revisions: null, deliveryAt: 0 }, selfId = null) {
   const q = await db.prepare('SELECT * FROM request_quotes WHERE id=? AND request_id=?').get(quoteId, rq.id);
   if (!q || q.status !== 'pending') return { error: 'عرض غير متاح' };
   const talent = await getUser(q.talent_id);
   if (!talent || talent.banned) return { error: 'الصانع غير متاح' };
-  if (!rq.is_guest && rq.shop_user_id) {
-    const clientU = await getUser(rq.shop_user_id);
-    if (clientU && clientU.is_platform_founder) return { error: FOUNDER_NO_CLIENT_ERROR };
+  const clientU = (!rq.is_guest && rq.shop_user_id) ? await getUser(rq.shop_user_id) : null;
+  if (clientU && clientU.is_platform_founder) return { error: FOUNDER_NO_CLIENT_ERROR };
+  // بوابة الهوية المالية (محرك المخاطر الحي): تُفحص على طرفي الحجز الجديد
+  // (المنفذ دائماً، والعميل العضو حين يوجد — الضيف بلا حساب خارج النقاط).
+  if (+q.price > RISK_FIN_IDENTITY_THRESHOLD) {
+    for (const u of [talent, clientU]) {
+      if (!u || u.is_platform_founder || u.fin_declared_at) continue;
+      if ((await accountRiskFor(u)).band === 'high') {
+        return { error: (selfId && u.id === selfId) ? FIN_GATE_SELF : FIN_GATE_OTHER, status: 403, fin_identity_required: true };
+      }
+    }
   }
   if (onVacation(talent)) return { error: 'الصانع في إجازة حالياً — اختر عرضاً آخر أو انتظر عودته' };
   let bookingId;
@@ -6369,8 +6707,8 @@ app.post('/api/my/requests/:id/quotes/:qid/accept', auth, async (req, res) => {
   const rq = await db.prepare('SELECT * FROM shop_requests WHERE id=?').get(+req.params.id);
   if (!rq || rq.status !== 'open' || !(await requestOwnerCheck(rq, req.user))) return res.status(404).json({ error: 'غير موجود' });
   const agrQ = agreementFromBody(req.body || {}); if (agrQ.error) return res.status(400).json({ error: agrQ.error });
-  const out = await acceptQuote(rq, +req.params.qid, agrQ);
-  if (out.error) return res.status(400).json({ error: out.error });
+  const out = await acceptQuote(rq, +req.params.qid, agrQ, req.user.id);
+  if (out.error) return res.status(out.status || 400).json({ error: out.error, ...(out.fin_identity_required ? { fin_identity_required: true } : {}) });
   res.json({ ok: true, booking_id: out.bookingId });
 });
 app.get('/api/guest/:token/quotes', async (req, res) => {
@@ -6383,7 +6721,7 @@ app.post('/api/guest/:token/quotes/:qid/accept', async (req, res) => {
   if (!rq || rq.status !== 'open') return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
   const agrQ2 = agreementFromBody(req.body || {}); if (agrQ2.error) return res.status(400).json({ error: agrQ2.error });
   const out = await acceptQuote(rq, +req.params.qid, agrQ2);
-  if (out.error) return res.status(400).json({ error: out.error });
+  if (out.error) return res.status(out.status || 400).json({ error: out.error, ...(out.fin_identity_required ? { fin_identity_required: true } : {}) });
   res.json({ ok: true, booking_id: out.bookingId });
 });
 
@@ -6473,6 +6811,9 @@ app.post('/api/waitlist/:id/accept', auth, async (req, res) => {
   }
   if (!price || price <= 0) return res.status(400).json({ error: 'لا سعر متاحاً لهذا الصانع حالياً' });
   const agrW = agreementFromBody(req.body || {}); if (agrW.error) return res.status(400).json({ error: agrW.error });
+  // بوابة الهوية المالية (محرك المخاطر الحي) على طرفي حجز قائمة الانتظار.
+  const gateW = await riskGateError(req.user, talent, price);
+  if (gateW) return res.status(403).json({ error: gateW, fin_identity_required: true });
   const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
     .run(req.user.id, talent.id, 'waitlist', e.request_id || null, title, price, talent.currency, now() + 7 * 24 * 3600 * 1000, agrW.revisions, agrW.deliveryAt, now());
   await db.prepare(`UPDATE waitlist_entries SET status='converted' WHERE id=?`).run(e.id);

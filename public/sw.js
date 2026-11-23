@@ -15,3 +15,27 @@ self.addEventListener('fetch', (e) => {
     return r;
   }).catch(() => caches.match(e.request)));
 });
+
+/* إشعارات Web Push: عرض إشعار نظام من حمولة الخادم ({title, body, ref, type})
+   والضغط عليه يركّز التطبيق أو يفتحه — بلا أي تغيير في استراتيجية الكاش. */
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { /* حمولة غير JSON: إشعار عام */ }
+  const title = d.title || 'Deal';
+  const opts = {
+    body: String(d.body || ''),
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    data: { ref: d.ref || '', type: d.type || '' },
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) { if ('focus' in c) return c.focus(); }
+      if (clients.openWindow) return clients.openWindow('/');
+    })
+  );
+});

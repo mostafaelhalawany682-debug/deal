@@ -1261,6 +1261,37 @@ ALTER TABLE disputes ADD COLUMN IF NOT EXISTS decided_by INTEGER DEFAULT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS link_copied_at BIGINT DEFAULT 0;
 `;
 
+/* جولة البصمة (Passkey / WebAuthn — TESTING-PASSKEY.md): اعتماد اختياري
+   إضافي بجانب كلمة السر التي تبقى الأساس. الجدولان idempotent:
+   - passkeys: بيانات اعتماد WebAuthn العامة فقط — معرّف الاعتماد +
+     المفتاح العام COSE (بايتات base64url) + عدّاد التوقيع + وسائل النقل
+     + اسم الجهاز. لا يُحفظ أي أثر بيومتري إطلاقاً: البصمة لا تغادر جهاز
+     المستخدم أبداً، والخادم يتحقق من توقيع المفتاح الخاص المحفوظ بالجهاز.
+   - webauthn_challenges: تحدّيات مراسم قصيرة العمر (٥ دقائق) مربوطة
+     بجلسة مراسم عشوائية، تُستهلك بقراءة واحدة (حذف عند الاستخدام). */
+const PASSKEY_MIGRATIONS_SQL = `
+CREATE TABLE IF NOT EXISTS passkeys (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  credential_id TEXT NOT NULL UNIQUE,
+  public_key TEXT NOT NULL,
+  sign_count BIGINT NOT NULL DEFAULT 0,
+  transports TEXT DEFAULT '',
+  label TEXT DEFAULT '',
+  created_at BIGINT NOT NULL,
+  last_used_at BIGINT DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys(user_id);
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+  ceremony_id TEXT PRIMARY KEY,
+  challenge TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  user_id INTEGER DEFAULT NULL,
+  expires_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+`;
+
 let readyPromise = null;
 function init() {
   if (!readyPromise) {
@@ -1280,6 +1311,7 @@ function init() {
       await pool.query(POLISH_MIGRATIONS_SQL);
       await pool.query(ENGINES_MIGRATIONS_SQL);
       await pool.query(FINAL_MIGRATIONS_SQL);
+      await pool.query(PASSKEY_MIGRATIONS_SQL);
       // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
       // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
       try {
@@ -1314,6 +1346,7 @@ const ID_TABLES = new Set([
   'contracts', 'profile_questions', 'seasons_custom', 'academy_progress',
   'ambassador_applications', 'churn_interventions', 'exp_events',
   'error_log', 'owner_audit_log', 'backups', 'broadcasts', 'user_blocks', 'page_views',
+  'passkeys',
 ]);
 
 function toPgSql(sql) {

@@ -1,5 +1,5 @@
 // Deal service worker — network-first for the app shell, cache fallback offline.
-const CACHE = 'deal-v26';
+const CACHE = 'deal-v27';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192-v22.png', '/icons/icon-512-v22.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

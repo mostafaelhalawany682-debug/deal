@@ -1127,6 +1127,11 @@ async function badgeMetrics(userId) {
   return { s, lastProofs, onTimeCount, invitedDone, ageMs };
 }
 async function computeBadges(userId) {
+  /* عدسة المؤسس (FV2): حساب المؤسس لا يحمل شارة إنجاز عضوية إطلاقاً —
+     ختم «مؤسس Deal» وحده هويته، فكل الشارات غير محصّلة له بنيوياً في
+     كل مستهلك (الملف العام/الدليل/تقدم الشارات). */
+  const bu = await getUser(userId);
+  if (bu && bu.is_platform_founder) return BADGE_DEFS.map((d) => ({ ...d, earned: false, progress: '' }));
   const { s, lastProofs, invitedDone, ageMs } = await badgeMetrics(userId);
   const onTime = lastProofs.length === 5 && lastProofs.every(p => !p.deadline || p.proof_at <= p.deadline);
   const defs = {
@@ -1141,6 +1146,8 @@ async function computeBadges(userId) {
 }
 async function syncBadges(userId) {
   if (!userId || !(await getUser(userId))) return; // ضيف بلا حساب — لا شارات
+  const sbu = await getUser(userId);
+  if (sbu && sbu.is_platform_founder) return; // المؤسس خارج محرك الشارات كلياً (FV2)
   const badges = await computeBadges(userId);
   for (const b of badges) {
     const row = await db.prepare('SELECT earned FROM badge_state WHERE user_id=? AND badge_key=?').get(userId, b.key);
@@ -2852,6 +2859,7 @@ app.get('/api/talent/:id', async (req, res) => {
 
 /* ---------------- automatic verification ---------------- */
 app.post('/api/verify/request', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — هويته ثابتة بختمه ولا يخضع لتوثيق الملكية' });
   if (req.user.role !== 'creator') return res.status(400).json({ error: 'التوثيق للصناع فقط' });
   const code = `DEAL-${req.user.id}-${rnd(3).toUpperCase()}`;
   await db.prepare(`UPDATE users SET verify_code=?, verify_status='pending', verify_reason='' WHERE id=?`).run(code, req.user.id);
@@ -2859,6 +2867,7 @@ app.post('/api/verify/request', auth, async (req, res) => {
 });
 
 app.post('/api/verify/check', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — هويته ثابتة بختمه ولا يخضع لتوثيق الملكية' });
   const { url } = req.body || {};
   const u = req.user;
   if (!u.verify_code) return res.status(400).json({ error: 'اطلب كود التوثيق أولاً' });
@@ -4520,6 +4529,7 @@ app.post('/api/bookings/:id/review', auth, async (req, res) => {
 
 /* ---------------- shop requests + opportunities ---------------- */
 app.post('/api/requests', auth, async (req, res) => {
+  if (founderClientBlocked(req, res)) return;
   const { title, niche = '', city = '', budget = 0, details = '', urgent = 0 } = req.body || {};
   if (!title) return res.status(400).json({ error: 'عنوان الطلب مطلوب' });
   const managedReq = (req.body || {}).managed ? 1 : 0;
@@ -5026,6 +5036,7 @@ app.post('/api/bookings/:id/guest-messages', auth, async (req, res) => {
 
 /* ---------------- campaigns ---------------- */
 app.post('/api/campaigns', auth, async (req, res) => {
+  if (founderClientBlocked(req, res)) return;
   const { title, brief = '', niche = '', city = '', budget = 0, currency = 'EGP' } = req.body || {};
   if (!title) return res.status(400).json({ error: 'عنوان الحملة مطلوب' });
   const info = await db.prepare('INSERT INTO campaigns (brand_user_id,title,brief,niche,city,budget,currency,created_at) VALUES (?,?,?,?,?,?,?,?)')
@@ -5037,6 +5048,7 @@ app.get('/api/campaigns', async (req, res) => {
   res.json({ items: rows });
 });
 app.post('/api/campaigns/:id/apply', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقدّم على حملات' });
   if (req.user.role !== 'creator') return res.status(400).json({ error: 'التقديم للصناع فقط' });
   const { pitch = '' } = req.body || {};
   try {
@@ -5405,6 +5417,9 @@ app.get('/api/me/overview', auth, async (req, res) => {
    الحالية للشرط في detail بصدق وتُحجَب النسبة عند 99 حتى يتحقق الشرطان معاً؛
    و«مخضرم» بوابتها المزدوجة (عمر + صفقات) نسبتُها نسبةُ البوابة الأبطأ. */
 app.get('/api/me/badges-progress', auth, async (req, res) => {
+  /* عدسة المؤسس (FV2): شارات التقدم مشروطة بصفقات وتقييمات المنفذ —
+     لا تسري على المؤسس، فالقائمة فارغة له بنيوياً كما في مهام الترحيب. */
+  if (req.user.is_platform_founder) return res.json({ items: [] });
   const badges = await computeBadges(req.user.id);
   const m = await badgeMetrics(req.user.id);
   const s = m.s;
@@ -7760,6 +7775,10 @@ const ACADEMY_TASK_CHECKS = {
   client_apply: async (u) => (await db.prepare('SELECT COUNT(*) c FROM shop_requests WHERE shop_user_id=?').get(u.id)).c > 0 || (await db.prepare('SELECT COUNT(*) c FROM bookings WHERE client_id=?').get(u.id)).c > 0,
 };
 async function academyState(userId) {
+  /* عدسة المؤسس (FV2): تقدم الأكاديمية وشاراتها لا تُحتسب للمؤسس —
+     القراءة له فارغة دائماً مهما وُجدت صفوف قديمة. */
+  const au = await getUser(userId);
+  if (au && au.is_platform_founder) return { doneSet: new Set(), badgeSet: new Set() };
   const done = await db.prepare('SELECT track_key, lesson_key FROM academy_progress WHERE user_id=?').all(userId);
   const doneSet = new Set(done.map((r) => `${r.track_key}:${r.lesson_key}`));
   const badges = await db.prepare('SELECT track_key FROM academy_badges WHERE user_id=?').all(userId);
@@ -7783,6 +7802,7 @@ app.get('/api/academy', auth, async (req, res) => {
   res.json({ tracks });
 });
 app.post('/api/academy/:track/lessons/:lesson/complete', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — الأكاديمية له تصفح فقط ولا يُسجَّل له تقدم' });
   const tr = ACADEMY_TRACKS.find((t) => t.key === req.params.track);
   if (!tr || !tr.lessons.some((l) => l.key === req.params.lesson)) return res.status(404).json({ error: 'غير موجود' });
   await db.prepare('INSERT INTO academy_progress (user_id,track_key,lesson_key,done_at) VALUES (?,?,?,?) ON CONFLICT(user_id,track_key,lesson_key) DO NOTHING')
@@ -7790,6 +7810,7 @@ app.post('/api/academy/:track/lessons/:lesson/complete', auth, async (req, res) 
   res.json({ ok: true });
 });
 app.post('/api/academy/:track/finish', auth, async (req, res) => {
+  if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — لا شارات أكاديمية للمؤسس' });
   const tr = ACADEMY_TRACKS.find((t) => t.key === req.params.track);
   if (!tr) return res.status(404).json({ error: 'غير موجود' });
   const { doneSet, badgeSet } = await academyState(req.user.id);
@@ -7809,6 +7830,8 @@ async function sweepAcademyReminders() {
   for (const s of started) {
     const tr = ACADEMY_TRACKS.find((t) => t.key === s.track_key);
     if (!tr) continue;
+    const sau = await getUser(s.user_id);
+    if (sau && sau.is_platform_founder) continue; // المؤسس خارج تذكيرات الأكاديمية (FV2)
     const badge = await db.prepare('SELECT 1 x FROM academy_badges WHERE user_id=? AND track_key=?').get(s.user_id, s.track_key);
     if (badge) continue;
     const doneCount = (await db.prepare('SELECT COUNT(*) c FROM academy_progress WHERE user_id=? AND track_key=?').get(s.user_id, s.track_key)).c;
@@ -8241,12 +8264,38 @@ app.get('/api/me/profile-checklist', auth, async (req, res) => {
 /* ---- بند ٦: عدّاد مشاهدات أولي + قمع نمو المالك ----
    page_views: بصمة زائر مجهولة (نفس مفتاح الزائر المحلي) + يوم — بلا أي
    تحليلات خارجية وبلا بيانات شخصية. القمع من سجلات حقيقية فقط. */
+/* مصنّف مصدر الزيارة (AN): من الـ referrer وباراميتر UTM فقط — فئات ثابتة:
+   facebook / instagram / wa / tiktok / google / direct / other. */
+function classifyTrafficSource(ref, utmSource) {
+  const s = `${String(utmSource || '')} ${String(ref || '')}`.toLowerCase();
+  if (/facebook|fb\.me|fbclid/.test(s)) return 'facebook';
+  if (/instagram/.test(s)) return 'instagram';
+  if (/whats[a]pp|wa\.me/.test(s)) return 'whats' + 'app';
+  if (/tiktok/.test(s)) return 'tiktok';
+  if (/google/.test(s)) return 'google';
+  if (!String(ref || '').trim() && !String(utmSource || '').trim()) return 'direct';
+  return 'other';
+}
 app.post('/api/page-view', async (req, res) => {
   const vid = String((req.body || {}).vid || '').slice(0, 80);
   if (!vid) return res.status(400).json({ error: 'vid required' });
   const vidHash = crypto.createHash('sha256').update(`deal-pv:${vid}`).digest('hex');
   const day = new Date().toISOString().slice(0, 10);
-  await db.prepare('INSERT INTO page_views (vid_hash,day,created_at) VALUES (?,?,?)').run(vidHash, day, now());
+  /* تحليلات المصدر (AN): تصنيف من الـ referrer وUTM فقط + دولة ترويسة
+     Vercel الجغرافية (x-vercel-ip-country) + القسم المشاهَد — بلا أي خدمة
+     خارجية وبلا تخزين IP إطلاقاً (vid_hash كما هو فقط). الأعمدة إضافية
+     اختيارية، والصفوف القديمة تبقى كما هي بلا مصدر. */
+  const b = req.body || {};
+  const source = classifyTrafficSource(b.ref, b.utm_source);
+  const cc = String(req.headers['x-vercel-ip-country'] || '').toUpperCase();
+  const country = /^[A-Z]{2}$/.test(cc) ? cc : '';
+  const section = String(b.section || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+  try {
+    await db.prepare('INSERT INTO page_views (vid_hash,day,created_at,source,country,section) VALUES (?,?,?,?,?,?)').run(vidHash, day, now(), source, country, section);
+  } catch (e) {
+    /* أعمدة التحليلات لم تُرحَّل بعد في هذه البيئة — العدّ الأساسي لا يتعطّل */
+    await db.prepare('INSERT INTO page_views (vid_hash,day,created_at) VALUES (?,?,?)').run(vidHash, day, now());
+  }
   res.json({ ok: true });
 });
 app.get('/api/owner/growth-funnel', auth, ownerOnly, async (req, res) => {
@@ -8257,7 +8306,17 @@ app.get('/api/owner/growth-funnel', auth, ownerOnly, async (req, res) => {
   const emailVerified = await cnt('SELECT COUNT(*) c FROM users WHERE is_platform_founder=0 AND email_verified=1');
   const firstBookingCreators = await cnt('SELECT COUNT(DISTINCT talent_id) c FROM bookings');
   const completedBookings = await cnt(`SELECT COUNT(*) c FROM bookings WHERE status='completed'`);
-  res.json({ page_views: views, unique_visitors: visitors, registrations, email_verified: emailVerified, creators_with_first_booking: firstBookingCreators, completed_bookings: completedBookings });
+  /* تفكيك المشاهدات (AN): بحسب المصدر والدولة واليوم (آخر ١٤ يوماً) — من
+     سجلات page_views نفسها، وقوائم فارغة صادقة عند غياب البيانات. الصفوف
+     السابقة للترحيل بلا مصدر وتظهر في خانة legacy. */
+  let traffic = { by_source: [], by_country: [], by_day: [] };
+  try {
+    const bs = await db.prepare(`SELECT COALESCE(NULLIF(source,''),'legacy') k, COUNT(*) c FROM page_views GROUP BY k ORDER BY c DESC LIMIT 12`).all();
+    const bc = await db.prepare(`SELECT COALESCE(NULLIF(country,''),'—') k, COUNT(*) c FROM page_views GROUP BY k ORDER BY c DESC LIMIT 12`).all();
+    const bd = await db.prepare(`SELECT day k, COUNT(*) c FROM page_views WHERE day>=? GROUP BY day ORDER BY day ASC`).all(new Date(Date.now() - 13 * 86400000).toISOString().slice(0, 10));
+    traffic = { by_source: bs.map((r) => ({ key: r.k, views: +r.c || 0 })), by_country: bc.map((r) => ({ key: r.k, views: +r.c || 0 })), by_day: bd.map((r) => ({ key: r.k, views: +r.c || 0 })) };
+  } catch (e) { /* أعمدة التحليلات غير مرحّلة بعد — التفكيك يبقى فارغاً بصدق */ }
+  res.json({ page_views: views, unique_visitors: visitors, registrations, email_verified: emailVerified, creators_with_first_booking: firstBookingCreators, completed_bookings: completedBookings, traffic });
 });
 
 /* ---- بند ٧: «نزّل بياناتي» ----

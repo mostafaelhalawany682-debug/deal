@@ -4689,7 +4689,7 @@ function starBannerEligible(u,st){
   return !!(starCtaEligible(u)&&u&&!u.verified&&st&&st.state!=='active'&&st.state!=='pending');
 }
 function unverifiedStarBannerHtml(){
-  return `<div class="uv-banner"><div class="row"><span style="font-size:20px">⭐</span><div style="flex:1"><b style="font-size:16.5px">${t('uv_t')}</b><div>${t('uv_d')}</div><div class="mut" style="margin-top:3px">${t('uv_note')}</div></div><button type="button" class="btn star-cta-btn" onclick="goStarSubscribe()">${t('star_get')}</button></div></div>`;
+  return `<div class="uv-banner"><div class="row" style="flex-wrap:nowrap"><span style="font-size:20px">⭐</span><div style="flex:1;min-width:0"><b style="font-size:16.5px">${t('uv_t')}</b><div>${t('uv_d')}</div></div></div><button type="button" class="btn star-cta-btn" style="display:block;width:100%;margin-top:10px" onclick="goStarSubscribe()">${t('star_get')}</button><div class="mut" style="margin-top:8px">${t('uv_note')}</div></div>`;
 }
 function starCtaEligible(u){ return !!(u&&['creator','provider'].includes(u.role)&&!u.is_platform_founder&&!u.frozen); }
 function starCtaHtml(st){

@@ -1162,12 +1162,23 @@ html,body{overflow-x:clip}
     <!-- ويدجت Turnstile (الجولة الأخيرة — بند ١٢): يبقى فارغاً تماماً ولا
          يُبنى فيه أي عنصر إلا عند وجود مفتاح موقع في /api/config. -->
     <div id="turnstileBox" style="margin-top:10px"></div>
+    <!-- مرحلة التسجيل الأخيرة (التسجيل الإجباري المتسلسل): نماذج الشغل —
+         لا تظهر إلا بعد اكتمال مرحلة البيانات لصانع/مقدم، ولا يُنشأ الحساب
+         قبل نموذج صالح واحد على الأقل (يُرسل مع طلب التسجيل نفسه). -->
+    <div id="regSamples" class="hide">
+      <h4 style="margin:12px 0 4px">🎬 <span data-i18n="reg_samples_t">نماذج شغلك</span></h4>
+      <div class="mut" style="line-height:1.8" data-i18n="reg_samples_d">التسجيل بيكمّل خطوة بخطوة — ما تقدرش تتخطى مرحلة من غير ما تخلّصها: ضيف نموذج شغل واحد على الأقل (لحد ٣ روابط فيديو من شغلك) عشان تكمّل إنشاء حسابك.</div>
+      <label data-i18n="sample_1">نموذج ١</label><input id="rgUrl1" placeholder="https://…">
+      <label data-i18n="sample_2">نموذج ٢</label><input id="rgUrl2" placeholder="https://…">
+      <label data-i18n="sample_3">نموذج ٣</label><input id="rgUrl3" placeholder="https://…">
+      <div class="row" style="margin-top:8px"><button type="button" class="btn ghost sm" onclick="authBackToStage1()" data-i18n="reg_back_btn">رجوع</button></div>
+    </div>
   </div>
   <label data-i18n="f_contact">رقم الهاتف أو الإيميل (هو وسيلة الدخول)</label><input id="aContact" data-i18n-ph="contact_ph" placeholder="01xxxxxxxxx أو you@mail.com">
   <label data-i18n="f_password">كلمة السر</label><input id="aPassword" type="password" autocomplete="current-password">
   <div class="mut" id="pwHint" data-i18n="sec_pw_hint">٨ أحرف على الأقل — هتحتاجها في كل دخول.</div>
-  <div class="row"><button type="button" class="btn" onclick="doAuth(this)" data-i18n="continue_btn">متابعة</button>
-  <button type="button" class="btn ghost sm" onclick="openForgot()" data-i18n="forgot_link">نسيت كلمة السر؟</button>
+  <div class="row"><button type="button" class="btn" id="authPrimaryBtn" onclick="authPrimary(this)" data-i18n="continue_btn">متابعة</button>
+  <button type="button" class="btn ghost sm" id="authForgotBtn" onclick="openForgot()" data-i18n="forgot_link">نسيت كلمة السر؟</button>
   <button class="btn ghost" data-i18n="close">إغلاق</button></div>
   <!-- دخول البصمة (جولة البصمة): صف مخفي دائماً ولا يظهر إلا في وضع
        «دخول» وعلى متصفح يدعم WebAuthn فعلاً — المتصفحات المدمجة داخل
@@ -1321,13 +1332,13 @@ html,body{overflow-x:clip}
 
 <dialog id="samplesDlg"><form method="dialog">
   <h3>🎬 <span data-i18n-x="samples_t">أضف نماذج من شغلك</span></h3>
-  <div class="mut" style="line-height:1.8">من غير نماذج، ملفك مش هيظهر في معرض الأعمال للعملاء. الصق حتى ٣ روابط يوتيوب/تيك توك من شغلك — تقدر تتخطى دلوقتي وتضيفها بعدين من ملفك.</div>
+  <div class="mut" style="line-height:1.8" data-i18n="samples_d2">ضيف لحد ٣ روابط فيديو من شغلك (يوتيوب/تيك توك/إنستجرام/فيسبوك). نموذج شغل واحد على الأقل إلزامي — من غيره مش هتقدر تستقبل اتفاقات ولا تقدّم عروض.</div>
   <div class="err" id="samplesErr"></div>
-  <label>نموذج ١</label><input id="smUrl1" placeholder="https://…">
-  <label>نموذج ٢</label><input id="smUrl2" placeholder="https://…">
-  <label>نموذج ٣</label><input id="smUrl3" placeholder="https://…">
+  <label data-i18n="sample_1">نموذج ١</label><input id="smUrl1" placeholder="https://…">
+  <label data-i18n="sample_2">نموذج ٢</label><input id="smUrl2" placeholder="https://…">
+  <label data-i18n="sample_3">نموذج ٣</label><input id="smUrl3" placeholder="https://…">
   <div class="row" style="margin-top:10px"><button type="button" class="btn" onclick="saveSamples(this)">حفظ النماذج</button>
-  <button class="btn ghost" onclick="document.getElementById('samplesDlg').close()">تخطي دلوقتي</button></div>
+  <button class="btn ghost" data-i18n="close">إغلاق</button></div>
 </form></dialog>
 
 <dialog id="guestBookDlg"><form method="dialog">
@@ -1516,6 +1527,9 @@ Object.assign(DICT.en,{f_password:'Password',sec_pw_hint:'At least 8 characters 
 /* مفاتيح بوابة تأكيد الإيميل (إصلاح حي ٢-١): لافتة تقود لمسار التأكيد نفسه. */
 Object.assign(DICT.ar,{evgate_t:'أكّد إيميلك عشان تكمل',evgate_d:'تقديم عروض الأسعار وقبول الاتفاقات محتاج إيميل مؤكد. لو حسابك برقم موبايل وبلا إيميل، أضف إيميلك وهنبعتلك كود تأكيد من ٦ أرقام — دقيقة واحدة وترجع تكمل من مكانك.',evgate_btn:'أضف إيميلك وأكّده'});
 Object.assign(DICT.en,{evgate_t:'Verify your email to continue',evgate_d:'Submitting quotes and accepting bookings requires a verified email. If your account uses a phone number with no email, add your email and we will send you a 6-digit verification code — one minute and you are back where you left off.',evgate_btn:'Add & verify your email'});
+Object.assign(DICT.ar,{reg_samples_t:'نماذج شغلك',reg_samples_d:'التسجيل بيكمّل خطوة بخطوة — ما تقدرش تتخطى مرحلة من غير ما تخلّصها: ضيف نموذج شغل واحد على الأقل (لحد ٣ روابط فيديو من شغلك) عشان تكمّل إنشاء حسابك.',reg_samples_required:'لازم تضيف نموذج شغل واحد على الأقل (رابط يوتيوب أو تيك توك من شغلك) عشان تكمّل',reg_back_btn:'رجوع',reg_create_btn:'إنشاء الحساب',reg_err_name:'اكتب اسمك',reg_err_city:'المدينة مطلوبة',reg_err_niche:'اختر مجالك',reg_err_prov:'اختر خدمتك من القائمة',reg_err_prov_custom:'اكتب خدمتك كما تريد أن تظهر في ملفك',reg_err_price:'حدد سعرك المعلن (أكبر من صفر)',reg_err_contact:'اكتب رقم الهاتف أو الإيميل',reg_err_pw:'كلمة السر مطلوبة — ٨ أحرف على الأقل',reg_err_tos:'لازم توافق على شروط الاستخدام وتأكّد أن عمرك ١٨ سنة أو أكثر',sample_1:'نموذج ١',sample_2:'نموذج ٢',sample_3:'نموذج ٣',samples_gate_t:'🎬 نماذج شغلك ناقصة',samples_gate_d:'أضف نموذج شغلك الأول عشان تقدر تستقبل اتفاقات وتقدّم عروض',samples_gate_btn:'أضف نماذج شغلك',samples_d2:'ضيف لحد ٣ روابط فيديو من شغلك (يوتيوب/تيك توك/إنستجرام/فيسبوك). نموذج شغل واحد على الأقل إلزامي — من غيره مش هتقدر تستقبل اتفاقات ولا تقدّم عروض.'});
+Object.assign(DICT.en,{reg_samples_t:'Your work samples',reg_samples_d:'Registration completes step by step — you cannot skip a stage without finishing it: add at least one work sample (up to 3 video links of your work) to finish creating your account.',reg_samples_required:'You must add at least one work sample (a YouTube or TikTok link of your work) to continue',reg_back_btn:'Back',reg_create_btn:'Create account',reg_err_name:'Enter your name',reg_err_city:'City is required',reg_err_niche:'Choose your field',reg_err_prov:'Choose your service from the list',reg_err_prov_custom:'Write your service as you want it shown on your profile',reg_err_price:'Set your listed price (greater than zero)',reg_err_contact:'Enter your phone number or email',reg_err_pw:'A password is required — at least 8 characters',reg_err_tos:'You must accept the Terms of Use and confirm you are 18 or older',sample_1:'Sample 1',sample_2:'Sample 2',sample_3:'Sample 3',samples_gate_t:'🎬 Your work samples are missing',samples_gate_d:'Add your first work sample so you can receive agreements and submit quotes',samples_gate_btn:'Add your samples',samples_d2:'Add up to 3 video links of your work (YouTube/TikTok/Instagram/Facebook). At least one work sample is mandatory — without it you cannot receive agreements or submit quotes.'});
+Object.assign(ERR_EN,{'لازم تضيف نموذج شغل واحد على الأقل في ملفك عشان تقدر تستقبل اتفاقات وتقدّم عروض':'You must add at least one work sample to your profile before you can receive agreements and submit quotes','المنفذ ده لسه ما ضافش نماذج شغله — ما يقدرش يستقبل اتفاقات لحد ما يضيف نموذج شغل واحد على الأقل':'This provider has not added work samples yet — they cannot receive agreements until they add at least one work sample','ملفك ناقص — كمّل البيانات المطلوبة الأول':'Your profile is incomplete — complete the required details first'});
 /* الجولة الأخيرة الشاملة (TESTING-FINAL.md): صيانة/إكمال ملف/بياناتي/حظر/لوحة مالك موسّعة/خط زمني/شفافية */
 Object.assign(DICT.ar,{fin_maint_t:'بنعمل صيانة سريعة — راجعين قريباً',fin_maint_d:'بنظبط حاجات صغيرة عشان تجربتك تبقى أحسن — شكراً لصبرك، جرّب تاني كمان شوية.',fin_maint_login:'دخول المالك',fin_chk_t:'أكمِل ملفك',fin_chk_d:'كل خطوة بتكمّلها بتقرّب ملفك من الظهور الكامل قدام العملاء.',fin_chk_photo:'صورة شخصية لملفك',fin_chk_bio:'نبذة تعريفية عنك',fin_chk_samples:'أضف نماذجك عشان العملاء يشوفوا شغلك',fin_chk_packages:'باقة أسعار واحدة على الأقل',fin_chk_fin:'خطوة الهوية المالية المؤكدة',fin_chk_link:'انسخ رابطك الشخصي مرة على الأقل',fin_chk_fix:'أكملها',fin_data_t:'بياناتي',fin_data_d:'نزّل نسخة JSON من بياناتك عندنا: ملفك واتفاقاتك وسجلك المالي وإشعاراتك وبيانات رسائلك الوصفية.',fin_data_btn:'⬇️ نزّل بياناتي',fin_blocks_t:'المحظورون',fin_blocks_none:'لا أحد محظور.',fin_block_btn:'حظر',fin_unblock_btn:'فك الحظر',fin_blocked_t:'اتحظر — مش هتقدروا تبدأوا تواصل أو اتفاقات جديدة',fin_unblocked_t:'اتفك الحظر',fin_tl_t:'الخط الزمني الموحّد للصفقة',fin_arb_t:'قرار التحكيم المسبّب',fin_arb_refs:'مراجع الأدلة',fin_tr_t:'الشفافية والأمان',fin_tr_1:'Deal لا تستلم ولا تحتجز أموال المعاملات أبداً: كل تحويل يتحرك بين محفظتي العميل والمنفّذ مباشرة، ودور المنصة التنظيم والتوثيق والتحكيم فقط.',fin_tr_2:'كل رقم تشوفه في Deal حقيقي من قاعدة بياناتها: عدد الصناع والصفقات والمقاعد والتقييمات — لا أرقام تجميلية ولا إحصاءات مخترعة.',fin_tr_3:'كل مهلة وكل عقوبة معلنة في شروط المعاملات قبل أن تبدأ أي خطوة: مهلات الدفع ٣ ساعات، ومهلة المعاينة ٢٤ ساعة، وسلّم العقوبات منشور بالكامل — لا قواعد خفية أبداً.',fin_tr_4:'التحكيم عند أي خلاف يتم من أدلة التطبيق وحدها (المحادثة والإيصالات وسجل الخطوات)، وقراره مسبّب دائماً: السبب مكتوب ومراجع الأدلة ظاهرة للطرفين في صفحة الاتفاق نفسها.',fin_ow_ops_t:'تشغيل المنصة',fin_ow_maint:'وضع الصيانة',fin_ow_maint_on:'مفعّل الآن — الزوار والأعضاء يرون شاشة الصيانة',fin_ow_maint_off:'متوقف — المنصة تعمل طبيعياً',fin_ow_maint_toggle:'تبديل وضع الصيانة',fin_ow_funnel_t:'قمع النمو (أرقام حقيقية)',fin_ow_views:'مشاهدات الصفحات',fin_ow_visitors:'زوار فريدون',fin_ow_regs:'تسجيلات',fin_ow_verified_emails:'إيميلات مؤكدة',fin_ow_first_booking:'صناع بأول اتفاق',fin_ow_completed:'صفقات مكتملة',fin_ow_backup_t:'النسخ الاحتياطي',fin_ow_backup_now:'اعمل نسخة دلوقتي',fin_ow_backup_last:'آخر نسخة',fin_ow_backup_none:'لا نسخ بعد',fin_ow_backup_dl:'تنزيل أحدث نسخة',fin_ow_broadcast_t:'إعلان لكل الأعضاء',fin_ow_bc_title_ph:'عنوان الإعلان',fin_ow_bc_body_ph:'نص الإعلان (عربي)',fin_ow_bc_body_en_ph:'نص الإعلان (إنجليزي — اختياري)',fin_ow_bc_send:'إرسال الإعلان',fin_ow_bc_sent:'اتبعت الإعلان',fin_ow_bc_hist:'سجل الإعلانات',fin_ow_bc_recipients:'مستلماً',fin_ow_fin_t:'التصدير المالي',fin_ow_fin_d:'سجل الأموال والالتزامات لفترة من اختيارك — ملف جداول (SpreadsheetML .xls) بإجماليات.',fin_ow_fin_btn:'⬇️ تصدير مالي',fin_ow_errlog_t:'سجل الأخطاء الداخلي (آخر ١٠٠)',fin_ow_errlog_none:'لا أخطاء مسجلة.',fin_ow_audit_t:'سجل تدقيق إجراءات المالك (آخر ١٠٠)',fin_ow_audit_none:'لا إجراءات مدققة بعد.',fin_arb_dlg_t:'قرار تحكيم مسبّب',fin_arb_reason_ph:'سبب القرار (إلزامي — يظهر للطرفين)',fin_arb_evidence:'اختر دليلاً واحداً على الأقل من خط زمن الاتفاق',fin_arb_go:'تأكيد القرار'});
 Object.assign(DICT.en,{fin_maint_t:'Quick maintenance — we will be back soon',fin_maint_d:'We are fine-tuning a few things to make your experience better — thanks for your patience, try again shortly.',fin_maint_login:'Owner login',fin_chk_t:'Complete your profile',fin_chk_d:'Every step you finish brings your profile closer to full visibility in front of clients.',fin_chk_photo:'A profile photo',fin_chk_bio:'A short bio about you',fin_chk_samples:'Add your samples so clients can see your work',fin_chk_packages:'At least one price package',fin_chk_fin:'The verified financial-identity step',fin_chk_link:'Copy your personal link at least once',fin_chk_fix:'Complete it',fin_data_t:'My data',fin_data_d:'Download a JSON copy of your data with us: your profile, bookings, money ledger, notifications and message metadata.',fin_data_btn:'⬇️ Download my data',fin_blocks_t:'Blocked members',fin_blocks_none:'Nobody is blocked.',fin_block_btn:'Block',fin_unblock_btn:'Unblock',fin_blocked_t:'Blocked — neither of you can start new messages or bookings',fin_unblocked_t:'Unblocked',fin_tl_t:'Unified deal timeline',fin_arb_t:'Reasoned arbitration decision',fin_arb_refs:'Evidence references',fin_tr_t:'Transparency & security',fin_tr_1:'Deal never receives or holds transaction money: every transfer moves directly between the client wallet and the provider wallet, and the platform only organizes, documents and arbitrates.',fin_tr_2:'Every number you see on Deal is real from its database: creators, deals, seats and ratings — no cosmetic figures and no invented statistics.',fin_tr_3:'Every deadline and every penalty is published in the transaction terms before any step begins: payment deadlines are 3 hours, the preview window is 24 hours, and the full penalty ladder is public — no hidden rules, ever.',fin_tr_4:'Arbitration in any dispute works from in-app evidence only (the chat, receipts and the step log), and its decision is always reasoned: the written reason and the evidence references are visible to both parties on the agreement page itself.',fin_ow_ops_t:'Platform operations',fin_ow_maint:'Maintenance mode',fin_ow_maint_on:'ON now — guests and members see the maintenance screen',fin_ow_maint_off:'Off — the platform runs normally',fin_ow_maint_toggle:'Toggle maintenance mode',fin_ow_funnel_t:'Growth funnel (real numbers)',fin_ow_views:'Page views',fin_ow_visitors:'Unique visitors',fin_ow_regs:'Registrations',fin_ow_verified_emails:'Verified emails',fin_ow_first_booking:'Creators with a first booking',fin_ow_completed:'Completed deals',fin_ow_backup_t:'Database backup',fin_ow_backup_now:'Back up now',fin_ow_backup_last:'Last backup',fin_ow_backup_none:'No backups yet',fin_ow_backup_dl:'Download latest backup',fin_ow_broadcast_t:'Broadcast to all members',fin_ow_bc_title_ph:'Announcement title',fin_ow_bc_body_ph:'Announcement text (Arabic)',fin_ow_bc_body_en_ph:'Announcement text (English — optional)',fin_ow_bc_send:'Send announcement',fin_ow_bc_sent:'Announcement sent',fin_ow_bc_hist:'Announcement history',fin_ow_bc_recipients:'recipients',fin_ow_fin_t:'Financial export',fin_ow_fin_d:'The money ledger and obligations for a period you choose — a spreadsheet file (SpreadsheetML .xls) with totals.',fin_ow_fin_btn:'⬇️ Financial export',fin_ow_errlog_t:'Internal error log (latest 100)',fin_ow_errlog_none:'No errors recorded.',fin_ow_audit_t:'Owner action audit log (latest 100)',fin_ow_audit_none:'No audited actions yet.',fin_arb_dlg_t:'Reasoned arbitration decision',fin_arb_reason_ph:'Decision reason (required — visible to both parties)',fin_arb_evidence:'Pick at least one evidence item from the agreement timeline',fin_arb_go:'Confirm decision'});
@@ -2440,7 +2454,11 @@ async function doBookGuest(btn){
 
 function openSamplesDlg(){ const d=$('#samplesDlg'); if(d&&!d.open){ hideErr('samplesErr'); d.showModal(); } }
 async function saveSamples(btn){ hideErr('samplesErr'); await withBusy(btn,async()=>{ try{
-  for(const id of ['smUrl1','smUrl2','smUrl3']){ const v=($('#'+id)||{}).value||''; if(v.trim()) await api('/api/me/portfolio',{method:'POST',body:JSON.stringify({url:v.trim()})}); }
+  const urls=['smUrl1','smUrl2','smUrl3'].map(id=>(($('#'+id)||{}).value||'').trim()).filter(Boolean);
+  /* التسجيل الإجباري المتسلسل: الحفظ بلا أي نموذج (وبلا نماذج قائمة أصلاً)
+     لا يُنهي الخطوة — نموذج واحد على الأقل شرط الخروج من هذه المرحلة. */
+  if(!urls.length){ const cur=await api('/api/me/portfolio'); if(!((cur.items||[]).length)){ showErr('samplesErr',t('reg_samples_required')); return; } }
+  for(const v of urls) await api('/api/me/portfolio',{method:'POST',body:JSON.stringify({url:v})});
   $('#samplesDlg').close(); toast(X('اتحفظت نماذجك ✓','Your samples are saved ✓'));
 }catch(e){ showErr('samplesErr',errT(e.message)) } }) }
 
@@ -2711,7 +2729,15 @@ async function loadDash(){
     <label>${t('pref_min')}</label><input id="prefMin" type="number" value="">
     <button class="btn sm" onclick="savePrefs(this)">${t('save_btn')}</button>
     <button class="btn ghost sm" onclick="showTab('opps')">${t('open_opps_btn')}</button></div>`;
-  $('#dashBody').innerHTML=`${ovStrip}${starCard}${giftCard}${welcomeCard}${checklistCard}<div class="card dash-hero${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
+  /* تنبيه النماذج الدائم (التسجيل الإجباري المتسلسل — «على الكل»): صانع/
+     مقدم بلا أي نموذج شغل يرى هذا التنبيه في لوحته دائماً بزر يفتح محرر
+     النماذج — لأن بوابات الخادم تمنع اتفاقاته وعروضه حتى يضيف نموذجه
+     الأول. الحالة من /api/me (profile_missing) لا من تخمين الواجهة. */
+  let samplesGateCard='';
+  if(['creator','provider'].includes(u.role)&&!u.is_platform_founder&&(u.profile_missing||[]).includes('samples')){
+    samplesGateCard=`<div class="card" id="dashSamplesGate" style="margin-top:12px;border-color:var(--gold)"><h3 style="margin-top:0">${t('samples_gate_t')}</h3><div class="mut">${t('samples_gate_d')}</div><div class="row" style="margin-top:8px"><button class="btn sm" onclick="openSamplesDlg()">${t('samples_gate_btn')}</button></div></div>`;
+  }
+  $('#dashBody').innerHTML=`${ovStrip}${samplesGateCard}${starCard}${giftCard}${welcomeCard}${checklistCard}<div class="card dash-hero${u.is_platform_founder?' founder-card':''}">${u.is_platform_founder?`<div class="founder-ribbon">${t('founder_ribbon')}</div>`:''}
     <div class="row">${avatarHtml(u,true)}<div><h3 style="margin:0">${esc(u.name)}${seal(u)}</h3>
     <div class="mut">${esc(u.niche||'')} · ${esc(u.city)} · ${u.followers||0} ${t('followers_w')}${u.is_platform_founder?'':` · <span class="price">${money(u.price, u.currency)}</span>`}</div>
     <div class="row" style="margin-top:5px">${u.is_platform_founder?seal(u,'big'):''}${u.is_founder_member?`<span class="chip">${t('founder_member_w')}</span>`:''}${u.pioneer?`<span class="chip">${t('pioneer_w')}</span>`:''}
@@ -3073,8 +3099,51 @@ let AMODE='register';
 function openAuth(role){hideErr('authErr');if(!$('#aProvCat').options.length||!$('#aNiche').options.length)buildTaxUI();if(role){$('#aRole').value=role;roleFx();authMode('register')}else authMode('login');$('#authDlg').showModal()}
 function authMode(m){AMODE=m;$('#regFields').style.display=m==='register'?'block':'none';$('#authTitle').textContent=m==='register'?t('auth_reg_t'):t('auth_login_t');const aT=$('#authTabReg'),aL=$('#authTabLogin');if(aT){aT.classList.toggle('on',m==='register');aT.setAttribute('aria-pressed',m==='register')}if(aL){aL.classList.toggle('on',m==='login');aL.setAttribute('aria-pressed',m==='login')}
   /* زر البصمة: وضع الدخول فقط + دعم WebAuthn فعلي — غير ذلك يبقى مخفياً. */
-  const pkRow=$('#pkLoginRow'); if(pkRow) pkRow.classList.toggle('hide',!(m==='login'&&typeof pkSupported==='function'&&pkSupported()));}
+  const pkRow=$('#pkLoginRow'); if(pkRow) pkRow.classList.toggle('hide',!(m==='login'&&typeof pkSupported==='function'&&pkSupported()));
+  /* أي تبديل وضع (تسجيل/دخول) يبدأ المعالج من مرحلته الأولى دائماً. */
+  try{ authSetStage2(false); }catch(e){} }
 function roleFx(){$('#provCat').classList.toggle('hide',$('#aRole').value!=='provider')}
+/* ============ معالج التسجيل المتسلسل (التسجيل الإجباري المتسلسل) ============
+   مرحلتان لصانع/مقدم: (١) البيانات — لا انتقال قبل اكتمال كل حقل جوهري،
+   برسالة واضحة داخل الحوار؛ (٢) نماذج الشغل — لا إنشاء حساب قبل نموذج
+   واحد على الأقل، وتُرسل النماذج مع طلب التسجيل نفسه فتُحفظ ذرّياً.
+   الرجوع للمرحلة الأولى حر دائماً. المحل/البراند والدخول بلا مرحلة ثانية. */
+let REG_STAGE2=false;
+function regNeedsSamples(){ return AMODE==='register' && ['creator','provider'].includes(($('#aRole')||{}).value||''); }
+function authSetStage2(on){
+  REG_STAGE2=!!on;
+  const rf=$('#regFields'); if(!rf) return;
+  [...rf.children].forEach(ch=>{ if(ch.id!=='regSamples') ch.style.display=on?'none':''; });
+  const sm=$('#regSamples'); if(sm) sm.classList.toggle('hide',!on);
+  const fb=$('#authForgotBtn'); if(fb) fb.style.display=on?'none':'';
+  const pb=$('#authPrimaryBtn'); if(pb) pb.textContent=on?t('reg_create_btn'):t('continue_btn');
+}
+function authBackToStage1(){ authSetStage2(false); }
+function authStage1Error(){
+  if(!($('#aName').value||'').trim()) return t('reg_err_name');
+  if(!($('#aCity').value||'').trim()) return t('reg_err_city');
+  const role=$('#aRole').value;
+  if(role==='creator'){ const nv=$('#aNiche').value==='__other'?(($('#aNicheCustom').value||'').trim()):($('#aNiche').value||''); if(!nv) return t('reg_err_niche'); }
+  if(role==='provider'){ const pc=$('#aProvCat').value; if(!pc) return t('reg_err_prov'); if(pc==='other'&&!($('#aProvCustom').value||'').trim()) return t('reg_err_prov_custom'); }
+  if(['creator','provider'].includes(role) && !(+$('#aPrice').value>0)) return t('reg_err_price');
+  if(!($('#aContact').value||'').trim()) return t('reg_err_contact');
+  if(($('#aPassword').value||'').length<8) return t('reg_err_pw');
+  if(!($('#aTos')||{}).checked||!($('#aAge')||{}).checked) return t('reg_err_tos');
+  return '';
+}
+async function authPrimary(btn){
+  if(AMODE==='register'&&regNeedsSamples()&&!REG_STAGE2){
+    hideErr('authErr');
+    const err=authStage1Error();
+    if(err){ showErr('authErr',err); return; }
+    authSetStage2(true); return;
+  }
+  if(AMODE==='register'&&REG_STAGE2){
+    const any=['rgUrl1','rgUrl2','rgUrl3'].some(id=>(($('#'+id)||{}).value||'').trim());
+    if(!any){ showErr('authErr',t('reg_samples_required')); return; }
+  }
+  return doAuth(btn);
+}
 async function doAuth(btn){
   hideErr('authErr');
   await withBusy(btn,async()=>{
@@ -3082,7 +3151,7 @@ async function doAuth(btn){
       const nicheVal=$('#aNiche').value==='__other'?$('#aNicheCustom').value.trim():$('#aNiche').value;
       const provCat=$('#aProvCat').value;
       const r=AMODE==='register'
-        ?await api('/api/auth/register',{method:'POST',body:JSON.stringify({name:$('#aName').value,role:$('#aRole').value,niche:nicheVal,provider_category:provCat,provider_custom:provCat==='other'?$('#aProvCustom').value.trim():'',city:$('#aCity').value,country:$('#aCountry').value,country_name:$('#aCountry').value==='OTHER'?($('#aCountryName').value||'').trim():'',currency:$('#aCurr').value,contact:$('#aContact').value,password:$('#aPassword').value,device_id:guestDeviceId(),followers:+$('#aFollowers').value||0,price:+$('#aPrice').value||0,links:$('#aLinks').value,tos_accepted:!!(document.getElementById('aTos')||{}).checked,age_confirmed:!!(document.getElementById('aAge')||{}).checked,ref:currentRef()||undefined,turnstile_token:window.__tsToken||''})})
+        ?await api('/api/auth/register',{method:'POST',body:JSON.stringify({name:$('#aName').value,role:$('#aRole').value,niche:nicheVal,provider_category:provCat,provider_custom:provCat==='other'?$('#aProvCustom').value.trim():'',city:$('#aCity').value,country:$('#aCountry').value,country_name:$('#aCountry').value==='OTHER'?($('#aCountryName').value||'').trim():'',currency:$('#aCurr').value,contact:$('#aContact').value,password:$('#aPassword').value,device_id:guestDeviceId(),followers:+$('#aFollowers').value||0,price:+$('#aPrice').value||0,links:$('#aLinks').value,tos_accepted:!!(document.getElementById('aTos')||{}).checked,age_confirmed:!!(document.getElementById('aAge')||{}).checked,ref:currentRef()||undefined,turnstile_token:window.__tsToken||'',samples:REG_STAGE2?['rgUrl1','rgUrl2','rgUrl3'].map(id=>(($('#'+id)||{}).value||'').trim()).filter(Boolean):undefined})})
         :await api('/api/auth/login',{method:'POST',body:JSON.stringify({contact:$('#aContact').value,password:$('#aPassword').value,device_id:guestDeviceId()})});
       if(AMODE==='register'){ try{localStorage.removeItem('deal_ref')}catch(e){} }
       try{ const cid=($('#aContact').value||'').trim(); if(cid) localStorage.setItem('deal_login_id',cid); }catch(e){} /* معرّف الدخول يُحفظ محلياً لتهيئة شاشة الدخول عند عودة صاحب جلسة منتهية (بند ٨) */
@@ -3091,7 +3160,10 @@ async function doAuth(btn){
       $('#authDlg').close();renderAuth();toast(t('welcome_t'));FILTERS_READY=false;refresh();
       /* ترحيل الحسابات القديمة: دخول ناجح بلا كلمة سر يفتح فرض التعيين. */
       if(r.needs_password) openSetPassword(true);
-      else if(AMODE==='register'&&r.user&&['creator','provider'].includes(r.user.role)) openSamplesDlg();
+      /* التسجيل الإجباري المتسلسل: النماذج جُمعت في مرحلة التسجيل الأخيرة
+         وأُرسلت مع الطلب نفسه فحُفظت مع الحساب — لا حوار نماذج بعد التسجيل،
+         والمعالج يرجع لمرحلته الأولى لأي فتح قادم. */
+      try{ authSetStage2(false); }catch(e){}
     }catch(e){showErr('authErr',errT(e.message))}
   });
 }
@@ -3350,7 +3422,10 @@ async function verifyEmailConfirm(btn){await withBusy(btn,async()=>{try{await ap
    بعد — يفتح لافتة بزر يقود لموضع التأكيد نفسه في بطاقة الأمان باللوحة
    (حقل الإيميل + الكود)، فلا طريق مسدود لحسابات الهاتف بلا إيميل. */
 function openEmailVerifyGate(){ const d=$('#evGateDlg'); if(d&&!d.open){ try{ d.showModal(); }catch(e){} } }
-function handleGateError(e){ if(e&&e.code==='EMAIL_NOT_VERIFIED'){ openEmailVerifyGate(); return true; } return false; }
+function handleGateError(e){ if(e&&e.code==='EMAIL_NOT_VERIFIED'){ openEmailVerifyGate(); return true; }
+  /* بوابة نماذج الشغل: رسالة واضحة، وللصانع/المقدم يُفتح محرر النماذج نفسه
+     ليكمّل من مكانه — فلا طريق مسدود (نفس فلسفة بوابة الإيميل). */
+  if(e&&e.code==='SAMPLES_REQUIRED'){ toast(errT(e.message)); if(ME&&ME.user&&['creator','provider'].includes(ME.user.role)&&!ME.user.is_platform_founder) openSamplesDlg(); return true; } return false; }
 function goEmailVerify(){
   const d=$('#evGateDlg'); if(d&&d.open) d.close();
   showTab('dash');
@@ -5319,7 +5394,7 @@ async function xLoadMyReqs(){ const box=$('#xMyReqs'); if(!box) return; try{ con
 async function xShowQuotes(rid){ const box=$('#xQuotes'+rid); if(!box) return; try{ const d=await api('/api/my/requests/'+rid+'/quotes'); const items=d.items||[];
   box.innerHTML=items.length?`<div class="grid" style="margin-top:7px">${items.map(q=>`<div class="step"><b>${esc((q.talent&&q.talent.name)||q.talent_name||'')}</b><div style="font-size:18px;font-weight:900;color:var(--gold)">${money(q.price,'')}</div><div class="mut">⏱️ ${q.delivery_days} ${X('يوماً','days')}${q.note?` · ${esc(q.note)}`:''}</div>${q.status==='pending'?`<button class="btn sm" style="margin-top:5px" onclick="xAcceptQuote(this,${rid},${q.id})">${X('اختر العرض ده','Choose this quote')}</button>`:`<span class="chip">${esc(q.status)}</span>`}</div>`).join('')}</div>`:`<div class="mut">${X('لا عروض بعد.','No quotes yet.')}</div>`;
 }catch(e){ xErr(e) } }
-async function xAcceptQuote(btn,rid,qid){ try{ await api('/api/my/requests/'+rid+'/quotes/'+qid+'/accept',{method:'POST',body:'{}'}); toast(X('اتفتح الاتفاق من العرض المختار ✓','Agreement opened from the chosen quote ✓')); showTab('bookings'); }catch(e){ xErr(e) } }
+async function xAcceptQuote(btn,rid,qid){ try{ await api('/api/my/requests/'+rid+'/quotes/'+qid+'/accept',{method:'POST',body:'{}'}); toast(X('اتفتح الاتفاق من العرض المختار ✓','Agreement opened from the chosen quote ✓')); showTab('bookings'); }catch(e){ if(!handleGateError(e)) xErr(e) } }
 async function xLoadWaitlist(){ const box=$('#xWaitBox'); if(!box) return; try{ const d=await api('/api/me/waitlist'); const mine=d.mine||[]; const forMe=d.for_me||[];
   box.innerHTML=(mine.length||forMe.length)?[...mine.map(w=>`<div class="row" style="padding:3px 0"><span>🙋 ${X('منتظر عند','Waiting for')} ${esc((w.talent&&w.talent.name)||'')} — ${esc(w.status)}</span><div class="sp"></div>${w.status==='offered'?`<button class="btn sm" onclick="xWaitAct(${w.id},'accept')">${X('اقبل الفرصة','Accept slot')}</button>`:''}<button class="btn ghost sm" onclick="xWaitAct(${w.id},'leave')">${X('اترك','Leave')}</button></div>`),...forMe.map(w=>`<div class="row" style="padding:3px 0"><span>⏳ ${esc((w.client&&w.client.name)||w.guest_name||'')} ${X('في قائمة انتظارك','is on your waitlist')} — ${esc(w.status)}</span></div>`)].join(''):`<div class="mut">${X('لا قوائم انتظار.','No waitlist entries.')}</div>`;
 }catch(e){ console.error('[deal-extras] widget box:',e); box.innerHTML=''; } }

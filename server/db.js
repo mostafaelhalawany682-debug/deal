@@ -1293,69 +1293,71 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
 `;
 
 let readyPromise = null;
-/* قفل التهيئة الاستشاري (بند ٧ — إصلاح انقطاع الإنتاج): نسختا serverless
-   باردتان أطلقتا DDL التهيئة في اللحظة نفسها فتشابكتا على أقفال
-   AccessExclusiveLock (users/bookings) ومات الإقلاع بـ deadlock (40P01)
-   فصارت واجهة الـ API كلها 500. الحل: جلسة تهيئة مخصصة واحدة تمسك
-   pg_advisory_lock بمفتاح ثابت وحيد لكل التطبيق قبل أي DDL — نسخة واحدة
-   فقط تهيّئ في أي لحظة، وباقي النسخ تنتظر ثم تجد الجداول جاهزة فتتخطى
-   (كل الـ DDL بصيغة IF NOT EXISTS — التهيئة idempotent كما هي، وبلا أي
-   تغيير في منطق الأعمال). */
-const INIT_ADVISORY_LOCK_KEY = 727271001;
+/* تهيئة المخطط (بند ٧ بصيغته المصحّحة — ملحق «تصحيح بند ٧» في
+   TESTING-AUDIT.md): الإنتاج يعمل خلف Supavisor بوضع Transaction Pooling
+   (منفذ 6543)، وفي هذا الوضع قد يهبط كل استعلام عبر التجميعة على backend
+   مختلف، فأي آلية جلسية تُركّب من استعلامات منفصلة (قفل يُمسك على جلسة
+   ثم يُعتمد عليه من استعلامات لاحقة، أو إعداد جلسة) غير متماسكة وتتسابق
+   فعلياً — جرّبنا قفلاً جلسياً هنا ففشل في الإنتاج الحي. التصميم المتوافق
+   مع البولر:
+   (أ) مسار سريع أولاً: استعلام واحد خفيف عبر pool يفحص علامتين —
+   users (أول جدول في أول دفعة SCHEMA_SQL) وpasskeys (آخر جدول في آخر
+   دفعة PASSKEY_MIGRATIONS_SQL) — فإن وُجدا معاً فالمخطط مهيّأ وتُتخطى
+   كل دفعات الـ DDL فوراً. الدفعات بين العلامتين إضافية فقط بصيغة
+   IF NOT EXISTS. تنبيه للجولات المستقبلية: أي جولة تضيف جدولاً في دفعة
+   جديدة يجب أن تحدّث علامة النهاية هنا إلى آخر جدول تضيفه.
+   (ب) عند غياب العلامة: دفعات الـ DDL الست عشرة بترتيبها عبر pool.query
+   مباشرة (سلوك ما قبل البند ٧ الذي عمل أسابيع)، ثم تطبيع contact كما هو
+   عبر pool. التهيئة idempotent، وسباق التهيئة الحقيقي النادر يعالجه
+   غلاف init() بإعادة المحاولة — المحاولة التالية تعيد فحص العلامة
+   فتتخطى ما اكتمل. بلا أي تغيير في منطق الأعمال. */
 async function initOnce() {
-  const client = await pool.connect();
+  const marker = (await pool.query(
+    "SELECT to_regclass('public.users') AS users_reg, to_regclass('public.passkeys') AS passkeys_reg"
+  )).rows[0];
+  if (marker && marker.users_reg && marker.passkeys_reg) return;
+  await pool.query(SCHEMA_SQL);
+  await pool.query(MIGRATIONS_SQL);
+  await pool.query(SOCIAL_MIGRATIONS_SQL);
+  await pool.query(AMBASSADOR_MIGRATIONS_SQL);
+  await pool.query(P2P_MIGRATIONS_SQL);
+  await pool.query(ALIGN_MIGRATIONS_SQL);
+  await pool.query(RECOVERY_MIGRATIONS_SQL);
+  await pool.query(DETERRENCE_MIGRATIONS_SQL);
+  await pool.query(FEATURES_MIGRATIONS_SQL);
+  await pool.query(EXPANSION_MIGRATIONS_SQL);
+  await pool.query(AUDIT_MIGRATIONS_SQL);
+  await pool.query(REVIEW_MIGRATIONS_SQL);
+  await pool.query(POLISH_MIGRATIONS_SQL);
+  await pool.query(ENGINES_MIGRATIONS_SQL);
+  await pool.query(FINAL_MIGRATIONS_SQL);
+  await pool.query(PASSKEY_MIGRATIONS_SQL);
+  // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
+  // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
   try {
-    await client.query('SELECT pg_advisory_lock($1)', [INIT_ADVISORY_LOCK_KEY]);
-    try {
-      // سقف انتظار أقفال الجداول داخل جلسة التهيئة فقط (15 ثانية) — لا انتظار بلا نهاية.
-      await client.query("SET lock_timeout = '15s'");
-      await client.query(SCHEMA_SQL);
-      await client.query(MIGRATIONS_SQL);
-      await client.query(SOCIAL_MIGRATIONS_SQL);
-      await client.query(AMBASSADOR_MIGRATIONS_SQL);
-      await client.query(P2P_MIGRATIONS_SQL);
-      await client.query(ALIGN_MIGRATIONS_SQL);
-      await client.query(RECOVERY_MIGRATIONS_SQL);
-      await client.query(DETERRENCE_MIGRATIONS_SQL);
-      await client.query(FEATURES_MIGRATIONS_SQL);
-      await client.query(EXPANSION_MIGRATIONS_SQL);
-      await client.query(AUDIT_MIGRATIONS_SQL);
-      await client.query(REVIEW_MIGRATIONS_SQL);
-      await client.query(POLISH_MIGRATIONS_SQL);
-      await client.query(ENGINES_MIGRATIONS_SQL);
-      await client.query(FINAL_MIGRATIONS_SQL);
-      await client.query(PASSKEY_MIGRATIONS_SQL);
-      // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
-      // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
-      try {
-        const rows = (await client.query('SELECT id, contact FROM users')).rows;
-        for (const r of rows) {
-          const n = normalizeContact(r.contact);
-          if (n && n !== r.contact) {
-            try { await client.query('UPDATE users SET contact=$1 WHERE id=$2', [n, r.id]); }
-            catch (e) { /* تعارض تفرّد — يُترك كما هو */ }
-          }
-        }
-      } catch (e) { /* تطبيع الصفوف القائمة لا يعطّل الإقلاع أبداً */ }
-    } finally {
-      await client.query('SELECT pg_advisory_unlock($1)', [INIT_ADVISORY_LOCK_KEY]);
+    const rows = (await pool.query('SELECT id, contact FROM users')).rows;
+    for (const r of rows) {
+      const n = normalizeContact(r.contact);
+      if (n && n !== r.contact) {
+        try { await pool.query('UPDATE users SET contact=$1 WHERE id=$2', [n, r.id]); }
+        catch (e) { /* تعارض تفرّد — يُترك كما هو */ }
+      }
     }
-  } finally {
-    // تدمير جلسة التهيئة بدل إعادتها إلى التجميعة: يحرّر القفل الاستشاري
-    // حتماً حتى لو فشل فكّه الصريح، ولا يُسرّب lock_timeout لباقي الجلسات.
-    client.release(true);
-  }
+  } catch (e) { /* تطبيع الصفوف القائمة لا يعطّل الإقلاع أبداً */ }
 }
 function init() {
   if (!readyPromise) {
     readyPromise = (async () => {
-      // إعادة محاولة عند أخطاء الأقفال العابرة فقط (40P01 deadlock /
-      // 55P03 lock_not_available من lock_timeout): التشابك عابر بطبيعته
-      // ومحاولة أخرى بعد انتظار قصير تنجح عملياً — أي خطأ آخر يصعد كما هو.
+      // إعادة محاولة عند أكواد سباق التهيئة العابرة فقط: 40P01 ‏deadlock
+      // و55P03 ‏lock_not_available (تشابك أقفال)، و23505/42P07 تصادم
+      // كتالوج حين تنشئ نسختان الجدول نفسه بـ IF NOT EXISTS في اللحظة
+      // نفسها على قاعدة فارغة (سباق الإنشاء الأول الحقيقي) — التشابك
+      // عابر بطبيعته، والمحاولة التالية تعيد فحص العلامة فتتخطى ما
+      // اكتمل. أي خطأ آخر يصعد كما هو.
       for (let attempt = 1; ; attempt++) {
         try { await initOnce(); return; }
         catch (e) {
-          if (e && (e.code === '40P01' || e.code === '55P03') && attempt < 3) {
+          if (e && (e.code === '40P01' || e.code === '55P03' || e.code === '23505' || e.code === '42P07') && attempt < 3) {
             await new Promise((r) => setTimeout(r, 400 * attempt));
             continue;
           }

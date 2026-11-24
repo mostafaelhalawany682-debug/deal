@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   price DOUBLE PRECISION NOT NULL,
   currency TEXT DEFAULT 'EGP',
   status TEXT DEFAULT 'pending_agreement',
+  exec_type TEXT DEFAULT 'preview',
   agreed_client INTEGER DEFAULT 0,
   agreed_talent INTEGER DEFAULT 0,
   fee_status TEXT DEFAULT 'none',
@@ -713,6 +714,7 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deemed_warn_sent INTEGER DEFAULT 0
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deemed_mid_warn_sent INTEGER DEFAULT 0;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS agreed_revisions INTEGER DEFAULT NULL;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS agreed_delivery_at BIGINT DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS exec_type TEXT DEFAULT 'preview';
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS initial_proof_url TEXT DEFAULT '';
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS initial_proof_at BIGINT DEFAULT 0;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS initial_proof_check TEXT DEFAULT '';

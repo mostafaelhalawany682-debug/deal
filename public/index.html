@@ -3427,7 +3427,7 @@ function fvSyncModeUI(){
    المسجل تماماً (هيرو الزائر وأزراره وقوائمه، ونداءات بلا رمز فالخادم
    يعاملها كزائر)، والرمز يبقى في localStorage ولا يُمس أبداً؛ والعودة
    لوضع المؤسس ضغطة واحدة تستعيد الهوية والتبويب من اللقطة فوراً. */
-function fvResetModes(){ FV_PREVIEW=false; FV_GUEST=false; FV_SNAPSHOT=null; FV_GUEST_SNAPSHOT=null; try{ if(document.body){ document.body.classList.remove('fv-preview'); document.body.classList.remove('fv-guest'); } }catch(e){} }
+function fvResetModes(){ FV_PREVIEW=false; FV_GUEST=false; FV_SNAPSHOT=null; FV_GUEST_SNAPSHOT=null; try{ if(document.body){ document.body.classList.remove('fv-preview'); document.body.classList.remove('fv-guest'); } }catch(e){} try{ if(typeof dlBoxSync==='function') dlBoxSync(); }catch(e){} }
 function fvSetMode(mode){
   if(!ME_IS_FOUNDER) return;
   const m=mode===true||mode==='creator'?'creator':(mode==='guest'?'guest':'founder');
@@ -3437,6 +3437,7 @@ function fvSetMode(mode){
   if(m==='creator'&&!FV_PREVIEW){ FV_PREVIEW=true; if(ME&&ME.user) FV_SNAPSHOT={f:!!ME.user.is_platform_founder,fm:!!ME.user.is_founder_member}; applyPreviewLens(); document.body.classList.add('fv-preview'); }
   if(m==='guest'&&!FV_GUEST){ FV_GUEST_SNAPSHOT={me:ME,tab:(typeof CURTAB!=='undefined'?CURTAB:'market')}; FV_GUEST=true; ME=null; document.body.classList.add('fv-guest'); }
   fvSyncModeUI(); renderAuth(); refresh();
+  try{ if(typeof dlBoxSync==='function') dlBoxSync(); }catch(e){}
   if(m==='creator') toast(t('fv_preview_on'));
   else if(m==='guest'){ showTab('market'); toast(t('fv_guest_on')); }
   else{ if(bt){ if(bt==='owner'){ const hr=$('#hero'); if(hr) hr.classList.add('hide'); } showTab(bt); } try{ api('/api/me').then((mm)=>{ if(mm&&mm.user&&!FV_PREVIEW&&!FV_GUEST){ ME={user:mm.user}; renderAuth(); } }).catch(()=>{}); }catch(e){} }
@@ -5705,14 +5706,19 @@ if(document.readyState==='loading'&&typeof document.addEventListener==='function
    بطاقة «حمّل التطبيق» بارزة أعلى عرض السوق — أول عنصر داخل #tab-market
    بعد الهيرو مباشرة، فلا تسرّب لأي تبويب آخر، وظاهرة للزائر والعضو
    على السواء. تُخفى في وضع standalone (تطبيق مثبّت) عبر instStandalone
-   نفسه، وتُخفى فور حدث appinstalled في الجلسة نفسها. زرّها لا يكرّر
+   نفسه، وتُخفى فور حدث appinstalled في الجلسة نفسها. استثناء عدسة
+   المؤسس (DLB2): أثناء معاينة الصانع/الزائر (FV_PREVIEW/FV_GUEST)
+   تبقى الخانة ظاهرة دائماً — فالمعاينة تعرض ما يراه ذلك الجمهور
+   فعلاً، والزائر الحقيقي لا يكون في standalone أبداً؛ ويعيد
+   fvSetMode/fvResetModes تشغيل dlBoxSync عند كل تبديل وضع. زرّها لا يكرّر
    منطق التثبيت إطلاقاً: يفوض لتدفق بوابة INST القائم حرفياً — فتح
    البوابة ثم instGateInstall (نفس تدفق بند القائمة instMenuGo): موجّه
    ملتقط ⇒ يُطلق الموجّه الأصلي وتُعالج نتيجته (قبول/رفض) داخل البوابة،
    وغياب الموجّه ⇒ البوابة تعرض الخطوات اليدوية حسب المتصفح. */
-function dlBoxSync(){ const b=document.getElementById('dlBox'); if(!b) return; let sa=false; try{ sa=instStandalone(); }catch(e){} if(sa||window.__appInstalled) b.classList.add('hide'); }
+function dlBoxFvPreview(){ try{ return !!((typeof FV_PREVIEW!=='undefined'&&FV_PREVIEW)||(typeof FV_GUEST!=='undefined'&&FV_GUEST)); }catch(e){ return false; } }
+function dlBoxSync(){ const b=document.getElementById('dlBox'); if(!b) return; if(dlBoxFvPreview()){ b.classList.remove('hide'); return; } let sa=false; try{ sa=instStandalone(); }catch(e){} b.classList.toggle('hide',!!(sa||window.__appInstalled)); }
 function dlBoxGo(){ try{ instGateOpen(); instGateInstall(); }catch(e){} }
-window.addEventListener('appinstalled',function(){ const b=document.getElementById('dlBox'); if(b) b.classList.add('hide'); });
+window.addEventListener('appinstalled',function(){ try{ dlBoxSync(); }catch(e){} });
 dlBoxSync();
 </script>
 </body>

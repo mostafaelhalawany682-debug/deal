@@ -301,6 +301,57 @@ app.get('/api/me/welcome-missions', auth, async (req, res) => {
   });
 });
 
+/* ---------------- هدية الترحيب: «أول صفقة من غير عمولة» ----------------
+   قرار المالك (2026-11-24): كل صانع/مقدم خدمة موثّق البريد (نفس بوابة التعامل)
+   له هدية واحدة تلقائية: أول اتفاق يكتمل له بلا عمولة Deal إطلاقاً — خطوة
+   العمولة تُتخطى بالكامل (لا التزام مالي يُنشأ أصلاً)، والعميل يدفع السعر
+   المعلن كما هو والمنفّذ يأخذ السعر كاملاً. نظام منفصل تماماً عن «مهام
+   الترحيب» أعلاه وجائزتها (شهر نجم) — لا يمسّها ولا تمسّه.
+   قاعدة التعليم والاستهلاك (الأقل مفاجأة، وموثّقة في TESTING-WELCOME-GIFT.md):
+   - التعليم يحدث مرة واحدة عند اكتمال اتفاق الطرفين (نقطة advanceAfterAgreement)
+     عبر مطالبة ذرية على users.welcome_gift_booking_id: اتفاق واحد فقط يحمل
+     العلم في أي لحظة؛ اتفاق ثانٍ يُوافَق عليه أثناء قيام الأول يسلك مسار
+     العمولة العادي من لحظته الأولى (لا مفاجآت لاحقة أبداً).
+   - التعليم مؤقت: لا يُستهلك إلا باكتمال الاتفاق الحامل فعلياً. إلغاء/انتهاء
+     الحامل قبل الاكتمال يحرّر الخانة تلقائياً (المطالبة التالية تنجح لأن حاملها
+     السابق صار cancelled) فتبقى الهدية متاحة للاتفاق التالي.
+   - الاستهلاك يُختم في tryCompleteFinal على نفس الاتفاق المُعلَّم وحده. */
+async function welcomeGiftStateFor(u) {
+  const completed = (await db.prepare('SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND status=?').get(u.id, 'completed')).c;
+  const holder = u.welcome_gift_booking_id ? await getBooking(u.welcome_gift_booking_id) : null;
+  const active = holder && !['completed', 'cancelled'].includes(holder.status) ? holder.id : 0;
+  let state = 'not_eligible';
+  if (u.welcome_gift_used_at) state = 'used';
+  else if (!u.email_verified) state = 'unverified';
+  else if (completed === 0) state = 'available';
+  return {
+    state, used_at: u.welcome_gift_used_at || 0,
+    used_booking_id: u.welcome_gift_used_at ? (u.welcome_gift_booking_id || 0) : 0,
+    active_booking_id: active, completed_deals: completed,
+  };
+}
+/* محاولة تعليم اتفاق بالهدية عند اكتمال اتفاق الطرفين — ترجع true لو تعلّم. */
+async function tryClaimWelcomeGift(b) {
+  const t = await getUser(b.talent_id);
+  if (!t || t.is_platform_founder || !['creator', 'provider'].includes(t.role)) return false;
+  if (!t.email_verified || t.welcome_gift_used_at) return false;
+  const completed = (await db.prepare('SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND status=?').get(t.id, 'completed')).c;
+  if (completed > 0) return false;
+  /* المطالبة الذرية: الخانة فارغة، أو حاملها السابق اتفاق ملغي (انتهى بلا
+     اكتمال فلم يستهلك شيئاً). أي حامل حي آخر ⇒ لا تعليم لهذا الاتفاق. */
+  const claim = await db.prepare(`UPDATE users SET welcome_gift_booking_id=? WHERE id=? AND welcome_gift_used_at=0 AND (welcome_gift_booking_id=0 OR welcome_gift_booking_id IN (SELECT id FROM bookings WHERE talent_id=? AND status='cancelled'))`).run(b.id, t.id, t.id);
+  if (!claim.changes) return false;
+  await db.prepare('UPDATE bookings SET gift=1 WHERE id=?').run(b.id);
+  return true;
+}
+app.get('/api/me/welcome-gift', auth, async (req, res) => {
+  const u = req.user;
+  /* المؤسس مستثنى كلياً (قواعد عرض المؤسس — لا هدية شخصية له أبداً). */
+  if (u.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس عرض وملكية فقط — لا هدية ترحيب له', code: 'FOUNDER_EXCLUDED' });
+  if (!['creator', 'provider'].includes(u.role)) return res.status(400).json({ error: 'هدية الترحيب للصناع ومقدمي الخدمة فقط' });
+  res.json(await welcomeGiftStateFor(u));
+});
+
 /* ---------------- المرجع المالي الموحد + نظام أمان المعاملات ----------------
    قرار المالك الملزم: كل التزام مالي في المنصة (اشتراك باقة، عمولة اتفاق،
    عربون، دفعة أخيرة) يحمل «مرجعاً مالياً» يعرفه الطرفان: كود معاملة بشري
@@ -469,11 +520,15 @@ const LARGE_DEAL_SPLIT_THRESHOLD = 1000;
 function isSplitDeposit(b) { return !!b && +b.price > LARGE_DEAL_SPLIT_THRESHOLD; }
 /* مبالغ أرجل الاتفاق بنفس صيغ آلة الحالات القائمة حرفياً (عمولة/نصف الصافي). */
 function bookingLegAmounts(b) {
-  const fee = mround(b.price * COMMISSION_RATE);
+  /* هدية الترحيب: اتفاق مُعلَّم بالهدية (b.gift) عمولته صفر وصافي المنفّذ هو
+     السعر كاملاً — والعربون دائماً نصف صافي المنفّذ: ٥٠٪ (أو ٢٥+٢٥ للصفقات
+     الكبيرة بعد المعاينة الأولية) والباقي النصف الثاني. */
+  const gift = !!b.gift;
+  const fee = gift ? 0 : mround(b.price * COMMISSION_RATE);
   const net = b.price - fee;
   const half = mround(net / 2);
   const split = isSplitDeposit(b);
-  return { fee, deposit: half, rest: half, split, dep1: split ? mround(b.price * 0.20) : half, dep2: split ? mround(b.price * 0.25) : 0 };
+  return { fee, net, deposit: half, rest: half, split, gift, dep1: split ? (gift ? mround(b.price * 0.25) : mround(b.price * 0.20)) : half, dep2: split ? mround(b.price * 0.25) : 0 };
 }
 /* ---------- بناء تصحيحات المراجعة: اتفاق مهيكل + هوية مالية + سجل علني ---------- */
 const FIN_IDENTITY_VERSION = 'fin-identity-v1';
@@ -834,6 +889,16 @@ async function tryCompleteFinal(b) {
   await db.prepare(`UPDATE bookings SET status='completed', completed_at=? WHERE id=?`).run(now(), b.id);
   await addBookingEvent(b.id, 'completed', 'اكتملت الصفقة — الباقي اتقبض والنسخة النهائية اتسلمت واتأكد استلامها');
   const nb = await getBooking(b.id);
+  /* استهلاك هدية الترحيب: يُختم هنا فقط — لحظة اكتمال الاتفاق المُعلَّم نفسه.
+     الختم مقيد بأن تكون خانة الحجز ما زالت تحمل هذا الاتفاق بالذات، فلا
+     يستهلك الهديةَ اتفاقٌ آخر ولا تُختم مرتين. */
+  if (nb.gift) {
+    const stamp = await db.prepare('UPDATE users SET welcome_gift_used_at=? WHERE id=? AND welcome_gift_used_at=0 AND welcome_gift_booking_id=?').run(now(), nb.talent_id, nb.id);
+    if (stamp.changes) {
+      await addBookingEvent(nb.id, 'welcome_gift_used', '🎁 اتسجلت الصفقة دي كأول صفقة مكتملة للمنفّذ — هدية الترحيب اتستخدمت، وعمولة Deal القياسية ١٠٪ تسري من الصفقة الجاية');
+      await notify(nb.talent_id, 'booking', `اتفاق #${nb.id}: 🎁 استخدمت هدية الترحيب — أول صفقة ليك اكتملت من غير عمولة، والعمولة القياسية ١٠٪ تسري من صفقتك الجاية`, `booking:${nb.id}`);
+    }
+  }
   const rest = bookingLegAmounts(nb).rest;
   await notify(nb.talent_id, 'booking', `اتفاق #${nb.id}: 🎉 اكتملت الصفقة — قبضت باقيك ${rest} ${nb.currency} والنسخة النهائية اتسلمت`, `booking:${nb.id}`);
   if (nb.client_id) await notify(nb.client_id, 'booking', `اتفاق #${nb.id}: 🎉 اكتملت الصفقة — النسخة النهائية عندك والباقي اتقبض`, `booking:${nb.id}`);
@@ -876,7 +941,7 @@ async function buildEvidenceBundle(b) {
   return {
     bundle: 'Deal — حزمة أدلة اتفاق (Evidence Bundle)',
     generated_at: fmt(now()),
-    booking: { id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status, source: b.source, created_at: fmt(b.created_at), completed_at: fmt(b.completed_at), protection_voided: !!b.protection_voided, protection_voided_at: fmt(b.protection_voided_at || 0) },
+    booking: { id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status, source: b.source, created_at: fmt(b.created_at), completed_at: fmt(b.completed_at), protection_voided: !!b.protection_voided, protection_voided_at: fmt(b.protection_voided_at || 0), welcome_gift: !!b.gift, amounts },
     parties: {
       client: client ? { id: client.id, name: client.name } : { guest_name: b.guest_name || '' },
       talent: talent ? { id: talent.id, name: talent.name, role: talent.role, niche: talent.niche, city: talent.city } : null,
@@ -2964,7 +3029,8 @@ async function sweepStepExpiry() {
 }
 async function getBooking(id) { return await db.prepare('SELECT * FROM bookings WHERE id=?').get(id); }
 async function bookingView(b, viewer) {
-  const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
+  /* كل أرقام الأرجل من مصدر الحساب الواحد — واعٍ بهدية الترحيب (عمولة صفر). */
+  const fee = bookingLegAmounts(b).fee;
   const net = b.price - fee;
   const myReview = viewer ? await db.prepare('SELECT * FROM reviews WHERE booking_id=? AND reviewer_id=?').get(b.id, viewer.id) : null;
   const view = { ...b };
@@ -2994,6 +3060,7 @@ async function bookingView(b, viewer) {
   view.tips = await tipsOf(b.id); // إكراميات الصفقة (التزامات tip في السجل — بلا عمولة)
   /* تصحيحات المراجعة: تقسيم العربون + سجل علني + سفير المدينة + الاتفاق المهيكل */
   { const am = bookingLegAmounts(b); view.deposit_split = am.split; view.dep1 = am.dep1; view.dep2 = am.dep2; }
+  view.gift = !!b.gift; // هدية الترحيب: عمولة صفر — الواجهة تعرض ملاحظة الهدية للطرفين
   view.initial_proof_url = b.initial_proof_url || ''; view.initial_proof_at = b.initial_proof_at || 0; view.initial_confirmed_at = b.initial_confirmed_at || 0;
   view.talent_record = await talentRecordFor(b.talent_id);
   view.city_ambassador = await bookingCityAmbassador(b);
@@ -4174,6 +4241,16 @@ async function ensureCommissionObligation(b) {
 async function advanceAfterAgreement(b) {
   let nb = await getBooking(b.id);
   if (nb.agreed_client && nb.agreed_talent && nb.status === 'pending_agreement') {
+    /* هدية الترحيب: لو تعلّم الاتفاق بالهدية تُتخطى خطوة العمولة بالكامل —
+       لا التزام عمولة يُنشأ أصلاً، والاتفاق يفتح على العربون مباشرة. */
+    if (await tryClaimWelcomeGift(nb)) {
+      await db.prepare(`UPDATE bookings SET status='awaiting_deposit', fee_status='gift' WHERE id=?`).run(b.id);
+      await addBookingEvent(b.id, 'welcome_gift', '🎁 هدية الترحيب اتفعّلت على الاتفاق ده: عمولة Deal صفر — السعر المعلن كله للمنفّذ، وخطوة العمولة اتخطّت تلقائياً');
+      await notify(nb.client_id, 'booking', `اتفاق #${b.id}: اتفق الطرفان 🎁 الصفقة دي هدية ترحيب للمنفّذ من Deal — من غير عمولة، وخطوة العربون مفتوحة دلوقتي`, `booking:${b.id}`);
+      await notify(nb.talent_id, 'booking', `اتفاق #${b.id}: اتفق الطرفان 🎁 هديتك اتفعّلت — أول صفقة ليك من غير عمولة Deal والسعر كله ليك؛ في انتظار عربون العميل`, `booking:${b.id}`);
+      nb = await getBooking(b.id);
+      return nb;
+    }
     await db.prepare(`UPDATE bookings SET status='awaiting_fee' WHERE id=?`).run(b.id);
     await ensureCommissionObligation(await getBooking(b.id));
     await notify(nb.client_id, 'booking', `اتفاق #${b.id}: اتفق الطرفان — خطوة العمولة أولاً`, `booking:${b.id}`);
@@ -4209,8 +4286,9 @@ async function acceptTermsAndAgree(b, side, actor = {}) {
 
 async function applyClientPayment(b, kind, ref, payer = null) {
   const payerCols = payer ? { n: String(payer.name || '').slice(0, 120), w: String(payer.wallet || '').slice(0, 60), f: String(payer.fp || '').slice(0, 80) } : { n: '', w: '', f: '' };
-  const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
-  const net = b.price - fee, half = Math.round(net / 2 * 100) / 100;
+  /* مبالغ الأرجل من مصدر الحساب الواحد — اتفاق الهدية: عمولة صفر ونصف كامل. */
+  const fee = bookingLegAmounts(b).fee;
+  const net = b.price - fee, half = bookingLegAmounts(b).rest;
   if (kind === 'fee') {
     if (b.status !== 'awaiting_fee') return { error: 'خطوة العمولة ليست مفتوحة' };
     await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at,payer_name,payer_wallet,payer_device_fp) VALUES (?,?,?,?,?,?,?,?,?)').run(b.id, 'fee', fee, ref, 'confirmed', now(), payerCols.n, payerCols.w, payerCols.f);
@@ -4314,7 +4392,7 @@ app.get('/api/bookings/:id/fee-info', auth, async (req, res) => {
     payer_user_id: req.user.id, payee: 'owner',
   });
   const colFee = await collectorForObligation(ob);
-  res.json({ label: 'Deal — حساب عمولات المنصة', phone: colFee.phone, collector_via: colFee.via, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency, obligation: await payerObligationView(ob, req.user.country) });
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: colFee.phone, collector_via: colFee.via, methods: ['Vodafone Cash', 'InstaPay'], amount: bookingLegAmounts(b).fee, currency: b.currency, obligation: await payerObligationView(ob, req.user.country) });
 });
 
 /* قبول «شروط المعاملات» من طرف عضو (عميل/منفذ) — مسجّل خادمياً بالإصدار والوقت. */
@@ -4752,8 +4830,9 @@ async function guestBookingByToken(token) {
   return await db.prepare('SELECT * FROM bookings WHERE guest_token=?').get(token);
 }
 async function guestBookingView(b) {
-  const fee = Math.round(b.price * COMMISSION_RATE * 100) / 100;
-  const net = b.price - fee, half = Math.round(net / 2 * 100) / 100;
+  /* أرقام الأرجل من مصدر الحساب الواحد — واعٍ بهدية الترحيب (عمولة صفر). */
+  const fee = bookingLegAmounts(b).fee;
+  const net = b.price - fee, half = bookingLegAmounts(b).rest;
   const myReview = await db.prepare('SELECT * FROM reviews WHERE booking_id=? AND reviewer_id IS NULL').get(b.id);
   /* حالة شروط المعاملات لعرض الضيف: مشاهِد صفحة الرمز هو جانب العميل نفسه،
      فيُرفَق علم قبوله هو (mine_accepted = client_accepted) تناظراً مع
@@ -4768,6 +4847,7 @@ async function guestBookingView(b) {
     order_state: orderStateFor(b),
     fee_status: b.fee_status, agreed_client: !!b.agreed_client, agreed_talent: !!b.agreed_talent,
     fee, net, deposit: half, rest: half,
+    gift: !!b.gift, // هدية الترحيب: صفحة الضيف تعرض ملاحظة «عمولة صفر — هدية الترحيب»
     deposit_split: gAm.split, dep1: gAm.dep1, dep2: gAm.dep2,
     initial_proof_url: b.initial_proof_url || '', initial_proof_at: b.initial_proof_at || 0, initial_confirmed_at: b.initial_confirmed_at || 0,
     agreed_revisions: b.agreed_revisions !== undefined ? b.agreed_revisions : null, agreed_delivery_at: b.agreed_delivery_at || 0,
@@ -4811,7 +4891,7 @@ app.get('/api/guest/:token/fee-info', async (req, res) => {
     guest_token: b.guest_token, payee: 'owner',
   });
   const colGFee = await collectorForObligation(ob);
-  res.json({ label: 'Deal — حساب عمولات المنصة', phone: colGFee.phone, collector_via: colGFee.via, methods: ['Vodafone Cash', 'InstaPay'], amount: Math.round(b.price * COMMISSION_RATE * 100) / 100, currency: b.currency, obligation: await payerObligationView(ob, await guestCountryByToken(req.params.token)) });
+  res.json({ label: 'Deal — حساب عمولات المنصة', phone: colGFee.phone, collector_via: colGFee.via, methods: ['Vodafone Cash', 'InstaPay'], amount: bookingLegAmounts(b).fee, currency: b.currency, obligation: await payerObligationView(ob, await guestCountryByToken(req.params.token)) });
 });
 
 /* التزام خطوة دفع الضيف (عربون/أخيرة): يُعرض للدافع الضيف برمز متابعته فقط. */
@@ -5607,7 +5687,7 @@ app.get('/api/star/fuel', auth, async (req, res) => {
   const views = (await db.prepare('SELECT COUNT(*) c FROM profile_views WHERE talent_id=?').get(uid)).c;
   // الأرباح: العربون المؤكد + الباقي المؤكد قبضه (مباشرة بين الطرفين)
   // فقط — ادعاء التحويل وحده (claimed) أو المرفوض/المردود لا يُحتسب قبضاً.
-  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND ((p.kind='deposit' AND p.status='confirmed') OR (p.kind='rest' AND p.status='confirmed'))`).all(uid);
+  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND ((p.kind IN ('deposit','deposit2') AND p.status='confirmed') OR (p.kind='rest' AND p.status='confirmed'))`).all(uid);
   const d = new Date();
   const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   const monthEarnings = earnings.filter((e) => { const ed = new Date(e.created_at); return `${ed.getFullYear()}-${String(ed.getMonth() + 1).padStart(2, '0')}` === monthKey; })
@@ -6789,7 +6869,7 @@ app.get('/api/my/stats', auth, async (req, res) => {
   const myBookings = (await db.prepare('SELECT COUNT(*) c FROM bookings WHERE talent_id=?').get(uid)).c;
   const done = (await db.prepare(`SELECT COUNT(*) c FROM bookings WHERE talent_id=? AND status='completed'`).get(uid)).c;
   // نفس قاعدة وقود النجم: الباقي يُحتسب محتجَزاً/مُفرَجاً فقط، لا بمجرد الادعاء.
-  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND ((p.kind='deposit' AND p.status='confirmed') OR (p.kind='rest' AND p.status='confirmed'))`).all(uid);
+  const earnings = await db.prepare(`SELECT p.kind, p.amount, p.created_at FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE b.talent_id=? AND ((p.kind IN ('deposit','deposit2') AND p.status='confirmed') OR (p.kind='rest' AND p.status='confirmed'))`).all(uid);
   const byMonth = {};
   for (const e of earnings) {
     const d = new Date(e.created_at); const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;

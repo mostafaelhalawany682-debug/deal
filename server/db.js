@@ -1295,6 +1295,17 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
 );
 `;
 
+/* هدية الترحيب «أول صفقة من غير عمولة» (قرار المالك 2026-11-24): bookings.gift
+   علم الاتفاق المستفيد من الهدية (يُعلَّم عند خطوة الاتفاق — مؤقت حتى الاكتمال)،
+   وusers.welcome_gift_used_at ختم الاستهلاك (يُكتب لحظة اكتمال أول اتفاق فقط)،
+   وusers.welcome_gift_booking_id خانة الحجز الذري: الاتفاق الحامل للعلم حالياً
+   (أو المستهلِك بعد الاكتمال) — تمنع تعليم اتفاقين في وقت واحد. */
+const GIFT_MIGRATIONS_SQL = `
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS gift INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_gift_used_at BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_gift_booking_id INTEGER DEFAULT 0;
+`;
+
 let readyPromise = null;
 /* تهيئة المخطط (بند ٧ بصيغته المصحّحة — ملحق «تصحيح بند ٧» في
    TESTING-AUDIT.md): الإنتاج يعمل خلف Supavisor بوضع Transaction Pooling
@@ -1335,6 +1346,7 @@ async function initOnce() {
   await pool.query(ENGINES_MIGRATIONS_SQL);
   await pool.query(FINAL_MIGRATIONS_SQL);
   await pool.query(PASSKEY_MIGRATIONS_SQL);
+  await pool.query(GIFT_MIGRATIONS_SQL);
   // تطبيع contact للصفوف القائمة (idempotent): أي صف بصيغة غير مطبّعة يُحدَّث،
   // وعند أي تعارض تفرّد يُترك الصف كما هو دون تعطيل الإقلاع (إنتاج حالي: مستخدم واحد).
   try {

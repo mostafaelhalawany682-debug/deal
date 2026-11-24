@@ -3351,13 +3351,14 @@ async function toggleMemberPreview(){
   renderAuth(); refresh();
   toast(t('fv_preview_on'));
 }
-async function exitMemberPreview(){
+function exitMemberPreview(){
   if(!FV_PREVIEW) return;
   FV_PREVIEW=false;
-  try{ const m=await api('/api/me'); ME={user:m.user}; }catch(e){}
+  if(ME&&ME.user){ ME.user.is_platform_founder=true; ME.user.is_founder_member=true; }
   document.body.classList.remove('fv-preview');
   const bar=$('#fvPreviewBar'); if(bar) bar.classList.add('hide');
   renderAuth(); refresh();
+  try{ api('/api/me').then(function(m){ if(m&&m.user){ ME={user:m.user}; renderAuth(); refresh(); } }).catch(function(){}); }catch(e){}
 }
 const FV_TX_FNS=['quickBook','openGuest','openCampaign','applyCamp','bookGuestReq','xOrderPackage','goStarSubscribe','doSubscribeStar','xSubmitQuote','xAcceptQuote','xCreateContract','xStopContract','xWaitAct','xSetFlash','xDelFlash','xSetVac','xDelVac','xSavePackage','xClearPackages','xAddVideo','xDelVideo','xLesson','xFinishTrack','vReq','vCheck','savePrefs','saveFinIdentity','saveAvailability','friendAct','sendMsg','doCampaign','doRequest','deleteAccount','xGuestAcceptQuote'];
 if(typeof document!=='undefined'&&document.addEventListener) document.addEventListener('click',function(ev){

@@ -596,6 +596,32 @@ async function requireVerifiedEmail(req, res) {
   res.status(403).json({ error: 'أكّد إيميلك الأول عشان تقدر تقبل اتفاقات أو تقدّم عروض سعر — حسابك شغال وبتتصفح عادي، والتأكيد من إعدادات حسابك بكود ٦ أرقام', code: 'EMAIL_NOT_VERIFIED', email_verified: false });
   return false;
 }
+/* ============ التسجيل الإجباري المتسلسل (قرار المالك: «مايعرفش يتخطى
+   مرحلة غير لما يخلصها» + «على الكل») ============
+   اكتمال الملف حالة مشتقة من بيانات حقيقية (لا علم مخزّن): مدينة + مجال/
+   خدمة + سعر معلن + نموذج شغل واحد على الأقل لصانع/مقدم. حساب ناقص يعمل
+   ويتصفح ويظهر ملفه في الدليل — والبوابة على المعاملات وحدها: لا يُتفق
+   معه ولا يقدّم عروضاً ولا يحوّل طلبات ضيوف حتى يكمّل. */
+const SAMPLES_REQUIRED_ERROR = 'لازم تضيف نموذج شغل واحد على الأقل في ملفك عشان تقدر تستقبل اتفاقات وتقدّم عروض';
+const PROFILE_INCOMPLETE_ERROR = 'ملفك ناقص — كمّل البيانات المطلوبة الأول';
+async function samplesCountOf(userId) {
+  return (await db.prepare('SELECT COUNT(*) c FROM portfolio_items WHERE user_id=?').get(userId)).c;
+}
+async function requireSamples(req, res) {
+  if ((await samplesCountOf(req.user.id)) > 0) return true;
+  res.status(403).json({ error: SAMPLES_REQUIRED_ERROR, code: 'SAMPLES_REQUIRED', samples_required: true });
+  return false;
+}
+async function profileMissingItems(u) {
+  if (!u || !['creator', 'provider'].includes(u.role) || u.is_platform_founder) return [];
+  const missing = [];
+  if (!String(u.city || '').trim()) missing.push('city');
+  if (u.role === 'creator' && !String(u.niche || '').trim()) missing.push('niche');
+  if (u.role === 'provider' && (!u.provider_category || (u.provider_category === 'other' && !String(u.provider_custom || '').trim()))) missing.push('niche');
+  if (!(Number(u.price) > 0)) missing.push('price');
+  if ((await samplesCountOf(u.id)) === 0) missing.push('samples');
+  return missing;
+}
 const OBLIGATION_KIND_FOR_LEG = { fee: 'booking_commission', deposit: 'booking_deposit', deposit2: 'booking_deposit', rest: 'booking_final' };
 /* ربط دفعة مسجلة في آلة الاتفاق بالتزامها: ادعاء الدافع بمرجعه (claimed) — لا
    تأكيد؛ التأكيد يأتي من مطابقة إيصال أو قرار مالك/مستلم أو اكتمال الاتفاق. */
@@ -1496,6 +1522,23 @@ app.post('/api/auth/register', async (req, res) => {
     if (![...SERVICE_KEYS, 'other'].includes(provider_category)) return res.status(400).json({ error: 'اختر خدمتك من القائمة' });
     if (provider_category === 'other' && !String(provider_custom || '').trim()) return res.status(400).json({ error: 'اكتب خدمتك كما تريد أن تظهر في ملفك' });
   }
+  /* نماذج الشغل داخل طلب التسجيل نفسه (التسجيل الإجباري المتسلسل): معالج
+     التسجيل يرسلها مع النموذج في مرحلته الأخيرة — تُتحقق بنفس محلّل
+     التضمين الرسمي وتُحفظ مع إنشاء الحساب ذرّياً. إرسال قائمة نماذج كلها
+     غير صالحة لحساب صانع/مقدم = محاولة إكمال ناقصة تُرفض 422
+     PROFILE_INCOMPLETE. غياب الحقل أصلاً يبقي سلوك الإنشاء القائم،
+     والاكتمال يُفرض عندها ببوابات المعاملات وحارس تعديل الملف. */
+  let regSamples = [];
+  if (Array.isArray((req.body || {}).samples)) {
+    const seenEmbed = new Set();
+    for (const s of req.body.samples) {
+      const p = parseVideoEmbed(s);
+      if (p && !seenEmbed.has(p.embed_url)) { seenEmbed.add(p.embed_url); regSamples.push({ url: String(s).trim(), parsed: p }); }
+      if (regSamples.length >= SHORTS_MAX) break;
+    }
+    if (['creator', 'provider'].includes(role) && req.body.samples.length && !regSamples.length)
+      return res.status(422).json({ error: PROFILE_INCOMPLETE_ERROR, code: 'PROFILE_INCOMPLETE', missing: ['samples'] });
+  }
   /* حظر الشخص (جولة الردع): هاتف/إيميل/بصمة جهاز في قائمة الحظر الدائمة =
      لا حساب جديد أبداً — الفحص قبل فحص التكرار حتى لا يُرشَد المحظور للدخول. */
   if (await personBlockHit({ contact, phone, req })) return res.status(403).json({ error: PERSON_BANNED_ERROR, person_banned: true });
@@ -1532,6 +1575,12 @@ app.post('/api/auth/register', async (req, res) => {
     if (rank >= 1 && rank <= 50) {
       await db.prepare('UPDATE users SET founder_seat=? WHERE id=? AND founder_seat IS NULL').run(rank, newId);
     }
+  }
+  /* نماذج مرحلة التسجيل الأخيرة تُحفظ مع الحساب الجديد فوراً (نفس صفوف
+     portfolio_items التي يقرأها الملف والدليل وبوابات المعاملات). */
+  for (const s of regSamples) {
+    await db.prepare('INSERT INTO portfolio_items (user_id,platform,video_id,embed_url,source_url,title,created_at) VALUES (?,?,?,?,?,?,?)')
+      .run(info.lastInsertRowid, s.parsed.platform, s.parsed.video_id, s.parsed.embed_url, s.url, '', now());
   }
   const user = await getUser(info.lastInsertRowid);
   /* تحقق الإيميل (٨-أ): يُولَّد كود ويُرسل بأفضل جهد عند التسجيل — التسجيل
@@ -2071,6 +2120,11 @@ app.get('/api/me', auth, async (req, res) => {
   user.needs_password = !req.user.password_hash;
   user.recovery_email = req.user.recovery_email || '';
   user.email_verified = !!req.user.email_verified;
+  /* اكتمال الملف لصاحب الحساب (التسجيل الإجباري المتسلسل): قائمة النواقص
+     الحقيقية — تقود تنبيه اللوحة الدائم وبوابات الواجهة. المؤسس والمحل
+     والبراند خارج حساب الاكتمال (قائمة فارغة = مكتمل). */
+  user.profile_missing = await profileMissingItems(req.user);
+  user.profile_complete = user.profile_missing.length === 0;
   user.verify_email = (req.user.recovery_email || (req.user.contact && req.user.contact.includes('@') ? req.user.contact : '')) || '';
   user.fin_identity = req.user.fin_declared_at ? { declared: true, declared_at: req.user.fin_declared_at, version: req.user.fin_declared_version || '', wallet_masked: maskTail(req.user.fin_wallet_number), has_legal_name: !!req.user.legal_name } : { declared: false };
   res.json({ user, verify_status: req.user.verify_status, verify_code: req.user.verify_code });
@@ -2081,6 +2135,17 @@ const AVATAR_MAX_BYTES = 200 * 1024;
 const COVER_MAX_BYTES = 400 * 1024; // الغلاف أعرض من الصورة الرمزية: حدّ أكبر بنفس خط المعالجة
 app.patch('/api/me/profile', auth, async (req, res) => {
   const b = req.body || {};
+  /* حارس الاكتمال (التسجيل الإجباري المتسلسل): تعديل يُفرغ حقلاً جوهرياً
+     لصانع/مقدم (مدينة، مجال الصانع، أو سعر معلن يصير صفراً) يُرفض 422
+     PROFILE_INCOMPLETE بقائمة النواقص — فلا يتحول ملف مكتمل إلى ناقص
+     من بوابة التعديل، ولا تُستخدم البوابة للالتفاف على مراحل التسجيل. */
+  if (['creator', 'provider'].includes(req.user.role) && !req.user.is_platform_founder) {
+    const wouldMiss = [];
+    if (b.city !== undefined && !String(b.city).trim()) wouldMiss.push('city');
+    if (req.user.role === 'creator' && b.niche !== undefined && !String(b.niche).trim()) wouldMiss.push('niche');
+    if (b.price !== undefined && !(Number(b.price) > 0)) wouldMiss.push('price');
+    if (wouldMiss.length) return res.status(422).json({ error: PROFILE_INCOMPLETE_ERROR, code: 'PROFILE_INCOMPLETE', missing: wouldMiss });
+  }
   // قائمة بيضاء صارمة: حقول الملف فقط. أي حقل امتياز (is_platform_founder،
   // verified، pioneer، frozen...) يُتجاهل تماماً فلا طريق لتفعيل شكل المؤسس.
   const sets = [], args = [];
@@ -4183,6 +4248,10 @@ app.post('/api/bookings', auth, async (req, res) => {
   if (talent.penalty_level === 'suspended' || talent.frozen) return res.status(403).json({ error: 'هذا الحساب معلّق حالياً ولا يستقبل اتفاقات' });
   if (onVacation(talent)) return res.status(400).json({ error: 'المنفذ في إجازة حالياً ولا يستقبل اتفاقات جديدة حتى عودته' });
   if (req.user.frozen) return res.status(403).json({ error: 'حسابك مجمّد حالياً (مستحقات متأخرة أو عقوبة) — سدّد مستحقاتك الموثّقة أولاً فيُفكّ التجميد آلياً' });
+  /* بوابة نماذج الشغل على المنفذ (التسجيل الإجباري المتسلسل — «على الكل»):
+     منفذ بلا أي نموذج شغل صالح لا يُتفق معه — ملفه يبقى ظاهراً في الدليل،
+     والمعاملة وحدها هي الممنوعة حتى يضيف نموذجاً واحداً على الأقل. */
+  if ((await samplesCountOf(talent.id)) === 0) return res.status(403).json({ error: 'المنفذ ده لسه ما ضافش نماذج شغله — ما يقدرش يستقبل اتفاقات لحد ما يضيف نموذج شغل واحد على الأقل', code: 'SAMPLES_REQUIRED', samples_required: true });
   // اختيار باقة عند الطلب يملأ سعر الاتفاق منها (خادمياً — لا من العميل).
   let pkgTier = null;
   let p;
@@ -4782,6 +4851,7 @@ app.post('/api/guest-requests/:id/book', auth, async (req, res) => {
   if (!['creator', 'provider'].includes(req.user.role)) return res.status(400).json({ error: 'تحويل الطلبات للصناع ومقدمي الخدمة فقط' });
   if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط ولا يقبل اتفاقات أو تواصلاً' });
   if (req.user.penalty_level === 'suspended' || req.user.frozen) return res.status(403).json({ error: 'حسابك معلّق حالياً ولا يستقبل اتفاقات' });
+  if (!(await requireSamples(req, res))) return;
   if (onVacation(req.user)) return res.status(400).json({ error: 'أنت في وضع إجازة — أوقف الإجازة أولاً لتحويل طلبات' });
   const { price, deadline_days = 7, package_tier = null } = req.body || {};
   const agrGB = agreementFromBody(req.body || {}); if (agrGB.error) return res.status(400).json({ error: agrGB.error });
@@ -7020,6 +7090,7 @@ app.post('/api/requests/:id/quotes', auth, async (req, res) => {
   if (!['creator', 'provider'].includes(req.user.role)) return res.status(400).json({ error: 'تقديم العروض للصناع ومقدمي الخدمة فقط' });
   if (req.user.is_platform_founder) return res.status(400).json({ error: 'حساب المؤسس — عرض فقط' });
   if (req.user.frozen || req.user.penalty_level === 'suspended') return res.status(403).json({ error: 'حسابك معلّق حالياً' });
+  if (!(await requireSamples(req, res))) return;
   if (onVacation(req.user)) return res.status(400).json({ error: 'أنت في وضع إجازة — أوقف الإجازة أولاً لتقديم عروض' });
   const rq = await db.prepare('SELECT * FROM shop_requests WHERE id=?').get(+req.params.id);
   if (!rq || rq.status !== 'open' || rq.managed) return res.status(404).json({ error: 'طلب غير متاح للعروض' });
@@ -7062,6 +7133,9 @@ async function acceptQuote(rq, quoteId, agr = { revisions: null, deliveryAt: 0 }
   if (!q || q.status !== 'pending') return { error: 'عرض غير متاح' };
   const talent = await getUser(q.talent_id);
   if (!talent || talent.banned) return { error: 'الصانع غير متاح' };
+  /* بوابة نماذج الشغل: قبول عرض يفتح اتفاقاً للمنفذ — منفذ بلا أي نموذج
+     شغل لا يُتفق معه ولو كان عرضه قُدّم قبل حذف نماذجه. */
+  if ((await samplesCountOf(talent.id)) === 0) return { error: SAMPLES_REQUIRED_ERROR, status: 403, code: 'SAMPLES_REQUIRED' };
   const clientU = (!rq.is_guest && rq.shop_user_id) ? await getUser(rq.shop_user_id) : null;
   if (clientU && clientU.is_platform_founder) return { error: FOUNDER_NO_CLIENT_ERROR };
   /* حظر عضو↔عضو (الجولة الأخيرة — بند ٩): قبول عرض يفتح اتفاقاً = بدء تعامل
@@ -7103,7 +7177,7 @@ app.post('/api/my/requests/:id/quotes/:qid/accept', auth, async (req, res) => {
   if (!rq || rq.status !== 'open' || !(await requestOwnerCheck(rq, req.user))) return res.status(404).json({ error: 'غير موجود' });
   const agrQ = agreementFromBody(req.body || {}); if (agrQ.error) return res.status(400).json({ error: agrQ.error });
   const out = await acceptQuote(rq, +req.params.qid, agrQ, req.user.id);
-  if (out.error) return res.status(out.status || 400).json({ error: out.error, ...(out.fin_identity_required ? { fin_identity_required: true } : {}) });
+  if (out.error) return res.status(out.status || 400).json({ error: out.error, ...(out.fin_identity_required ? { fin_identity_required: true } : {}), ...(out.code ? { code: out.code } : {}) });
   res.json({ ok: true, booking_id: out.bookingId });
 });
 app.get('/api/guest/:token/quotes', async (req, res) => {
@@ -7116,7 +7190,7 @@ app.post('/api/guest/:token/quotes/:qid/accept', async (req, res) => {
   if (!rq || rq.status !== 'open') return res.status(404).json({ error: 'رابط متابعة غير صحيح' });
   const agrQ2 = agreementFromBody(req.body || {}); if (agrQ2.error) return res.status(400).json({ error: agrQ2.error });
   const out = await acceptQuote(rq, +req.params.qid, agrQ2);
-  if (out.error) return res.status(out.status || 400).json({ error: out.error, ...(out.fin_identity_required ? { fin_identity_required: true } : {}) });
+  if (out.error) return res.status(out.status || 400).json({ error: out.error, ...(out.fin_identity_required ? { fin_identity_required: true } : {}), ...(out.code ? { code: out.code } : {}) });
   res.json({ ok: true, booking_id: out.bookingId });
 });
 

@@ -811,7 +811,7 @@ CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_one_open ON reports(reporter_id, target_type, target_id) WHERE status='open';
 `;
 
-/* ترحيلات جولة «ضمان الاستبدال الصارم + الردع بحكم القانون» (قرار المستخدم
+/* ترحيلات جولة «قاعدة الاستبدال الموثّق الصارمة + الردع بحكم القانون» (قرار المستخدم
    المعتمَد 2026-11-23 — TESTING-DETERRENCE-APPLY.md):
    - نوع التزام جديد breach_penalty (غرامة إخلال لصالح Deal): توسيع قيد CHECK
      على kind في القواعد القائمة (الجدول الجديد يُنشأ بالقيد الموسّع أصلاً).

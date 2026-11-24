@@ -369,7 +369,7 @@ const DEEMED_AFTER_MS = 24 * 3600 * 1000;      // سكوت العميل بعد �
 const FINAL_DEEMED_AFTER_MS = 3 * 3600 * 1000; // سكوت العميل بعد تسليم النسخة النهائية = اكتمال مُعتبَر — يبقى ٣ ساعات (قرار المستخدم: التمييز موثّق — المعاينة ٢٤ والدفع ٣ وما بعد النهائي ٣)
 const RELEASE_ALERT_MS = 15 * 60 * 1000;       // تنبيه المالك العاجل: مبلغ جاهز للإفراج ينتظر أكثر من ١٥ دقيقة (قاعدة Deal)
 const FRAUD_SUSPEND_AT = 3;                    // ٣ مطالبات دفع كاذبة مثبتة = الحد الثالث في سلّم الردع (حظر نهائي للشخص — توحيد 2026-11-23)
-const TX_TERMS_VERSION = 'deal-tx-terms-v8';   // إصدار «شروط المعاملات» الحالي (v8: ترحيل المصطلحات بقرار المستخدم 2026-11-24 — اعتماد «اتفاق» مصطلحاً وحيداً في كل النصوص لأن Deal لا تحتجز مالاً؛ v7: إلغاء ادعاء الحماية المالية نهائياً بقرار المستخدم الصريح 2026-11-24 — Deal لا تحتجز مالاً وحمايتها إجرائية فقط: تنظيم وتوثيق وتحكيم — مع إعادة تسمية آلية الاستبدال إلى «قاعدة الاستبدال الموثّق»؛ v6: مهلة تأكيد المعاينة ٢٤ ساعة بدل ٣ بقرار المستخدم 2026-11-23 مع بقاء مهلات الدفع ٣ ساعات وسكوت ما بعد النهائي ٣ ساعات؛ v5: تعميم بند «الردع والقانون» بثلاث طبقات لكل الدول) — إصدار جديد يطلب قبولاً جديداً للاتفاقات الجديدة فقط، والمفتوحة تكمل على إصدارها
+const TX_TERMS_VERSION = 'deal-tx-terms-v9';   // إصدار «شروط المعاملات» الحالي (v9: بند توضيحي لنوع التنفيذ التلقائي حسب قسم الخدمة بقرار المستخدم 2026-11-24 — النوع يظهر للطرفين قبل القبول ويغيّره المنفّذ فقط قبل اكتمال قبول الشروط؛ v8: ترحيل المصطلحات بقرار المستخدم 2026-11-24 — اعتماد «اتفاق» مصطلحاً وحيداً في كل النصوص لأن Deal لا تحتجز مالاً؛ v7: إلغاء ادعاء الحماية المالية نهائياً بقرار المستخدم الصريح 2026-11-24 — Deal لا تحتجز مالاً وحمايتها إجرائية فقط: تنظيم وتوثيق وتحكيم — مع إعادة تسمية آلية الاستبدال إلى «قاعدة الاستبدال الموثّق»؛ v6: مهلة تأكيد المعاينة ٢٤ ساعة بدل ٣ بقرار المستخدم 2026-11-23 مع بقاء مهلات الدفع ٣ ساعات وسكوت ما بعد النهائي ٣ ساعات؛ v5: تعميم بند «الردع والقانون» بثلاث طبقات لكل الدول) — إصدار جديد يطلب قبولاً جديداً للاتفاقات الجديدة فقط، والمفتوحة تكمل على إصدارها
 const RECEIPT_MAX_BYTES = 2 * 1024 * 1024;     // أقصى حجم لصورة الإيصال
 const RECEIPT_MAX_ATTEMPTS = 5;                // بعدها يُقفل الرفع على الالتزام
 const RECEIPT_DATE_WINDOW_MS = 48 * 3600 * 1000; // حداثة تاريخ الإيصال المطلوبة
@@ -2851,6 +2851,38 @@ const TAXONOMY = {
 const SERVICE_KEYS = TAXONOMY.services.map((s) => s.key);
 app.get('/api/taxonomy', (req, res) => res.json(TAXONOMY));
 
+/* ---------------- نوع التنفيذ التلقائي حسب قسم الخدمة (قرار المستخدم 2026-11-24) ----------------
+   كل اتفاق يُختم عند إنشائه بنوع تنفيذ مشتق من قسم خدمة المنفّذ:
+   • 'preview' (بمعاينة): الخدمة تُسلَّم ملفاً/عملاً يُعايَن قبل النسخة النهائية —
+     خطوة الإثبات فيها «معاينة» مختومة، والنهائي لا يتحرك إلا بعد تأكيد الاستلام.
+   • 'direct' (تنفيذ مباشر): خدمة مستمرة/حسابية لا نسخة نهائية لها تُحتجَز —
+     خطوة الإثبات فيها «إثبات تنفيذ الخدمة» (تقارير/لقطات/تأكيد العميل نفسه).
+   الميكانيكا واحدة تماماً في النوعين (نفس المال والمهلات والهدية) — يختلف
+   الاسم والختم فقط. أي قسم غير مُدرج هنا (منها 'other' الحر) = 'direct'
+   افتراضياً حتى لا تُفرَض معاينة على خدمة بلا ملف. صانع المحتوى (بلا
+   provider_category) خدمته فيديو بملف دائماً = 'preview'. */
+const EXEC_PREVIEW_CATEGORIES = new Set([
+  'videoproduction', // إنتاج ومونتاج الفيديو — ملف فيديو يُعايَن
+  'design',          // تصميم وموشن جرافيك — تصميم يُعايَن قبل الأصل
+  'filming',         // تصوير احترافي (يشمل تصوير المنتجات) — صور/لقطات تُعايَن
+  'voiceover',       // تعليق صوتي — مقطع يُعايَن قبل الملف الكامل
+  'script',          // كتابة محتوى وإعلانات — مسودة تُعايَن قبل النص الكامل
+]);
+function execTypeForCategory(key) {
+  return EXEC_PREVIEW_CATEGORIES.has(key) ? 'preview' : 'direct';
+}
+/* الاشتقاق من المنفّذ نفسه: قسمه إن وُجد، وإلا فصانع المحتوى (creator بلا قسم)
+   خدمته فيديو بملف = 'preview'، ومقدّم خدمة بلا قسم = 'direct' احترازياً. */
+function execTypeForTalent(t) {
+  if (!t) return 'preview';
+  if (t.provider_category) return execTypeForCategory(t.provider_category);
+  return t.role === 'provider' ? 'direct' : 'preview';
+}
+/* تطبيع قيمة مخزّنة: أي قيمة غير 'direct' (بما فيها NULL لاتفاقات سابقة) = 'preview' */
+function execTypeOf(b) { return b && b.exec_type === 'direct' ? 'direct' : 'preview'; }
+const EXEC_TYPE_AR = { preview: 'بمعاينة', direct: 'تنفيذ مباشر' };
+const EXEC_TYPE_EN = { preview: 'By preview', direct: 'Direct execution' };
+
 /* ---------------- الدول العربية: هواتف وعملات ودفع محلي ----------------
    مصدر الحقيقة الوحيد هو TAXONOMY.countries أعلاه (تُبث عبر /api/taxonomy
    وتطابقها نسخة الواجهة الاحتياطية حرفياً بالفحص البنيوي). كل دولة: مفتاح
@@ -3131,6 +3163,7 @@ async function bookingView(b, viewer) {
   /* تصحيحات المراجعة: تقسيم العربون + سجل علني + سفير المدينة + الاتفاق المهيكل */
   { const am = bookingLegAmounts(b); view.deposit_split = am.split; view.dep1 = am.dep1; view.dep2 = am.dep2; }
   view.gift = !!b.gift; // هدية الترحيب: عمولة صفر — الواجهة تعرض ملاحظة الهدية للطرفين
+  view.exec_type = execTypeOf(b); // نوع التنفيذ التلقائي حسب قسم خدمة المنفّذ (بمعاينة/تنفيذ مباشر) — ظاهر للطرفين في صندوق الشروط
   view.initial_proof_url = b.initial_proof_url || ''; view.initial_proof_at = b.initial_proof_at || 0; view.initial_confirmed_at = b.initial_confirmed_at || 0;
   view.talent_record = await talentRecordFor(b.talent_id);
   view.city_ambassador = await bookingCityAmbassador(b);
@@ -3202,7 +3235,7 @@ async function bookingEvents(bookingId, limit = 100) {
   return rows.map((e) => ({ id: e.id, sender: 'system', kind: e.kind, body: e.body, created_at: e.created_at }));
 }
 
-/* ---- «شروط المعاملات» (deal-tx-terms-v8): الوثيقة التي يقبلها الطرفان قبل
+/* ---- «شروط المعاملات» (deal-tx-terms-v9): الوثيقة التي يقبلها الطرفان قبل
    أول خطوة دفع في أي اتفاق — قبول مسجّل خادمياً (من + متى + إصدار) ويدخل
    حزمة الأدلة. إصدار جديد يطلب قبولاً جديداً للاتفاقات الجديدة فقط. */
 const TX_TERMS = {
@@ -3221,6 +3254,7 @@ const TX_TERMS = {
     'قاعدة الاستبدال الموثّق الصارمة: تتفعّل فقط لو أعلن المنفذ عدم قدرته، أو سكت في محادثة الاتفاق ٢٤ ساعة بعد قبض العربون رغم تنبيهين آليين. Deal لا تفرض موعد تسليم ولا تدير عدّاد تسليم: توقيت التنفيذ اتفاق بين الطرفين داخل محادثة الاتفاق، وعلامة «مستعجل» اتفاقية بلا أي التزام زمني مفروض من المنصة، وأي خلاف على تأخير التسليم يُحسم تحكيماً بأدلة المحادثة. ترشّح Deal بديلاً واحداً موثّقاً من نفس المدينة والمجال بنفس السعر والشروط حرفياً خلال ٢٤ ساعة، ويقرر العميل القبول أو الرفض خلال ٣ ساعات؛ وإن لم يوجد بديل مناسب يُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. ردّ العربون إجباري على المنفذ المتخلّف خلال ٣ ساعات من قرار الاستبدال أو التحكيم، ولا استبدال أبداً بعد اعتماد المعاينة.',
     'الردع والقانون — للطرفين في كل الدول: (١) قبولك هذه الشروط قبول مسجّل بهويتك ووقته، وهو عقد إلكتروني ملزم يخضع لقانون الشروط الحاكم المنصوص عليه في شروط استخدام Deal، وسجلات Deal ومحادثات الاتفاق وإيصالاتها أدلّة موثّقة تُسلَّم للطرف المتضرر في حزمة أدلة رسمية عند ثبوت احتيال. (٢) عقوبات المنصة الداخلية تسرى على كل المستخدمين بالتساوي في أي دولة: أي التزام مالي يتجاوز مهلته يجمّد الحساب فوراً مع علامة «مستحقات متأخرة» في ملفه، وفكّ التجميد بسداد الالتزام وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف في الإخلال الثاني)، والاحتيال المثبت = حظر نهائي للشخص نفسه (هاتف + إيميل + بصمة جهاز). (٣) الاحتيال جريمة في قوانين كل دولة تعمل فيها المنصة، ومسؤولية المحتال كاملة بلا أي سقف. مثال موثّق من مصر — القانون الحاكم للمنصة: قبول الشروط عقد ملزم (المادة ١٤٧ من القانون المدني: العقد شريعة المتعاقدين)، وقبض العربون والاستيلاء عليه أو رفض ردّه عند الإخلال يدخل في نطاق خيانة الأمانة (المادة ٣٤١ عقوبات) والنصب (المادة ٣٣٦ عقوبات)، والاحتيال عبر الشبكات يغلّظه قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨، وللمتضرر المطالبة بتعويض كامل (المادة ١٦٣ مدني).',
     'أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا حماية ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كاتفاق داخل Deal. أي ترتيب جانبي (مكالمة أو محادثة خارجية أو اتفاق شفهي) لا يُستند إليه في أي تحكيم ولا يُلزم المنصة بشيء، ومحاولة نقل التعامل لخارج المنصة تُرصد في محادثة الاتفاق وتدخل سلّم العقوبات. خدمات Deal — الحماية الإجرائية والتحكيم وحزمة الأدلة والتقييمات ودعم النزاعات — متاحة فقط للصفقات المفتوحة والموثّقة داخل المنصة من أول خطوة؛ أي اتفاق خارجي لا يمنح أي حق في أي خدمة من خدمات المنصة، ومحاولة استخدام أي خدمة لتغطية اتفاق خارجي مخالفة تستوجب علامة سلوك وتصعيد العقوبة عند التكرار.',
+    'نوع التنفيذ يتحدد تلقائياً حسب قسم خدمة المنفّذ — «بمعاينة» للخدمات ذات الملف القابل للمعاينة، و«تنفيذ مباشر» للخدمات المستمرة — ويظهر للطرفين في صندوق شروط الاتفاق قبل القبول، ولا يغيّره إلا المنفّذ وحده وقبل اكتمال قبول الطرفين لهذه الشروط فقط؛ بعد القبول يثبت النوع ولا يتغيّر. خطوة إثبات التنفيذ واحدة في الحالتين وبنفس المهلات والحماية: في «بمعاينة» يقدّم المنفّذ معاينة مختومة والنسخة النهائية لا تُسلَّم إلا بعد تأكيد الاستلام ودفع الباقي، وفي «تنفيذ مباشر» يقدّم المنفّذ إثبات تنفيذ الخدمة (تقارير أو لقطات أو تأكيد داخل المحادثة) ويؤكّد العميل تنفيذ الخدمة.',
   ],
   en: [
     'Every payment step has a 3-hour deadline with a live countdown — expiry with no payment declared cancels the order automatically, with no money moving at all.',
@@ -3236,6 +3270,7 @@ const TX_TERMS = {
     'The strict documented replacement rule: it activates only if the provider declares inability, or the provider stays silent in the agreement chat for a full 24 hours after receiving the deposit despite two automatic warnings. Deal imposes no delivery deadline and runs no delivery countdown: execution timing is agreed between the parties inside the agreement chat, the \u201curgent\u201d marker is a mutual agreement with no platform-imposed time commitment, and any dispute over delivery delay is decided by arbitration on the chat evidence. Deal nominates exactly one verified alternative from the same city and niche at exactly the same price and terms within 24 hours, and the client decides to accept or refuse within 3 hours; if no suitable alternative exists, the deposit is refunded in full by an arbitration decision within 72 hours. Refunding the deposit is mandatory for the defaulting provider within 3 hours of the replacement or arbitration decision, and there is never a replacement after the preview has been confirmed.',
     'Deterrence and the law — for both parties, in every country: (1) Your acceptance of these terms is recorded with your identity and its time and is a binding electronic contract governed by the governing law stated in Deal\u2019s Terms of Use; Deal\u2019s records, agreement chats and receipts are documented evidence handed to the harmed party in an official evidence bundle when fraud is proven. (2) The platform\u2019s internal penalties apply equally to every user in every country: any money obligation that passes its deadline freezes the account immediately with a \u201clate dues\u201d mark on the profile, unfreezing requires settling the obligation plus a breach penalty of 10% of the deal value (doubled on the second breach), and proven fraud means a permanent ban of the person (phone + email + device fingerprint). (3) Fraud is a crime under the laws of every country the platform operates in, and a fraudster\u2019s liability is full, with no cap. One documented example — Egypt, the platform\u2019s governing law: acceptance of the terms is a binding contract (Article 147 of the Civil Code: the contract is the law of the parties); taking a deposit and keeping it, or refusing to refund it on default, falls within breach of trust (Article 341 of the Penal Code) and fraud (Article 336 of the Penal Code); online fraud is aggravated by the Anti-IT-Crimes Law 175 of 2018; and the harmed party may claim full compensation (Article 163 of the Civil Code).',
     'Any agreement outside the platform does not happen, and the platform is not bound by it — no protection, no arbitration, no rating and no evidence bundle for any agreement that was not opened and documented as an agreement inside Deal. Any side arrangement (a call, an external chat or a verbal deal) cannot be relied on in any arbitration and binds the platform to nothing, and attempting to move the dealing outside the platform is detected in the agreement chat and enters the penalty ladder. Deal\u2019s services — procedural protection, arbitration, the evidence bundle, ratings and dispute support — are available only for deals opened and documented inside the platform from the very first step; an external agreement grants no right to any platform service, and attempting to use any service to cover an external agreement is a violation that earns a behavior flag and escalating penalties on repetition.',
+    'The execution type is set automatically by the provider\u2019s service category — "by preview" for services with a previewable deliverable, and "direct execution" for ongoing services — and is shown to both parties in the agreement terms box before acceptance; only the provider may change it, and only before both parties have completed accepting these terms; after acceptance the type is fixed. The execution-proof step is the same in both cases, with the same deadlines and protection: under "by preview" the provider submits a stamped preview and the final copy is delivered only after receipt is confirmed and the rest is paid, and under "direct execution" the provider submits proof of service execution (reports, screenshots, or an in-chat confirmation) and the client confirms the service execution.',
   ],
 };
 /* إصدار شروط الاتفاق الفعّال: إصدار أول قبول مسجّل لهذا الاتفاق — فالاتفاقات
@@ -3301,9 +3336,13 @@ async function sweepDeemedReceipt() {
     const ob = await finalObligation(b.id);
     await db.prepare(`UPDATE bookings SET receipt_confirmed_at=?, receipt_auto=1, deemed_at=?, status='awaiting_rest' WHERE id=?`).run(now(), now(), b.id);
     if (ob) await moneyLedger(ob.id, ob.status, ob.status, 'system', 'اعتماد استلام مُعتبَر بقاعدة Deal: سكوت العميل ٢٤ ساعة بعد إثبات سليم — اتفتحت خطوة دفع الباقي للمنفذ مباشرة (للمالك حق العكس عند ثبوت احتيال/خطأ)');
-    await addBookingEvent(b.id, 'deemed_confirmed', 'يُعتبَر استلام المعاينة مؤكداً بقاعدة سكوت ٢٤ ساعة (نظام Deal) — اتفتحت خطوة دفع الباقي للمنفذ');
+    await addBookingEvent(b.id, 'deemed_confirmed', execTypeOf(b) === 'direct'
+      ? 'يُعتبَر تنفيذ الخدمة مؤكداً بقاعدة سكوت ٢٤ ساعة (نظام Deal) — اتفتحت خطوة دفع الباقي للمنفذ'
+      : 'يُعتبَر استلام المعاينة مؤكداً بقاعدة سكوت ٢٤ ساعة (نظام Deal) — اتفتحت خطوة دفع الباقي للمنفذ');
     await notify(b.talent_id, 'deemed', `اتفاق #${b.id}: ⏱️ سكت العميل ٢٤ ساعة بعد إثباتك — يُعتبَر الاستلام مؤكداً بقاعدة Deal، واتفتحت خطوة دفع الباقي لك مباشرة`, `booking:${b.id}`);
-    if (b.client_id) await notify(b.client_id, 'deemed', `اتفاق #${b.id}: ⏱️ لم تؤكد الاستلام خلال ٢٤ ساعة من وصول الشغل — اعتُبر الاستلام مؤكداً بقاعدة Deal واتفتحت خطوة دفع الباقي للمنفذ (مهلتها ٣ ساعات)`, `booking:${b.id}`);
+    if (b.client_id) await notify(b.client_id, 'deemed', execTypeOf(b) === 'direct'
+      ? `اتفاق #${b.id}: ⏱️ لم تؤكد تنفيذ الخدمة خلال ٢٤ ساعة من وصول الإثبات — اعتُبر التنفيذ مؤكداً بقاعدة Deal واتفتحت خطوة دفع الباقي للمنفذ (مهلتها ٣ ساعات)`
+      : `اتفاق #${b.id}: ⏱️ لم تؤكد الاستلام خلال ٢٤ ساعة من وصول الشغل — اعتُبر الاستلام مؤكداً بقاعدة Deal واتفتحت خطوة دفع الباقي للمنفذ (مهلتها ٣ ساعات)`, `booking:${b.id}`);
     await notifyOwner('deemed', `اتفاق #${b.id}: ⏱️ اعتماد استلام مُعتبَر بقاعدة سكوت ٢٤ ساعة — اتفتحت خطوة الباقي (تستطيع عكس الاعتماد من لوحتك عند ثبوت خطأ/احتيال)`, `booking:${b.id}`);
     fired++;
   }
@@ -3383,7 +3422,9 @@ async function sweepDeadlineWarnings() {
     if (!b.deemed_mid_warn_sent && now() >= base + DEEMED_AFTER_MS / 2 && now() < due) {
       await db.prepare('UPDATE bookings SET deemed_mid_warn_sent=1 WHERE id=?').run(b.id);
       if (b.client_id) {
-        await notify(b.client_id, 'deemed_warn', `اتفاق #${b.id}: ⏰ فات نصف مهلة تأكيد المعاينة (١٢ ساعة من ٢٤) — الشغل وصلك من المنفذ، أكّد الاستلام أو افتح نزاعاً من صفحة الاتفاق قبل ما تخلص المهلة فيُعتبَر الاستلام مؤكداً بقاعدة Deal`, `booking:${b.id}`);
+        await notify(b.client_id, 'deemed_warn', execTypeOf(b) === 'direct'
+          ? `اتفاق #${b.id}: ⏰ فات نصف مهلة تأكيد تنفيذ الخدمة (١٢ ساعة من ٢٤) — إثبات التنفيذ وصلك من المنفذ، أكّد تنفيذ الخدمة أو افتح نزاعاً من صفحة الاتفاق قبل ما تخلص المهلة فيُعتبَر التنفيذ مؤكداً بقاعدة Deal`
+          : `اتفاق #${b.id}: ⏰ فات نصف مهلة تأكيد المعاينة (١٢ ساعة من ٢٤) — الشغل وصلك من المنفذ، أكّد الاستلام أو افتح نزاعاً من صفحة الاتفاق قبل ما تخلص المهلة فيُعتبَر الاستلام مؤكداً بقاعدة Deal`, `booking:${b.id}`);
         sent++;
       }
     }
@@ -3391,7 +3432,9 @@ async function sweepDeadlineWarnings() {
     if (!b.deemed_warn_sent && now() >= due - WARN_BEFORE_MS && now() < due) {
       await db.prepare('UPDATE bookings SET deemed_warn_sent=1 WHERE id=?').run(b.id);
       if (b.client_id) {
-        await notify(b.client_id, 'deemed_warn', `اتفاق #${b.id}: ⚠️ تحذير أخير — لو ما ردّيتش خلال ساعة (تأكيد استلام أو نزاع) هيُعتبَر استلام المعاينة مؤكداً تلقائياً بقاعدة Deal وهتتفتح خطوة دفع الباقي للمنفذ`, `booking:${b.id}`);
+        await notify(b.client_id, 'deemed_warn', execTypeOf(b) === 'direct'
+          ? `اتفاق #${b.id}: ⚠️ تحذير أخير — لو ما ردّيتش خلال ساعة (تأكيد تنفيذ الخدمة أو نزاع) هيُعتبَر تنفيذ الخدمة مؤكداً تلقائياً بقاعدة Deal وهتتفتح خطوة دفع الباقي للمنفذ`
+          : `اتفاق #${b.id}: ⚠️ تحذير أخير — لو ما ردّيتش خلال ساعة (تأكيد استلام أو نزاع) هيُعتبَر استلام المعاينة مؤكداً تلقائياً بقاعدة Deal وهتتفتح خطوة دفع الباقي للمنفذ`, `booking:${b.id}`);
         sent++;
       }
     }
@@ -4149,8 +4192,8 @@ app.post('/api/bookings/:id/order-again', auth, async (req, res) => {
   const title = (req.body && String(req.body.title || '').trim()) || b.title;
   const agrOA = (req.body && (req.body.agreed_revisions !== undefined || req.body.agreed_delivery_at !== undefined)) ? agreementFromBody(req.body) : { revisions: b.agreed_revisions !== undefined ? b.agreed_revisions : null, deliveryAt: b.agreed_delivery_at || 0 };
   if (agrOA.error) return res.status(400).json({ error: agrOA.error });
-  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(req.user.id, talent.id, 'order_again', b.id, title, price, b.currency, now() + 7 * 24 * 3600 * 1000, 0, agrOA.revisions, agrOA.deliveryAt, now());
+  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,agreed_revisions,agreed_delivery_at,exec_type,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, talent.id, 'order_again', b.id, title, price, b.currency, now() + 7 * 24 * 3600 * 1000, 0, agrOA.revisions, agrOA.deliveryAt, execTypeForTalent(talent), now());
   await addBookingEvent(info.lastInsertRowid, 'created', `أُنشئ الاتفاق كإعادة طلب من الصفقة المكتملة #${b.id} — نفس المنفّذ والبيانات الأساسية`);
   await notify(talent.id, 'booking_new', `🔁 طلب جديد من عميل سابق: اتفاق #${info.lastInsertRowid} بقيمة ${price} ${b.currency} (إعادة طلب من صفقة مكتملة)`, `booking:${info.lastInsertRowid}`);
   res.json({ booking: await bookingView(await getBooking(info.lastInsertRowid), req.user) });
@@ -4267,8 +4310,8 @@ app.post('/api/bookings', auth, async (req, res) => {
   // بوابة الهوية المالية (محرك المخاطر الحي): شريط عالٍ + قيمة فوق العتبة فقط.
   const gateD = await riskGateError(req.user, talent, p);
   if (gateD) return res.status(403).json({ error: gateD, fin_identity_required: true });
-  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,package_tier,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(req.user.id, talent.id, source, ref_id, title || `اتفاق مع ${talent.name}`, p, talent.currency, now() + deadline_days * 24 * 3600 * 1000, urgent ? 1 : 0, pkgTier, agrD.revisions, agrD.deliveryAt, now());
+  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,package_tier,agreed_revisions,agreed_delivery_at,exec_type,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, talent.id, source, ref_id, title || `اتفاق مع ${talent.name}`, p, talent.currency, now() + deadline_days * 24 * 3600 * 1000, urgent ? 1 : 0, pkgTier, agrD.revisions, agrD.deliveryAt, execTypeForTalent(talent), now());
   await addBookingEvent(info.lastInsertRowid, 'created', 'أُنشئ الاتفاق — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   await notify(talent.id, 'booking_new', `طلب اتفاق جديد #${info.lastInsertRowid} بقيمة ${p} ${talent.currency}${urgent ? ' · 🔥 مستعجل — تنفيذ اليوم' : ''}`, `booking:${info.lastInsertRowid}`);
   res.json({ booking: await bookingView(await getBooking(info.lastInsertRowid), req.user) });
@@ -4376,8 +4419,12 @@ async function applyClientPayment(b, kind, ref, payer = null) {
          لا تُفتح إلا بعد معاينة أولية يؤكدها العميل (حزمة الثقة المجانية). */
       await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at,payer_name,payer_wallet,payer_device_fp) VALUES (?,?,?,?,?,?,?,?,?)').run(b.id, 'deposit', amounts.dep1, ref, 'confirmed', now(), payerCols.n, payerCols.w, payerCols.f);
       await db.prepare(`UPDATE bookings SET status='in_progress' WHERE id=?`).run(b.id);
-      await addBookingEvent(b.id, 'deposit_split_started', `صفقة كبيرة (أكبر من ${LARGE_DEAL_SPLIT_THRESHOLD}): العربون مُقسَّم — دفعة بداية ٢٠٪ (${amounts.dep1} ${b.currency}) ثم ٢٥٪ (${amounts.dep2} ${b.currency}) بعد معاينة أولية يؤكدها العميل`);
-      await notify(b.talent_id, 'booking', `اتفاق #${b.id}: وصلتك دفعة بداية العربون ${amounts.dep1} ${b.currency} (٢٠٪ — صفقة كبيرة بعربون مُقسَّم) — ابدأ التنفيذ وقدّم معاينة أولية ليؤكدها العميل فتتفتح دفعة الـ٢٥٪`, `booking:${b.id}`);
+      await addBookingEvent(b.id, 'deposit_split_started', execTypeOf(b) === 'direct'
+        ? `صفقة كبيرة (أكبر من ${LARGE_DEAL_SPLIT_THRESHOLD}): العربون مُقسَّم — دفعة بداية ٢٠٪ (${amounts.dep1} ${b.currency}) ثم ٢٥٪ (${amounts.dep2} ${b.currency}) بعد إثبات تنفيذ أولي يؤكده العميل`
+        : `صفقة كبيرة (أكبر من ${LARGE_DEAL_SPLIT_THRESHOLD}): العربون مُقسَّم — دفعة بداية ٢٠٪ (${amounts.dep1} ${b.currency}) ثم ٢٥٪ (${amounts.dep2} ${b.currency}) بعد معاينة أولية يؤكدها العميل`);
+      await notify(b.talent_id, 'booking', execTypeOf(b) === 'direct'
+        ? `اتفاق #${b.id}: وصلتك دفعة بداية العربون ${amounts.dep1} ${b.currency} (٢٠٪ — صفقة كبيرة بعربون مُقسَّم) — ابدأ التنفيذ وقدّم إثبات تنفيذ أولي ليؤكده العميل فتتفتح دفعة الـ٢٥٪`
+        : `اتفاق #${b.id}: وصلتك دفعة بداية العربون ${amounts.dep1} ${b.currency} (٢٠٪ — صفقة كبيرة بعربون مُقسَّم) — ابدأ التنفيذ وقدّم معاينة أولية ليؤكدها العميل فتتفتح دفعة الـ٢٥٪`, `booking:${b.id}`);
     } else {
       await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at,payer_name,payer_wallet,payer_device_fp) VALUES (?,?,?,?,?,?,?,?,?)').run(b.id, 'deposit', half, ref, 'confirmed', now(), payerCols.n, payerCols.w, payerCols.f);
       await db.prepare(`UPDATE bookings SET status='in_progress' WHERE id=?`).run(b.id);
@@ -4388,7 +4435,7 @@ async function applyClientPayment(b, kind, ref, payer = null) {
        العميل للمعاينة الأولية — ومهلتها ٣ ساعات ككل خطوة دفع. */
     const amounts = bookingLegAmounts(b);
     if (!amounts.split) return { error: 'اتفاقك بعربون واحد — لا دفعة ثانية' };
-    if (b.status !== 'awaiting_deposit2') return { error: 'دفعة العربون الثانية غير مفتوحة الآن — بتفتح بعد تأكيد المعاينة الأولية' };
+    if (b.status !== 'awaiting_deposit2') return { error: execTypeOf(b) === 'direct' ? 'دفعة العربون الثانية غير مفتوحة الآن — بتفتح بعد تأكيد إثبات التنفيذ الأولي' : 'دفعة العربون الثانية غير مفتوحة الآن — بتفتح بعد تأكيد المعاينة الأولية' };
     const prev2 = await db.prepare(`SELECT id FROM payments WHERE booking_id=? AND kind='deposit2'`).get(b.id);
     if (prev2) return { error: 'سجّلت دفعة العربون الثانية من قبل' };
     await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at,payer_name,payer_wallet,payer_device_fp) VALUES (?,?,?,?,?,?,?,?,?)').run(b.id, 'deposit2', amounts.dep2, ref, 'confirmed', now(), payerCols.n, payerCols.w, payerCols.f);
@@ -4399,7 +4446,7 @@ async function applyClientPayment(b, kind, ref, payer = null) {
        القبض يتأكد بمطابقة إيصال صارمة على رقم المنفذ أو بـ«وصلني» من المنفذ
        نفسه، وبعدها تُسلَّم النسخة النهائية ويكتمل الاتفاق بتأكيد استلامها أو
        بسكوت العميل ٣ ساعات. الخطوة تُفتح فقط بعد قبول استلام المعاينة. */
-    if (!['awaiting_rest', 'rest_overdue'].includes(b.status)) return { error: 'الباقي غير مفتوح الآن — بيفتح بعد تأكيد استلام المعاينة' };
+    if (!['awaiting_rest', 'rest_overdue'].includes(b.status)) return { error: execTypeOf(b) === 'direct' ? 'الباقي غير مفتوح الآن — بيفتح بعد تأكيد تنفيذ الخدمة' : 'الباقي غير مفتوح الآن — بيفتح بعد تأكيد استلام المعاينة' };
     const prev = await restPaymentRow(b.id);
     if (prev && ['claimed', 'confirmed'].includes(prev.status)) return { error: 'سجّلت تحويل الباقي من قبل — التحويلة عند المنفذ للتحقق من قبضها' };
     await db.prepare('INSERT INTO payments (booking_id,kind,amount,ref,status,created_at,payer_name,payer_wallet,payer_device_fp) VALUES (?,?,?,?,?,?,?,?,?)').run(b.id, 'rest', half, ref, 'claimed', now(), payerCols.n, payerCols.w, payerCols.f);
@@ -4422,7 +4469,9 @@ async function applyConfirmReceipt(b) {
     await notifyOwner('appeal_closed', `✅ اتفاق #${b.id}: العميل أكد الاستلام بنفسه — أُغلق طلب مراجعة الإفراج #${openAp.id} تلقائياً`, `booking:${b.id}`);
     await notify(b.talent_id, 'appeal', `اتفاق #${b.id}: العميل أكد الاستلام — أُغلق طلب المراجعة بتاعك تلقائياً`, `booking:${b.id}`);
   }
-  await addBookingEvent(b.id, 'receipt_confirmed', 'أكّد العميل استلام الشغل (المعاينة) بنفسه — اتفتحت خطوة دفع الباقي');
+  await addBookingEvent(b.id, 'receipt_confirmed', execTypeOf(b) === 'direct'
+    ? 'أكّد العميل تنفيذ الخدمة بنفسه — اتفتحت خطوة دفع الباقي'
+    : 'أكّد العميل استلام الشغل (المعاينة) بنفسه — اتفتحت خطوة دفع الباقي');
   await db.prepare(`UPDATE bookings SET status='awaiting_rest' WHERE id=?`).run(b.id);
   const ob = await finalObligation(b.id);
   if (ob && ['confirmed', 'auto_confirmed'].includes(ob.status)) {
@@ -4483,6 +4532,25 @@ app.get('/api/terms/transactions', (req, res) => {
   res.json({ version: TX_TERMS.version, items_ar: TX_TERMS.ar, items_en: TX_TERMS.en });
 });
 
+/* تغيير نوع التنفيذ: المنفّذ (طرف الصانع) وحده، وفقط قبل اكتمال بوابة قبول
+   «شروط المعاملات» من الطرفين — بعد اكتمالها يثبت النوع (EXEC_TYPE_LOCKED).
+   كل تغيير حدث موثّق في الخط الزمني/الأدلة (من → إلى + الفاعل) ويُعلَم العميل. */
+app.post('/api/bookings/:id/exec-type', auth, async (req, res) => {
+  const b = await getBooking(+req.params.id);
+  if (!b) return res.status(404).json({ error: 'غير موجود' });
+  if (b.talent_id !== req.user.id) return res.status(403).json({ error: 'تغيير نوع التنفيذ من المنفّذ فقط', code: 'EXEC_TYPE_TALENT_ONLY' });
+  const next = (req.body || {}).exec_type;
+  if (!['preview', 'direct'].includes(next)) return res.status(400).json({ error: 'نوع تنفيذ غير صحيح', code: 'EXEC_TYPE_INVALID' });
+  if (['completed', 'cancelled'].includes(b.status)) return res.status(400).json({ error: 'الاتفاق انتهى', code: 'EXEC_TYPE_LOCKED' });
+  if (await termsGateOpen(b)) return res.status(409).json({ error: 'نوع التنفيذ اتقفل: الطرفان قبلا «شروط المعاملات» وبدأت خطوات الدفع', code: 'EXEC_TYPE_LOCKED' });
+  const prev = execTypeOf(b);
+  if (prev === next) return res.json({ booking: await bookingView(b, req.user), exec_type: next, unchanged: true });
+  await db.prepare('UPDATE bookings SET exec_type=? WHERE id=?').run(next, b.id);
+  await addBookingEvent(b.id, 'exec_type_changed', `غيّر المنفّذ نوع التنفيذ من «${EXEC_TYPE_AR[prev]}» إلى «${EXEC_TYPE_AR[next]}» قبل قبول الشروط`);
+  if (b.client_id) await notify(b.client_id, 'booking', `اتفاق #${b.id}: غيّر المنفّذ نوع التنفيذ إلى «${EXEC_TYPE_AR[next]}» — النوع ظاهر لك في صندوق شروط الاتفاق قبل قبولك`, `booking:${b.id}`);
+  res.json({ booking: await bookingView(await getBooking(b.id), req.user), exec_type: next });
+});
+
 app.post('/api/bookings/:id/pay', auth, async (req, res) => {
   const { kind, ref } = req.body || {};
   const b = await getBooking(+req.params.id);
@@ -4514,7 +4582,9 @@ app.post('/api/bookings/:id/proof', auth, async (req, res) => {
   await db.prepare(`UPDATE bookings SET proof_url=?, proof_at=?, proof_check='verified', status='proof_submitted' WHERE id=?`).run(url, now(), b.id);
   // تقديم الإثبات بعد استلام العربون والعمل عليه = عامل تأكيد التزام العربون.
   try { await settleLegObligation(b.id, 'booking_deposit', 'قدّم المنفذ إثبات التنفيذ'); } catch (e) { /* لا يعطّل الإثبات */ }
-  await notify(b.client_id, 'booking', `اتفاق #${b.id}: المنفذ قدم إثبات التنفيذ (معاينة) — أكّد الاستلام أو افتح نزاعاً خلال ٢٤ ساعة؛ سكوتك الكامل ٢٤ ساعة يُعتبَر تأكيد استلام بقاعدة Deal وتتفتح خطوة دفع الباقي`, `booking:${b.id}`);
+  await notify(b.client_id, 'booking', execTypeOf(b) === 'direct'
+    ? `اتفاق #${b.id}: المنفذ قدم إثبات تنفيذ الخدمة — أكّد تنفيذ الخدمة أو افتح نزاعاً خلال ٢٤ ساعة؛ سكوتك الكامل ٢٤ ساعة يُعتبَر تأكيد تنفيذ بقاعدة Deal وتتفتح خطوة دفع الباقي`
+    : `اتفاق #${b.id}: المنفذ قدم إثبات التنفيذ (معاينة) — أكّد الاستلام أو افتح نزاعاً خلال ٢٤ ساعة؛ سكوتك الكامل ٢٤ ساعة يُعتبَر تأكيد استلام بقاعدة Deal وتتفتح خطوة دفع الباقي`, `booking:${b.id}`);
   res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
 });
 
@@ -4523,27 +4593,36 @@ app.post('/api/bookings/:id/proof', auth, async (req, res) => {
 app.post('/api/bookings/:id/initial-proof', auth, async (req, res) => {
   const { url } = req.body || {};
   const b = await getBooking(+req.params.id);
-  if (!b || b.talent_id !== req.user.id) return res.status(403).json({ error: 'المعاينة الأولية من المنفذ فقط' });
-  if (!isSplitDeposit(b)) return res.status(400).json({ error: 'اتفاقك بعربون واحد — لا معاينة أولية' });
+  if (!b || b.talent_id !== req.user.id) return res.status(403).json({ error: execTypeOf(b) === 'direct' ? 'إثبات التنفيذ الأولي من المنفذ فقط' : 'المعاينة الأولية من المنفذ فقط' });
+  if (!isSplitDeposit(b)) return res.status(400).json({ error: execTypeOf(b) === 'direct' ? 'اتفاقك بعربون واحد — لا إثبات تنفيذ أولي' : 'اتفاقك بعربون واحد — لا معاينة أولية' });
   if (b.status !== 'in_progress') return res.status(400).json({ error: 'الاتفاق ليس في مرحلة التنفيذ' });
-  if (b.initial_proof_url) return res.status(400).json({ error: 'قدّمت المعاينة الأولية من قبل' });
+  if (b.initial_proof_url) return res.status(400).json({ error: execTypeOf(b) === 'direct' ? 'قدّمت إثبات التنفيذ الأولي من قبل' : 'قدّمت المعاينة الأولية من قبل' });
   if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'رابط غير صحيح' });
   let ok = false;
   try { const r = await fetch(url, { method: 'GET', headers: { 'user-agent': 'Mozilla/5.0 (DealProof)' }, redirect: 'follow', signal: AbortSignal.timeout(8000) }); ok = r.status === 200; } catch (e) { ok = false; }
   if (!ok) return res.status(400).json({ error: 'تعذر التحقق: الرابط لا يعمل أو غير علني (لازم HTTP 200)' });
   await db.prepare(`UPDATE bookings SET initial_proof_url=?, initial_proof_at=?, initial_proof_check='verified' WHERE id=?`).run(url, now(), b.id);
   try { await settleLegObligation(b.id, 'booking_deposit', 'قدّم المنفذ المعاينة الأولية'); } catch (e) { /* لا يعطّل */ }
-  await addBookingEvent(b.id, 'initial_proof', 'قدّم المنفذ معاينة أولية — بانتظار تأكيد العميل لتتفتح دفعة العربون الثانية (٢٥٪)');
-  if (b.client_id) await notify(b.client_id, 'booking', `اتفاق #${b.id}: وصلتك معاينة أولية من المنفذ — أكّدها من صفحة الاتفاق لتتفتح دفعة العربون الثانية`, `booking:${b.id}`);
+  await addBookingEvent(b.id, 'initial_proof', execTypeOf(b) === 'direct'
+    ? 'قدّم المنفذ إثبات تنفيذ أولي — بانتظار تأكيد العميل لتتفتح دفعة العربون الثانية (٢٥٪)'
+    : 'قدّم المنفذ معاينة أولية — بانتظار تأكيد العميل لتتفتح دفعة العربون الثانية (٢٥٪)');
+  if (b.client_id) await notify(b.client_id, 'booking', execTypeOf(b) === 'direct'
+    ? `اتفاق #${b.id}: وصلك إثبات تنفيذ أولي من المنفذ — أكّده من صفحة الاتفاق لتتفتح دفعة العربون الثانية`
+    : `اتفاق #${b.id}: وصلتك معاينة أولية من المنفذ — أكّدها من صفحة الاتفاق لتتفتح دفعة العربون الثانية`, `booking:${b.id}`);
   res.json({ booking: await bookingView(await getBooking(b.id), req.user) });
 });
 async function applyConfirmInitial(b) {
-  if (!isSplitDeposit(b)) return { error: 'اتفاق بعربون واحد — لا معاينة أولية' };
-  if (b.status !== 'in_progress' || !b.initial_proof_url) return { error: 'لا توجد معاينة أولية بانتظار التأكيد' };
-  if (b.initial_confirmed_at) return { error: 'أكّدت المعاينة الأولية من قبل' };
+  const direct = execTypeOf(b) === 'direct';
+  if (!isSplitDeposit(b)) return { error: direct ? 'اتفاق بعربون واحد — لا إثبات تنفيذ أولي' : 'اتفاق بعربون واحد — لا معاينة أولية' };
+  if (b.status !== 'in_progress' || !b.initial_proof_url) return { error: direct ? 'لا يوجد إثبات تنفيذ أولي بانتظار التأكيد' : 'لا توجد معاينة أولية بانتظار التأكيد' };
+  if (b.initial_confirmed_at) return { error: direct ? 'أكّدت إثبات التنفيذ الأولي من قبل' : 'أكّدت المعاينة الأولية من قبل' };
   await db.prepare(`UPDATE bookings SET initial_confirmed_at=?, status='awaiting_deposit2' WHERE id=?`).run(now(), b.id);
-  await addBookingEvent(b.id, 'initial_confirmed', 'أكّد العميل المعاينة الأولية — اتفتحت دفعة العربون الثانية (٢٥٪) بمهلة دفع ٣ ساعات');
-  await notify(b.talent_id, 'booking', `اتفاق #${b.id}: العميل أكد المعاينة الأولية — دفعة العربون الثانية (٢٥٪) اتفتحت وبانتظار دفعها`, `booking:${b.id}`);
+  await addBookingEvent(b.id, 'initial_confirmed', direct
+    ? 'أكّد العميل إثبات التنفيذ الأولي — اتفتحت دفعة العربون الثانية (٢٥٪) بمهلة دفع ٣ ساعات'
+    : 'أكّد العميل المعاينة الأولية — اتفتحت دفعة العربون الثانية (٢٥٪) بمهلة دفع ٣ ساعات');
+  await notify(b.talent_id, 'booking', direct
+    ? `اتفاق #${b.id}: العميل أكد إثبات التنفيذ الأولي — دفعة العربون الثانية (٢٥٪) اتفتحت وبانتظار دفعها`
+    : `اتفاق #${b.id}: العميل أكد المعاينة الأولية — دفعة العربون الثانية (٢٥٪) اتفتحت وبانتظار دفعها`, `booking:${b.id}`);
   return { booking: await getBooking(b.id) };
 }
 app.post('/api/bookings/:id/confirm-initial', auth, async (req, res) => {
@@ -4878,9 +4957,9 @@ app.post('/api/guest-requests/:id/book', auth, async (req, res) => {
     const gateGB = await riskGateError(req.user, null, p);
     if (gateGB) { await client.query('ROLLBACK'); return res.status(403).json({ error: gateGB, fin_identity_required: true }); }
     const ins = await client.query(
-      `INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,urgent,package_tier,agreed_revisions,agreed_delivery_at,created_at)
-       VALUES (NULL,$1,'guest_request',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
-      [req.user.id, rq.id, rq.title, p, rq.currency, now() + deadline_days * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, rq.urgent ? 1 : 0, pkgTier, agrGB.revisions, agrGB.deliveryAt, now()]);
+      `INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,urgent,package_tier,agreed_revisions,agreed_delivery_at,exec_type,created_at)
+       VALUES (NULL,$1,'guest_request',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+      [req.user.id, rq.id, rq.title, p, rq.currency, now() + deadline_days * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, rq.urgent ? 1 : 0, pkgTier, agrGB.revisions, agrGB.deliveryAt, execTypeForTalent(req.user), now()]);
     bookingId = ins.rows[0].id;
     guestToken = rq.guest_token;
     await client.query(`UPDATE shop_requests SET status='booked' WHERE id=$1`, [rq.id]);
@@ -4919,6 +4998,7 @@ async function guestBookingView(b) {
   const gAm = bookingLegAmounts(b);
   return {
     id: b.id, title: b.title, price: b.price, currency: b.currency, status: b.status,
+    exec_type: execTypeOf(b), // نوع التنفيذ التلقائي — ظاهر للضيف في صندوق الشروط أيضاً
     order_state: orderStateFor(b),
     fee_status: b.fee_status, agreed_client: !!b.agreed_client, agreed_talent: !!b.agreed_talent,
     fee, net, deposit: half, rest: half,
@@ -5245,8 +5325,8 @@ app.post('/api/applications/:id/accept', auth, async (req, res) => {
   // بوابة الهوية المالية (محرك المخاطر الحي) على طرفي اتفاق الحملة.
   const gateC = await riskGateError(req.user, applicant, c.budget || (applicant ? applicant.price : 0));
   if (gateC) return res.status(403).json({ error: gateC, fin_identity_required: true });
-  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(req.user.id, a.creator_id, 'campaign', c.id, c.title, c.budget || (await getUser(a.creator_id)).price, c.currency, now() + 7 * 24 * 3600 * 1000, agrC.revisions, agrC.deliveryAt, now());
+  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,exec_type,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, a.creator_id, 'campaign', c.id, c.title, c.budget || (await getUser(a.creator_id)).price, c.currency, now() + 7 * 24 * 3600 * 1000, agrC.revisions, agrC.deliveryAt, execTypeForTalent(applicant), now());
   await db.prepare(`UPDATE campaign_applications SET status='accepted', booking_id=? WHERE id=?`).run(info.lastInsertRowid, a.id);
   await notify(a.creator_id, 'booking_new', `براند «${req.user.name}» قبل تقديمك — اتفاق #${info.lastInsertRowid} اتفتح`, `booking:${info.lastInsertRowid}`);
   res.json({ booking_id: info.lastInsertRowid });
@@ -7154,14 +7234,14 @@ async function acceptQuote(rq, quoteId, agr = { revisions: null, deliveryAt: 0 }
   if (onVacation(talent)) return { error: 'الصانع في إجازة حالياً — اختر عرضاً آخر أو انتظر عودته' };
   let bookingId;
   if (rq.is_guest) {
-    const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,urgent,agreed_revisions,agreed_delivery_at,created_at)
-      VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(talent.id, 'quote', rq.id, rq.title, q.price, rq.currency, now() + Math.max(1, q.delivery_days || 7) * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, rq.urgent ? 1 : 0, agr.revisions, agr.deliveryAt, now());
+    const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,urgent,agreed_revisions,agreed_delivery_at,exec_type,created_at)
+      VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(talent.id, 'quote', rq.id, rq.title, q.price, rq.currency, now() + Math.max(1, q.delivery_days || 7) * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, rq.urgent ? 1 : 0, agr.revisions, agr.deliveryAt, execTypeForTalent(talent), now());
     bookingId = ins.lastInsertRowid;
   } else {
-    const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,agreed_revisions,agreed_delivery_at,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(rq.shop_user_id, talent.id, 'quote', rq.id, rq.title, q.price, rq.currency, now() + Math.max(1, q.delivery_days || 7) * 24 * 3600 * 1000, rq.urgent ? 1 : 0, agr.revisions, agr.deliveryAt, now());
+    const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,agreed_revisions,agreed_delivery_at,exec_type,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(rq.shop_user_id, talent.id, 'quote', rq.id, rq.title, q.price, rq.currency, now() + Math.max(1, q.delivery_days || 7) * 24 * 3600 * 1000, rq.urgent ? 1 : 0, agr.revisions, agr.deliveryAt, execTypeForTalent(talent), now());
     bookingId = ins.lastInsertRowid;
   }
   await db.prepare(`UPDATE request_quotes SET status='accepted', decided_at=? WHERE id=?`).run(now(), q.id);
@@ -7283,8 +7363,8 @@ app.post('/api/waitlist/:id/accept', auth, async (req, res) => {
   // بوابة الهوية المالية (محرك المخاطر الحي) على طرفي اتفاق قائمة الانتظار.
   const gateW = await riskGateError(req.user, talent, price);
   if (gateW) return res.status(403).json({ error: gateW, fin_identity_required: true });
-  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(req.user.id, talent.id, 'waitlist', e.request_id || null, title, price, talent.currency, now() + 7 * 24 * 3600 * 1000, agrW.revisions, agrW.deliveryAt, now());
+  const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,exec_type,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, talent.id, 'waitlist', e.request_id || null, title, price, talent.currency, now() + 7 * 24 * 3600 * 1000, agrW.revisions, agrW.deliveryAt, execTypeForTalent(talent), now());
   await db.prepare(`UPDATE waitlist_entries SET status='converted' WHERE id=?`).run(e.id);
   await addBookingEvent(info.lastInsertRowid, 'created', 'أُنشئ الاتفاق من قائمة الانتظار — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   await notify(talent.id, 'booking_new', `طلب اتفاق جديد #${info.lastInsertRowid} من قائمة الانتظار بقيمة ${price} ${talent.currency}`, `booking:${info.lastInsertRowid}`);
@@ -7391,10 +7471,11 @@ app.get('/api/request-templates', (req, res) => res.json({ items: REQUEST_TEMPLA
 /* ---- ٩) تعاقد شهري متكرر ---- */
 const CONTRACT_CYCLE_MS = 30 * 24 * 3600 * 1000;
 async function generateContractCycle(c) {
-  const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,contract_id,title,price,currency,deadline,guest_name,guest_token,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const cTalent = await getUser(c.talent_id);
+  const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,contract_id,title,price,currency,deadline,guest_name,guest_token,exec_type,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(c.client_id || null, c.talent_id, 'contract', c.id, c.id, c.title || `تعاقد شهري #${c.id} — دورة ${c.cycles_done + 1}`, c.cycle_price, c.currency,
-      now() + 30 * 24 * 3600 * 1000, c.guest_name || '', c.guest_token || '', now());
+      now() + 30 * 24 * 3600 * 1000, c.guest_name || '', c.guest_token || '', execTypeForTalent(cTalent), now());
   await db.prepare('UPDATE contracts SET cycles_done=cycles_done+1, next_cycle_at=? WHERE id=?').run(now() + CONTRACT_CYCLE_MS, c.id);
   await addBookingEvent(ins.lastInsertRowid, 'created', 'أُنشئت دورة تعاقد شهري تلقائياً — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   await notify(c.talent_id, 'contract_cycle', `🔁 دورة جديدة من التعاقد الشهري #${c.id}: اتفاق #${ins.lastInsertRowid} بقيمة ${c.cycle_price} ${c.currency}`, `booking:${ins.lastInsertRowid}`);
@@ -8030,13 +8111,13 @@ app.post('/api/owner/managed-requests/:id/convert', auth, ownerOnly, async (req,
   let bookingId;
   if (rq.is_guest) {
     const agrM = agreementFromBody(req.body || {}); if (agrM.error) return res.status(400).json({ error: agrM.error });
-    const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,agreed_revisions,agreed_delivery_at,created_at) VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(talent.id, 'managed', rq.id, rq.title, price, rq.currency, now() + 7 * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, agrM.revisions, agrM.deliveryAt, now());
+    const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,guest_name,guest_phone,guest_token,agreed_revisions,agreed_delivery_at,exec_type,created_at) VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(talent.id, 'managed', rq.id, rq.title, price, rq.currency, now() + 7 * 24 * 3600 * 1000, rq.guest_name, rq.guest_phone, rq.guest_token, agrM.revisions, agrM.deliveryAt, execTypeForTalent(talent), now());
     bookingId = ins.lastInsertRowid;
   } else {
     const agrM2 = agreementFromBody(req.body || {}); if (agrM2.error) return res.status(400).json({ error: agrM2.error });
-    const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(rq.shop_user_id, talent.id, 'managed', rq.id, rq.title, price, rq.currency, now() + 7 * 24 * 3600 * 1000, agrM2.revisions, agrM2.deliveryAt, now());
+    const ins = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,exec_type,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(rq.shop_user_id, talent.id, 'managed', rq.id, rq.title, price, rq.currency, now() + 7 * 24 * 3600 * 1000, agrM2.revisions, agrM2.deliveryAt, execTypeForTalent(talent), now());
     bookingId = ins.lastInsertRowid;
   }
   await db.prepare(`UPDATE shop_requests SET status='booked' WHERE id=?`).run(rq.id);

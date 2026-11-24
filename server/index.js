@@ -91,7 +91,8 @@ app.use('/api', async (req, res, next) => {
     const token = (req.headers.authorization || '').replace('Bearer ', '');
     if (token) {
       const s = await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
-      if (s && !sessionExpired(s)) { const u = await getUser(s.user_id); if (u && u.is_platform_founder && !u.banned && !u.deleted_at) return next(); }
+      const u = s ? await getUser(s.user_id) : null;
+      if (u && !sessionExpiredFor(s, u) && u.is_platform_founder && !u.banned && !u.deleted_at) return next();
     }
   } catch (e) { /* أي عطل في الحلّ = لا تجاوز */ }
   return res.status(503).json({ error: 'بنعمل صيانة سريعة — راجعين قريباً', code: 'MAINTENANCE', maintenance: true });
@@ -1295,12 +1296,19 @@ async function notifySecurity(userId, text) {
    إطلاقاً — كانت تعيش حتى حذف صريح (خروج/تغيير كلمة سر/إنهاء جلسة). */
 const SESSION_TTL_MS = 90 * 24 * 3600 * 1000; // ٩٠ يوماً انزلاقية
 function sessionExpired(s) { return !!(s && s.last_seen_at && now() - s.last_seen_at > SESSION_TTL_MS); }
+/* دخول دائم للمؤسس (PE-1): جلسة المؤسس وحدها ٣٦٥ يوماً انزلاقية — تتجدد
+   مع كل استخدام فلا يُطلب منه دخول تاني عملياً على جهازه؛ الأعضاء يبقون
+   ٩٠ يوماً كما هم. الانتهاء يُحسم دائماً من هوية صاحب الجلسة خادمياً —
+   لا علم يأتي من العميل. */
+const FOUNDER_SESSION_TTL_MS = 365 * 24 * 3600 * 1000; // ٣٦٥ يوماً انزلاقية للمؤسس فقط
+function sessionExpiredFor(s, user) { return !!(s && s.last_seen_at && now() - s.last_seen_at > ((user && user.is_platform_founder) ? FOUNDER_SESSION_TTL_MS : SESSION_TTL_MS)); }
 async function auth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   let s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
-  if (s && sessionExpired(s)) { await db.prepare('DELETE FROM sessions WHERE token' + '=?').run(token); s = null; }
+  const sUser = s ? await getUser(s.user_id) : null;
+  if (s && sessionExpiredFor(s, sUser)) { await db.prepare('DELETE FROM sessions WHERE token' + '=?').run(token); s = null; }
   if (!s) return res.status(401).json({ error: 'سجل الدخول أولاً' });
-  req.user = await getUser(s.user_id);
+  req.user = sUser;
   if (!req.user) return res.status(401).json({ error: 'حساب غير موجود' });
   if (req.user.deleted_at) return res.status(403).json({ error: 'هذا الحساب محذوف' });
   if (req.user.banned) return res.status(403).json({ error: 'هذا الحساب محظور' });
@@ -4548,7 +4556,8 @@ app.get('/api/requests', async (req, res) => {
   // رقم هاتف الضيف لا يظهر لأي صانع/مقدم خدمة (التواصل داخل المنصة فقط) — المالك المؤسس وحده يراه
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   const s = token && await db.prepare('SELECT * FROM sessions WHERE token=?').get(token);
-  const sUser = s && !sessionExpired(s) ? await db.prepare('SELECT * FROM users WHERE id=?').get(s.user_id) : null;
+  const sRow = s ? await db.prepare('SELECT * FROM users WHERE id=?').get(s.user_id) : null;
+  const sUser = sRow && !sessionExpiredFor(s, sRow) ? sRow : null;
   const rows = await db.prepare(`SELECT r.id, r.shop_user_id, r.title, r.niche, r.city, r.budget, r.currency, r.details, r.status, r.created_at, r.is_guest, r.guest_phone, r.country, r.urgent, COALESCE(u.name, r.guest_name) AS shop_name FROM shop_requests r LEFT JOIN users u ON u.id=r.shop_user_id WHERE r.status='open' AND r.target_talent_id IS NULL AND r.managed=0 ORDER BY r.urgent DESC, r.created_at DESC`).all();
   const items = rows.map(r => {
     const it = { ...r, is_guest: !!r.is_guest, urgent: !!r.urgent };

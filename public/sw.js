@@ -1,6 +1,6 @@
 // Deal service worker — network-first for the app shell, cache fallback offline.
-const CACHE = 'deal-v21';
-const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const CACHE = 'deal-v22';
+const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192-v22.png', '/icons/icon-512-v22.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
@@ -24,8 +24,8 @@ self.addEventListener('push', (e) => {
   const title = d.title || 'Deal';
   const opts = {
     body: String(d.body || ''),
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/icons/icon-192-v22.png',
+    badge: '/icons/icon-192-v22.png',
     data: { ref: d.ref || '', type: d.type || '' },
   };
   e.waitUntil(self.registration.showNotification(title, opts));

@@ -2869,7 +2869,7 @@ function canSeeFounder(viewer) {
 
 app.get('/api/directory', async (req, res) => {
   const viewer = await optionalViewer(req);
-  const { role, niche, city, q, country } = req.query;
+  const { role, niche, city, q, country, max_price } = req.query;
   let sql = `SELECT * FROM users WHERE role IN ('creator','provider') AND banned=0`;
   const args = [];
   if (!canSeeFounder(viewer)) sql += ' AND is_platform_founder=0';
@@ -2882,6 +2882,11 @@ app.get('/api/directory', async (req, res) => {
   if (niche) { sql += ' AND (niche=? OR provider_category=? OR provider_custom=?)'; args.push(niche, niche, niche); }
   if (city) { sql += ' AND city=?'; args.push(city); }
   if (q) { sql += ' AND (name LIKE ? OR niche LIKE ? OR city LIKE ? OR provider_custom LIKE ?)'; args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
+  // فلتر «أقصى سعر» (بحث بالمبلغ): يُفعَّل فقط برقم صالح > 0 — ومن لا سعر
+  // معلناً له (price = 0/فارغ) يُستبعد أثناء تفعيل الفلتر (سلوك موثّق
+  // مقصود)، وبغياب البارامتر أو بقيمة 0/غير صالحة لا يتغير أي شيء.
+  const maxPrice = Number(max_price);
+  if (max_price != null && max_price !== '' && Number.isFinite(maxPrice) && maxPrice > 0) { sql += ' AND price > 0 AND price <= ?'; args.push(maxPrice); }
   let rows = await db.prepare(sql).all(...args);
   // مدينة المؤسس ليست علنية (طلب المالك): لا يجوز أن يطابقها فلتر مدينة، ولا
   // أن يصل إليها بحث نصي عبر حقل المدينة — يبقى المؤسس قابلاً للإيجاد باسمه

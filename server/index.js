@@ -317,7 +317,7 @@ const DEEMED_AFTER_MS = 24 * 3600 * 1000;      // سكوت العميل بعد �
 const FINAL_DEEMED_AFTER_MS = 3 * 3600 * 1000; // سكوت العميل بعد تسليم النسخة النهائية = اكتمال مُعتبَر — يبقى ٣ ساعات (قرار المستخدم: التمييز موثّق — المعاينة ٢٤ والدفع ٣ وما بعد النهائي ٣)
 const RELEASE_ALERT_MS = 15 * 60 * 1000;       // تنبيه المالك العاجل: مبلغ جاهز للإفراج ينتظر أكثر من ١٥ دقيقة (قاعدة Deal)
 const FRAUD_SUSPEND_AT = 3;                    // ٣ مطالبات دفع كاذبة مثبتة = الحد الثالث في سلّم الردع (حظر نهائي للشخص — توحيد 2026-11-23)
-const TX_TERMS_VERSION = 'deal-tx-terms-v6';   // إصدار «شروط المعاملات» الحالي (v6: مهلة تأكيد المعاينة ٢٤ ساعة بدل ٣ بقرار المستخدم الصريح 2026-11-23 مع بقاء كل مهلات الدفع ٣ ساعات وسكوت ما بعد النهائي ٣ ساعات؛ v5: تعميم بند «الردع والقانون» بثلاث طبقات لكل الدول — عقد ملزم بقانون الشروط الحاكم، عقوبات داخلية موحّدة، والاحتيال جريمة في كل دولة، ومواد مصر مثالاً موثقاً وحيداً؛ v4: قسم «ضمان الاستبدال والردع» المعتمَد 2026-11-23 + توحيد سلّم «حوّلت» الكاذبة: تحذير/تجميد/حظر نهائي للشخص) — إصدار جديد يطلب قبولاً جديداً للحجوزات الجديدة فقط، والمفتوحة تكمل على إصدارها
+const TX_TERMS_VERSION = 'deal-tx-terms-v7';   // إصدار «شروط المعاملات» الحالي (v7: إلغاء ادعاء الحماية المالية نهائياً بقرار المستخدم الصريح 2026-11-24 — Deal لا تحتجز مالاً وحمايتها إجرائية فقط: تنظيم وتوثيق وتحكيم — مع إعادة تسمية آلية الاستبدال إلى «قاعدة الاستبدال الموثّق»؛ v6: مهلة تأكيد المعاينة ٢٤ ساعة بدل ٣ بقرار المستخدم 2026-11-23 مع بقاء مهلات الدفع ٣ ساعات وسكوت ما بعد النهائي ٣ ساعات؛ v5: تعميم بند «الردع والقانون» بثلاث طبقات لكل الدول) — إصدار جديد يطلب قبولاً جديداً للحجوزات الجديدة فقط، والمفتوحة تكمل على إصدارها
 const RECEIPT_MAX_BYTES = 2 * 1024 * 1024;     // أقصى حجم لصورة الإيصال
 const RECEIPT_MAX_ATTEMPTS = 5;                // بعدها يُقفل الرفع على الالتزام
 const RECEIPT_DATE_WINDOW_MS = 48 * 3600 * 1000; // حداثة تاريخ الإيصال المطلوبة
@@ -553,7 +553,7 @@ async function claimObligationForPayment(b, kind, ref, actor, payer = null) {
   const base = kind === 'fee' ? amounts.fee : kind === 'deposit2' ? amounts.dep2 : kind === 'deposit' && amounts.split ? amounts.dep1 : amounts[kind];
   /* المستلم: العمولة وحدها → المنصة (إيراد Deal الخاص). العربون والدفعة
      الأخيرة → المقدم مباشرة بين المحافظ — Deal لا تستلم ولا تحتجز أموال
-     المعاملات بين الأطراف في أي مرحلة (قرار المستخدم 2026-11-23: الضمان في
+     المعاملات بين الأطراف في أي مرحلة (قرار المستخدم 2026-11-23: الحماية في
      الشغل لا في الفلوس — النسخة النهائية لا تُسلَّم إلا بعد تأكيد قبض الباقي). */
   const toOwner = kind === 'fee';
   let ob = await getOrCreateObligation({
@@ -769,7 +769,7 @@ async function ambassadorView(appt) {
    قرار المستخدم الجوهري (2026-11-23، قلق المساءلة القانونية): Deal لا تستلم
    ولا تحتجز أموال المعاملات بين الأطراف في أي مرحلة — الباقي (٤٥٪) يتحوّل من
    العميل إلى المنفذ مباشرة مثل العربون تماماً (التزام booking_final بمستلم
-   المنفذ، بنفس المرجع الموحد والبصمة والمطابقة الصارمة). الضمان انتقل من
+   المنفذ، بنفس المرجع الموحد والبصمة والمطابقة الصارمة). الحماية انتقلت من
    الفلوس إلى الشغل نفسه: إثبات التنفيذ «معاينة»، وبعد قبول الاستلام (تأكيد
    العميل أو الاستلام المُعتبَر بسكوت ٢٤ ساعة) تُفتح خطوة دفع الباقي بعدّاد
    ٣ ساعات؛ ولا يكتمل الحجز إلا بـ(أ) تأكيد قبض الباقي (مطابقة إيصال صارمة
@@ -3057,7 +3057,7 @@ async function bookingEvents(bookingId, limit = 100) {
   return rows.map((e) => ({ id: e.id, sender: 'system', kind: e.kind, body: e.body, created_at: e.created_at }));
 }
 
-/* ---- «شروط المعاملات» (deal-tx-terms-v6): الوثيقة التي يقبلها الطرفان قبل
+/* ---- «شروط المعاملات» (deal-tx-terms-v7): الوثيقة التي يقبلها الطرفان قبل
    أول خطوة دفع في أي حجز — قبول مسجّل خادمياً (من + متى + إصدار) ويدخل
    حزمة الأدلة. إصدار جديد يطلب قبولاً جديداً للحجوزات الجديدة فقط. */
 const TX_TERMS = {
@@ -3073,9 +3073,9 @@ const TX_TERMS = {
     'التحكيم بنظام Deal: طور تفاوض ١٠ دقائق بين الطرفين أولاً، ثم حسم المالك من الأدلة — وقراره نهائي داخل المنصة ومسجّل.',
     'محادثة الطلب داخل Deal هي قناة الأدلة الوحيدة — أي اتفاق خارجها لا يُقبل دليلاً في التحكيم.',
     'المعاملات P2P: الفلوس تتحرك بين المحافظ الشخصية مباشرة، وDeal ينظّم ويوثّق ويحمي — Deal ليس بنكاً ولا جهة مالية.',
-    'ضمان الاستبدال الصارم: يتفعّل فقط لو أعلن المنفذ عدم قدرته، أو سكت في محادثة الحجز ٢٤ ساعة بعد قبض العربون رغم تنبيهين آليين. Deal لا تفرض موعد تسليم ولا تدير عدّاد تسليم: توقيت التنفيذ اتفاق بين الطرفين داخل محادثة الحجز، وعلامة «مستعجل» اتفاقية بلا أي التزام زمني مفروض من المنصة، وأي خلاف على تأخير التسليم يُحسم تحكيماً بأدلة المحادثة. ترشّح Deal بديلاً واحداً موثّقاً من نفس المدينة والمجال بنفس السعر والشروط حرفياً خلال ٢٤ ساعة، ويقرر العميل القبول أو الرفض خلال ٣ ساعات؛ وإن لم يوجد بديل مناسب يُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. ردّ العربون إجباري على المنفذ المتخلّف خلال ٣ ساعات من قرار الاستبدال أو التحكيم، ولا استبدال أبداً بعد اعتماد المعاينة.',
+    'قاعدة الاستبدال الموثّق الصارمة: تتفعّل فقط لو أعلن المنفذ عدم قدرته، أو سكت في محادثة الحجز ٢٤ ساعة بعد قبض العربون رغم تنبيهين آليين. Deal لا تفرض موعد تسليم ولا تدير عدّاد تسليم: توقيت التنفيذ اتفاق بين الطرفين داخل محادثة الحجز، وعلامة «مستعجل» اتفاقية بلا أي التزام زمني مفروض من المنصة، وأي خلاف على تأخير التسليم يُحسم تحكيماً بأدلة المحادثة. ترشّح Deal بديلاً واحداً موثّقاً من نفس المدينة والمجال بنفس السعر والشروط حرفياً خلال ٢٤ ساعة، ويقرر العميل القبول أو الرفض خلال ٣ ساعات؛ وإن لم يوجد بديل مناسب يُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. ردّ العربون إجباري على المنفذ المتخلّف خلال ٣ ساعات من قرار الاستبدال أو التحكيم، ولا استبدال أبداً بعد اعتماد المعاينة.',
     'الردع والقانون — للطرفين في كل الدول: (١) قبولك هذه الشروط قبول مسجّل بهويتك ووقته، وهو عقد إلكتروني ملزم يخضع لقانون الشروط الحاكم المنصوص عليه في شروط استخدام Deal، وسجلات Deal ومحادثات الحجز وإيصالاتها أدلّة موثّقة تُسلَّم للطرف المتضرر في حزمة أدلة رسمية عند ثبوت احتيال. (٢) عقوبات المنصة الداخلية تسرى على كل المستخدمين بالتساوي في أي دولة: أي التزام مالي يتجاوز مهلته يجمّد الحساب فوراً مع علامة «مستحقات متأخرة» في ملفه، وفكّ التجميد بسداد الالتزام وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف في الإخلال الثاني)، والاحتيال المثبت = حظر نهائي للشخص نفسه (هاتف + إيميل + بصمة جهاز). (٣) الاحتيال جريمة في قوانين كل دولة تعمل فيها المنصة، ومسؤولية المحتال كاملة بلا أي سقف. مثال موثّق من مصر — القانون الحاكم للمنصة: قبول الشروط عقد ملزم (المادة ١٤٧ من القانون المدني: العقد شريعة المتعاقدين)، وقبض العربون والاستيلاء عليه أو رفض ردّه عند الإخلال يدخل في نطاق خيانة الأمانة (المادة ٣٤١ عقوبات) والنصب (المادة ٣٣٦ عقوبات)، والاحتيال عبر الشبكات يغلّظه قانون مكافحة جرائم تقنية المعلومات ١٧٥ لسنة ٢٠١٨، وللمتضرر المطالبة بتعويض كامل (المادة ١٦٣ مدني).',
-    'أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا ضمان ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal. أي ترتيب جانبي (مكالمة أو محادثة خارجية أو اتفاق شفهي) لا يُستند إليه في أي تحكيم ولا يُلزم المنصة بشيء، ومحاولة نقل التعامل لخارج المنصة تُرصد في محادثة الحجز وتدخل سلّم العقوبات. خدمات Deal — الضمان والتحكيم وحزمة الأدلة والتقييمات ودعم النزاعات — متاحة فقط للصفقات المفتوحة والموثّقة داخل المنصة من أول خطوة؛ أي اتفاق خارجي لا يمنح أي حق في أي خدمة من خدمات المنصة، ومحاولة استخدام أي خدمة لتغطية اتفاق خارجي مخالفة تستوجب علامة سلوك وتصعيد العقوبة عند التكرار.',
+    'أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا حماية ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal. أي ترتيب جانبي (مكالمة أو محادثة خارجية أو اتفاق شفهي) لا يُستند إليه في أي تحكيم ولا يُلزم المنصة بشيء، ومحاولة نقل التعامل لخارج المنصة تُرصد في محادثة الحجز وتدخل سلّم العقوبات. خدمات Deal — الحماية الإجرائية والتحكيم وحزمة الأدلة والتقييمات ودعم النزاعات — متاحة فقط للصفقات المفتوحة والموثّقة داخل المنصة من أول خطوة؛ أي اتفاق خارجي لا يمنح أي حق في أي خدمة من خدمات المنصة، ومحاولة استخدام أي خدمة لتغطية اتفاق خارجي مخالفة تستوجب علامة سلوك وتصعيد العقوبة عند التكرار.',
   ],
   en: [
     'Every payment step has a 3-hour deadline with a live countdown — expiry with no payment declared cancels the order automatically, with no money moving at all.',
@@ -3088,9 +3088,9 @@ const TX_TERMS = {
     'Arbitration follows Deal\'s own system: a 10-minute negotiation phase between the parties first, then the owner decides from the evidence — the decision is final inside the platform and recorded.',
     'The in-app order chat is the only evidence channel — agreements made outside it are not accepted as arbitration evidence.',
     'Transactions are P2P: money moves directly between personal wallets, and Deal organizes, documents and protects — Deal is not a bank or a financial institution.',
-    'The strict replacement guarantee: it activates only if the provider declares inability, or the provider stays silent in the booking chat for a full 24 hours after receiving the deposit despite two automatic warnings. Deal imposes no delivery deadline and runs no delivery countdown: execution timing is agreed between the parties inside the booking chat, the \u201curgent\u201d marker is a mutual agreement with no platform-imposed time commitment, and any dispute over delivery delay is decided by arbitration on the chat evidence. Deal nominates exactly one verified alternative from the same city and niche at exactly the same price and terms within 24 hours, and the client decides to accept or refuse within 3 hours; if no suitable alternative exists, the deposit is refunded in full by an arbitration decision within 72 hours. Refunding the deposit is mandatory for the defaulting provider within 3 hours of the replacement or arbitration decision, and there is never a replacement after the preview has been confirmed.',
+    'The strict documented replacement rule: it activates only if the provider declares inability, or the provider stays silent in the booking chat for a full 24 hours after receiving the deposit despite two automatic warnings. Deal imposes no delivery deadline and runs no delivery countdown: execution timing is agreed between the parties inside the booking chat, the \u201curgent\u201d marker is a mutual agreement with no platform-imposed time commitment, and any dispute over delivery delay is decided by arbitration on the chat evidence. Deal nominates exactly one verified alternative from the same city and niche at exactly the same price and terms within 24 hours, and the client decides to accept or refuse within 3 hours; if no suitable alternative exists, the deposit is refunded in full by an arbitration decision within 72 hours. Refunding the deposit is mandatory for the defaulting provider within 3 hours of the replacement or arbitration decision, and there is never a replacement after the preview has been confirmed.',
     'Deterrence and the law — for both parties, in every country: (1) Your acceptance of these terms is recorded with your identity and its time and is a binding electronic contract governed by the governing law stated in Deal\u2019s Terms of Use; Deal\u2019s records, booking chats and receipts are documented evidence handed to the harmed party in an official evidence bundle when fraud is proven. (2) The platform\u2019s internal penalties apply equally to every user in every country: any money obligation that passes its deadline freezes the account immediately with a \u201clate dues\u201d mark on the profile, unfreezing requires settling the obligation plus a breach penalty of 10% of the deal value (doubled on the second breach), and proven fraud means a permanent ban of the person (phone + email + device fingerprint). (3) Fraud is a crime under the laws of every country the platform operates in, and a fraudster\u2019s liability is full, with no cap. One documented example — Egypt, the platform\u2019s governing law: acceptance of the terms is a binding contract (Article 147 of the Civil Code: the contract is the law of the parties); taking a deposit and keeping it, or refusing to refund it on default, falls within breach of trust (Article 341 of the Penal Code) and fraud (Article 336 of the Penal Code); online fraud is aggravated by the Anti-IT-Crimes Law 175 of 2018; and the harmed party may claim full compensation (Article 163 of the Civil Code).',
-    'Any agreement outside the platform does not happen, and the platform is not bound by it — no guarantee, no arbitration, no rating and no evidence bundle for any agreement that was not opened and documented as a booking inside Deal. Any side arrangement (a call, an external chat or a verbal deal) cannot be relied on in any arbitration and binds the platform to nothing, and attempting to move the dealing outside the platform is detected in the booking chat and enters the penalty ladder. Deal\u2019s services — the guarantee, arbitration, the evidence bundle, ratings and dispute support — are available only for deals opened and documented inside the platform from the very first step; an external agreement grants no right to any platform service, and attempting to use any service to cover an external agreement is a violation that earns a behavior flag and escalating penalties on repetition.',
+    'Any agreement outside the platform does not happen, and the platform is not bound by it — no protection, no arbitration, no rating and no evidence bundle for any agreement that was not opened and documented as a booking inside Deal. Any side arrangement (a call, an external chat or a verbal deal) cannot be relied on in any arbitration and binds the platform to nothing, and attempting to move the dealing outside the platform is detected in the booking chat and enters the penalty ladder. Deal\u2019s services — procedural protection, arbitration, the evidence bundle, ratings and dispute support — are available only for deals opened and documented inside the platform from the very first step; an external agreement grants no right to any platform service, and attempting to use any service to cover an external agreement is a violation that earns a behavior flag and escalating penalties on repetition.',
   ],
 };
 /* إصدار شروط الحجز الفعّال: إصدار أول قبول مسجّل لهذا الحجز — فالحجوزات
@@ -3301,7 +3301,7 @@ async function applyBehaviorPenalty(userId) {
   return n;
 }
 
-/* ================= الردع بحكم القانون + ضمان الاستبدال الصارم =================
+/* ================= الردع بحكم القانون + قاعدة الاستبدال الموثّق الصارمة =================
    (قرار المستخدم المعتمَد 2026-11-23 — TESTING-DETERRENCE-APPLY.md، والنص
    الملزم في deal-deterrence-and-replacement-rules.md.) كل الآليات فوق البنية
    القائمة نفسها: الالتزامات المالية الموثّقة (DL)، السجل، أعلام السلوك،
@@ -3485,11 +3485,11 @@ async function sweepDuesEnforcement() {
    علامة سلوك على المرسل العضو (تدخل سلّم أعلام السلوك القائم) + توثيق في
    أحداث الحجز (سجل الأدلة). أرقام الطلبات والمبالغ القصيرة لا تُرصد: الهاتف
    يُشترط فيه طول وبادئة هاتفية حقيقية بعد تجريد الفواصل. */
-const OFF_PLATFORM_RULE_TEXT = 'أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا ضمان ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal';
+const OFF_PLATFORM_RULE_TEXT = 'أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا حماية ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal';
 /* سلّم ردع التعامل الخارجي الكامل (قرار المستخدم 2026-11-23 «تشديد الردع
    اللحظي»): نفس النص يظهر في تحذير ما قبل الإرسال بالواجهة وفي رسالة
    النظام بعد الإرسال هنا — مصدر واحد للصياغة فلا يتناقض الموضعان. */
-const OFF_PLATFORM_LADDER_TEXT = 'العقوبات: المحاولة تُسجَّل في سجل أدلة الحجز وتُحسَب علامة سلوك على مرسلها — التكرار يجمّد الحساب، والإصرار حظر نهائي للشخص نفسه (هاتف + إيميل + بصمة جهاز — لا حساب جديد أبداً). وأي اتفاق يتم خارج المنصة لا حماية له إطلاقاً: لا ضمان ولا تحكيم ولا تقييم ولا حزمة أدلة ولا أي خدمة من خدمات Deal';
+const OFF_PLATFORM_LADDER_TEXT = 'العقوبات: المحاولة تُسجَّل في سجل أدلة الحجز وتُحسَب علامة سلوك على مرسلها — التكرار يجمّد الحساب، والإصرار حظر نهائي للشخص نفسه (هاتف + إيميل + بصمة جهاز — لا حساب جديد أبداً). وأي اتفاق يتم خارج المنصة لا حماية له إطلاقاً: لا حماية ولا تحكيم ولا تقييم ولا حزمة أدلة ولا أي خدمة من خدمات Deal';
 const OFF_PLATFORM_KEYWORDS = ['واتساب', 'واتس اب', 'whatsapp', 'wa.me', 'تيليجرام', 'telegram', 't.me', 'بره المنصة', 'برا المنصة', 'خارج المنصة', 'بره التطبيق', 'نتعامل بره', 'كلمني على رقمي', 'ده رقمي', 'دا رقمي', 'ابعتلي رقمك', 'هات رقمك'];
 function detectOffPlatformLeak(text) {
   const s = String(text || '');
@@ -4032,7 +4032,7 @@ app.get('/api/my/opportunities', auth, async (req, res) => {
   res.json({ items: rows.map((r) => ({ id: r.id, title: r.title || '', niche: r.niche || '', city: r.city || '', budget: r.budget || 0, currency: r.currency || 'EGP', details: r.details || '', urgent: !!r.urgent, is_guest: !!r.is_guest, match_score: Math.round(r.match_score), created_at: r.created_at })) });
 });
 
-/* مسارات موعد التسليم المنظّم وتفعيل الاستبدال الآلي حُذفت بقرار المستخدم 2026-11-23 (لا موعد تسليم مفروضاً ولا مسار يفتح بساعة) — ضمان الاستبدال بمحرّكيه الباقيين يمضي عبر التحكيم الموثّق. */
+/* مسارات موعد التسليم المنظّم وتفعيل الاستبدال الآلي حُذفت بقرار المستخدم 2026-11-23 (لا موعد تسليم مفروضاً ولا مسار يفتح بساعة) — قاعدة الاستبدال بمحرّكيها الباقيين تمضي عبر التحكيم الموثّق. */
 
 /* ---- لوحة المالك: درجات الظهور بعناصرها (شفافية داخلية) ---- */
 app.get('/api/owner/ranking', auth, ownerOnly, async (req, res) => {
@@ -4120,7 +4120,7 @@ app.post('/api/bookings', auth, async (req, res) => {
   if (gateD) return res.status(403).json({ error: gateD, fin_identity_required: true });
   const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,urgent,package_tier,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(req.user.id, talent.id, source, ref_id, title || `حجز مع ${talent.name}`, p, talent.currency, now() + deadline_days * 24 * 3600 * 1000, urgent ? 1 : 0, pkgTier, agrD.revisions, agrD.deliveryAt, now());
-  await addBookingEvent(info.lastInsertRowid, 'created', 'أُنشئ الحجز — الضمان والمراحل موثّقة داخل Deal');
+  await addBookingEvent(info.lastInsertRowid, 'created', 'أُنشئ الحجز — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   await notify(talent.id, 'booking_new', `طلب حجز جديد #${info.lastInsertRowid} بقيمة ${p} ${talent.currency}${urgent ? ' · 🔥 مستعجل — تنفيذ اليوم' : ''}`, `booking:${info.lastInsertRowid}`);
   res.json({ booking: await bookingView(await getBooking(info.lastInsertRowid), req.user) });
 });
@@ -4675,7 +4675,7 @@ app.post('/api/guest-requests', async (req, res) => {
   try { await matchRequest(await db.prepare('SELECT * FROM shop_requests WHERE id=?').get(info.lastInsertRowid)); } catch (e) { /* المطابقة لا تعطّل إنشاء الطلب أبداً */ }
   if (targetId) {
     await notify(targetId, 'guest_targeted',
-      `🎯 طلب موجّه ليك مباشرة من عميل «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget}${urgent ? ' · 🔥 مستعجل — تنفيذ اليوم' : ''} — افتح «فرص ليك» لتحويله لحجز بضمان Deal`,
+      `🎯 طلب موجّه ليك مباشرة من عميل «${String(business_name).trim()}» — ${niche} · ${city} · ميزانية ${+budget}${urgent ? ' · 🔥 مستعجل — تنفيذ اليوم' : ''} — افتح «فرص ليك» لتحويله لحجز موثّق داخل Deal`,
       `request:${info.lastInsertRowid}`);
   }
   res.json({ id: info.lastInsertRowid, token, follow: `/#/g/${token}` });
@@ -4732,7 +4732,7 @@ app.post('/api/guest-requests/:id/book', auth, async (req, res) => {
   } finally {
     client.release();
   }
-  await addBookingEvent(bookingId, 'created', 'أُنشئ الحجز من طلب ضيف — الضمان والمراحل موثّقة داخل Deal');
+  await addBookingEvent(bookingId, 'created', 'أُنشئ الحجز من طلب ضيف — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   // قائمة الانتظار: تحويل طلب منتظر عند هذا الصانع يختم دخوله «converted».
   try { await db.prepare(`UPDATE waitlist_entries SET status='converted' WHERE request_id=? AND talent_id=? AND status IN ('waiting','offered')`).run(+req.params.id, req.user.id); } catch (e) { /* لا يعطّل التحويل */ }
   res.json({ booking: await bookingView(await getBooking(bookingId), req.user), follow: `/#/g/${guestToken}` });
@@ -5106,8 +5106,8 @@ app.post('/api/notifications/read', auth, async (req, res) => {
 const SUPPORT_KB = [
   { id: 'what', q_ar: 'ما هو Deal وكيف يعمل؟', q_en: 'What is Deal and how does it work?',
     keys: ['ما هو', 'ازاي بيشتغل', 'كيف يعمل', 'يعني ايه', 'what is deal', 'how does it work', 'how it works', 'about deal'],
-    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل يطلب خدمة أو يحجز صانعاً مباشرة، والدفع يتم على مراحل بحماية «ضمان Deal»: عمولة أولاً، ثم عربون للصانع، والباقي يتحوّل للصانع مباشرة بعد تأكيد استلام المعاينة — والنسخة النهائية لا تُسلَّم إلا بعد تأكيد قبض الباقي. Deal لا تحتجز أموال المعاملات أبداً — وكل خطوة موثّقة بسجل رسمي.',
-    a_en: 'Deal — the platform for all content creators: creators register a profile (niche, city, price), clients request a service or book a creator directly, and payment happens in protected stages under the Deal Guarantee: fee first, then a deposit to the creator, and the rest moves directly to the creator after preview receipt is confirmed — with the final copy delivered only after receipt of the rest is confirmed. Deal never holds transaction money — every step documented in an official ledger.' },
+    a_ar: 'Deal — منصة كل صناع المحتوى: الصانع يسجّل ملفه (مجال، مدينة، سعر)، والعميل يطلب خدمة أو يحجز صانعاً مباشرة، والدفع يتم على مراحل بخطوات موثّقة وحماية Deal الإجرائية: عمولة أولاً، ثم عربون للصانع، والباقي يتحوّل للصانع مباشرة بعد تأكيد استلام المعاينة — والنسخة النهائية لا تُسلَّم إلا بعد تأكيد قبض الباقي. Deal لا تحتجز أموال المعاملات أبداً — وكل خطوة موثّقة بسجل رسمي.',
+    a_en: 'Deal — the platform for all content creators: creators register a profile (niche, city, price), clients request a service or book a creator directly, and payment happens in protected stages with documented steps and Deal procedural protection: fee first, then a deposit to the creator, and the rest moves directly to the creator after preview receipt is confirmed — with the final copy delivered only after receipt of the rest is confirmed. Deal never holds transaction money — every step documented in an official ledger.' },
   { id: 'register', q_ar: 'كيف أسجّل كصانع محتوى؟', q_en: 'How do I register as a creator?',
     keys: ['تسجيل', 'اسجل', 'حساب جديد', 'انشاء حساب', 'register', 'sign up', 'create account', 'join as creator'],
     a_ar: 'من زر «دخول / تسجيل» اختر «صانع محتوى» واملأ الاسم والمجال والمدينة وعدد المتابعين وسعرك ووسيلة تواصل واحدة (رقم هاتف أو إيميل) — التسجيل مجاني ووسيلة التواصل هي وسيلة دخولك بعد ذلك.',
@@ -5122,8 +5122,8 @@ const SUPPORT_KB = [
     a_en: 'Use the "📣 Request a service" button on the home page: enter your business name, phone number, city, ad type, budget and a description — no account needed. Providers see your request instantly, and all communication with the provider happens inside Deal from your request follow-up page (the order chat); you also get a private follow-up link to complete booking, payment and rating steps.' },
   { id: 'fee_why', q_ar: 'ما هي عمولة Deal ولماذا تُدفع أولاً؟', q_en: 'What is the Deal fee and why is it paid first?',
     keys: ['عمولة', 'ليه العمولة', 'لماذا العمولة', '10%', '١٠', 'fee', 'commission', 'why fee first', '10 percent'],
-    a_ar: 'عمولة Deal هي 10% من قيمة الطلب، وتُدفع أولاً قبل أي مبلغ للصانع: بها يتأكد جدية الحجز ويُفتح باقي خطوات الدفع المحمي، وهي مصدر تشغيل المنصة وخدمة الضمان والتوثيق. العميل يدفع السعر المعلن بالضبط — العمولة جزء منه وتُخصم من حصة الصانع (صافي الصانع 90%).',
-    a_en: 'The Deal fee is 10% of the order value, paid first before any money reaches the creator: it confirms the booking is serious and unlocks the protected payment stages, and it funds the platform, guarantee and verification services. The client pays exactly the listed price — the fee is part of it and comes out of the creator\'s share (the creator nets 90%).' },
+    a_ar: 'عمولة Deal هي 10% من قيمة الطلب، وتُدفع أولاً قبل أي مبلغ للصانع: بها يتأكد جدية الحجز ويُفتح باقي خطوات الدفع المحمي، وهي مصدر تشغيل المنصة وخدمة الحماية الإجرائية والتوثيق. العميل يدفع السعر المعلن بالضبط — العمولة جزء منه وتُخصم من حصة الصانع (صافي الصانع 90%).',
+    a_en: 'The Deal fee is 10% of the order value, paid first before any money reaches the creator: it confirms the booking is serious and unlocks the protected payment stages, and it funds the platform, procedural protection and verification services. The client pays exactly the listed price — the fee is part of it and comes out of the creator\'s share (the creator nets 90%).' },
   { id: 'fee_how', q_ar: 'كيف أدفع العمولة؟', q_en: 'How do I pay the fee?',
     keys: ['ادفع العمولة ازاي', 'كيف ادفع', 'فودافون كاش', 'انستاباي', 'مرجع التحويل', 'رقم التحويلة', 'how to pay', 'vodafone cash', 'instapay', 'transfer reference', 'payment reference'],
     a_ar: 'داخل خطوة «عمولة Deal أولاً» في حجزك اضغط «إظهار حساب عمولات Deal» وسيظهر رقم حساب العمولات (يظهر فقط للعميل الدافع وداخل هذه الخطوة فقط). حوّل مبلغ العمولة إليه من محفظتك (فودافون كاش أو إنستاباي)، ثم اكتب مرجع عملية التحويل في الحجز واضغط تأكيد — التأكيد تلقائي.',
@@ -5132,10 +5132,10 @@ const SUPPORT_KB = [
     keys: ['مراحل', '45', '٤٥', 'عربون', 'الباقي', 'دفعتين', 'staged', 'deposit', 'stages', 'two payments', 'installments'],
     a_ar: 'كل خطوة دفع لها مهلة ٣ ساعات بعدّاد حي (نظام Deal) وانتهاؤها بلا إعلان دفع يلغي الطلب تلقائياً بلا حركة مال. بعد العمولة (10%)، يدفع العميل 45% من السعر عربوناً للصانع مباشرة فيبدأ التنفيذ — وفي الصفقات الأكبر من 1000 يتقسم العربون دفعتين: 20% عند بدء التنفيذ ثم 25% بعد ما يقدّم المنفذ معاينة أولية ويؤكدها العميل. وبعد تأكيد استلام المعاينة (أو اعتماد الاستلام بقاعدة سكوت ٢٤ ساعة أو قرار تحكيم) يحوّل العميل الـ45% الأخيرة للصانع مباشرة، ولا تُسلَّم النسخة النهائية إلا بعد تأكيد قبض الباقي — فيصل للصانع صافيه كاملاً (90%): العميل لا يخسر باقيه قبل ما يستلم، والمنفذ لا يسلّم النسخة النهائية إلا بعد تأكيد قبض باقيه — الحماية في آلية الشغل نفسها.',
     a_en: 'Every payment step has a 3-hour deadline with a live countdown (Deal\'s system); expiry with no payment declared cancels the order automatically with no money moving. After the 10% fee, the client pays 45% of the price directly to the creator as a deposit so work starts — and on deals over 1000 the deposit splits into two instalments: 20% when execution starts, then 25% after the provider submits an initial preview and the client confirms it. After preview receipt is confirmed (or deemed confirmed by the 24-hour silence rule, or decided by arbitration) the client transfers the final 45% directly to the creator — with the final copy delivered only after receipt of the rest is confirmed — so the creator receives the full net (90%): the client never loses the rest before receiving, and the provider never hands over the final copy before confirming receipt of the rest — the protection is in the work mechanism itself.' },
-  { id: 'guarantee', q_ar: 'ما هو ضمان Deal؟', q_en: 'What is the Deal Guarantee?',
-    keys: ['ضمان', 'حماية', 'امان', 'أمان', 'guarantee', 'protection', 'safe', 'trust'],
-    a_ar: '«حجز محمي بضمان Deal» يعني: دفع مرحلي موثّق داخل الحجز، عمولة مؤكدة أولاً، إثبات تنفيذ (معاينة) تتحقق منه المنصة ويُختم بوقته، الباقي يتحوّل للمنفذ مباشرة بعد تأكيد الاستلام — والضمان في الشغل نفسه: النسخة النهائية لا تُسلَّم إلا بعد تأكيد قبض الباقي، إمكانية فتح نزاع يجمّد تقدم الحجز فوراً حتى تراجعه الإدارة (قرار لصالح طرف + عقوبات موثّقة)، وعند إخلال المنفذ تقترح المنصة بدائل موثّقة من نفس مدينتك ومجالك. Deal لا تحتجز أموال المعاملات في أي مرحلة.',
-    a_en: 'A "Deal-Guaranteed booking" means: staged payments documented inside the booking, the fee confirmed first, a proof of delivery (preview) that the platform verifies and timestamps, the rest moving directly to the creator after receipt confirmation — the guarantee is in the work itself: the final copy is delivered only after receipt of the rest is confirmed — the ability to open a dispute that freezes the booking\'s progress instantly until admin review (a decision for one side plus documented penalties), and — if the creator defaults — verified alternatives from your own city and niche suggested by the platform. Deal never holds transaction money at any stage.' },
+  { id: 'protection', q_ar: 'إزاي Deal بيحمي صفقتي؟', q_en: 'How does Deal protect my deal?',
+    keys: ['حماية', 'بيحمي', 'امان', 'أمان', 'protection', 'protect', 'safe', 'trust'],
+    a_ar: '«حجز موثّق خطوة بخطوة» يعني: دفع مرحلي موثّق داخل الحجز، عمولة مؤكدة أولاً، إثبات تنفيذ (معاينة) تتحقق منه المنصة ويُختم بوقته، الباقي يتحوّل للمنفذ مباشرة بعد تأكيد الاستلام — والحماية في الشغل نفسه: النسخة النهائية لا تُسلَّم إلا بعد تأكيد قبض الباقي، إمكانية فتح نزاع يجمّد تقدم الحجز فوراً حتى تراجعه الإدارة (قرار لصالح طرف + عقوبات موثّقة)، وعند إخلال المنفذ تقترح المنصة بدائل موثّقة من نفس مدينتك ومجالك. Deal لا تحتجز أموال المعاملات في أي مرحلة.',
+    a_en: 'A "step-by-step documented booking" means: staged payments documented inside the booking, the fee confirmed first, a proof of delivery (preview) that the platform verifies and timestamps, the rest moving directly to the creator after receipt confirmation — the protection is in the work itself: the final copy is delivered only after receipt of the rest is confirmed — the ability to open a dispute that freezes the booking\'s progress instantly until admin review (a decision for one side plus documented penalties), and — if the creator defaults — verified alternatives from your own city and niche suggested by the platform. Deal never holds transaction money at any stage.' },
   { id: 'p2p', q_ar: 'هل المعاملات P2P؟ كيف تتحرك الفلوس فعلياً؟', q_en: 'Are transactions P2P? How does money actually move?',
     keys: ['p2p', 'بي تو بي', 'محافظ شخصية', 'محفظة شخصية', 'بين المحافظ', 'مش بنك', 'لست بنك', 'peer to peer', 'personal wallets', 'not a bank'],
     a_ar: 'المعاملات P2P — فلوسك بتتحرك بين المحافظ الشخصية مباشرة (فودافون كاش/إنستاباي)، وDeal بينظّم ويوثّق ويحمي ومش بنك. كل تحويلة بمرجع مالي موحّد (كود معاملة + مبلغ بكسور بصمة) ومتسجلة في سجل رسمي، وDeal لا يستلم ولا يحتجز أموال المعاملات بين الأطراف في أي مرحلة — عمولته واشتراكاته فقط هي إيراده.',
@@ -5190,8 +5190,8 @@ const SUPPORT_KB = [
     a_en: 'Use the EN / عربي button in the header or the main menu: every interface text switches between Arabic and English along with the page direction, and your choice is saved for your next visit. User-written content (names, request titles) stays in its original language.' },
   { id: 'booking_how', q_ar: 'كيف أحجز صانعاً أو يصلني شغل؟', q_en: 'How do I book a creator, or get work as a creator?',
     keys: ['احجز', 'حجز صانع', 'يصلني شغل', 'فرص ليك', 'شغل يجيلي', 'book a creator', 'how to book', 'get work', 'opportunities'],
-    a_ar: 'العميل: من بطاقة الصانع في السوق اضغط «احجز» فيُفتح حجز محمي بضمان Deal بسعره المعلن. الصانع: الشغل يصلك من قسم «فرص ليك» الذي يطابق طلبات المحلات والحملات مع مدينتك ومجالك تلقائياً، ومن طلبات الضيوف التي تحوّلها لحجوزات بنفسك من السوق.',
-    a_en: 'Clients: tap "Book" on a creator\'s market card to open a Deal-Guaranteed booking at the listed price. Creators: work reaches you through "Opportunities for you", which automatically matches shop requests and campaigns to your city and niche, and through guest requests you can convert into bookings yourself from the market.' },
+    a_ar: 'العميل: من بطاقة الصانع في السوق اضغط «احجز» فيُفتح حجز موثّق خطوة بخطوة بسعره المعلن. الصانع: الشغل يصلك من قسم «فرص ليك» الذي يطابق طلبات المحلات والحملات مع مدينتك ومجالك تلقائياً، ومن طلبات الضيوف التي تحوّلها لحجوزات بنفسك من السوق.',
+    a_en: 'Clients: tap "Book" on a creator\'s market card to open a step-by-step documented booking at the listed price. Creators: work reaches you through "Opportunities for you", which automatically matches shop requests and campaigns to your city and niche, and through guest requests you can convert into bookings yourself from the market.' },
   { id: 'star', q_ar: 'ما هي باقة «نجم Deal» وكيف أشترك؟', q_en: 'What is the Deal Star package and how do I subscribe?',
     keys: ['باقة نجم', 'نجم Deal', 'اشتراك النجم', 'باقة النجوم', 'star package', 'deal star', 'star subscription', '199'],
     a_ar: 'باقة «نجم Deal» (199 جنيهاً لمدة 30 يوماً) معمولة عشان تكبّر وتميّزك: شارة وإطار ذهبي في السوق، أولوية ترتيب وترشيح أول للعملاء، فرصتك في «نجم الأسبوع» مع بطاقة مشاركة، «وقود نمو» شهري بإحصاءاتك وأفكار محتوى لمجالك، وأولوية دعم. الاشتراك من صفحة الباقة في القائمة: بتحوّل المبلغ لحساب عمولات Deal وبتسجل مرجع التحويلة وبتوافق على الشروط — والباقة لا تتفعّل إلا بعد ما المالك يؤكد وصول الفلوس فعلياً، وساعتها تبدأ الـ30 يوماً وتوصلك رسالة التفعيل.',
@@ -5210,16 +5210,16 @@ const SUPPORT_KB = [
     a_en: 'From the sign-in screen tap "Forgot password?": a 6-digit verification code is emailed to you (valid 10 minutes) and with it you set a new password — your other sessions are revoked automatically and you get a security alert. If email is unavailable, use one of the ten backup codes you generated under "My devices & sessions" — each code works once only. From the same section you can review your devices and sessions and revoke any unfamiliar session.' },
   { id: 'off_platform', q_ar: 'هل أقدر أتفق مع الطرف التاني خارج المنصة؟', q_en: 'Can I agree with the other party outside the platform?',
     keys: ['اتفاق خارج', 'خارج المنصه', 'خارج المنصة', 'نتعامل بره', 'بره المنصه', 'واتساب بره', 'outside the platform', 'off-platform', 'deal outside', 'whatsapp outside'],
-    a_ar: 'لأ — أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه: لا ضمان ولا تحكيم ولا حزمة أدلة ولا تقييم لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal. الحاجة الوحيدة اللي بتتم برّه هي تنفيذ التحويل نفسه من محفظتك؛ الاتفاق والإثبات والتأكيد والتسليم والتقييم والتحكيم كلها جوه المنصة إجبارياً. ومحاولة جرّ الطرف التاني لتعامل خارجي مخالفة بتتصعّد لحد الحظر.',
-    a_en: 'No — any agreement outside the platform does not happen and the platform is not bound by it: no guarantee, arbitration, evidence bundle or rating for anything not opened and documented as a booking inside Deal. The only step that happens outside is executing the transfer itself from your wallet; the agreement, proof, confirmation, delivery, rating and arbitration are all mandatorily inside the platform. Trying to pull the other party into an outside deal is a violation that escalates up to a ban.' },
-  { id: 'replacement_deterrence', q_ar: 'ما هو ضمان الاستبدال؟ وما عقوبات الإخلال؟', q_en: 'What is the replacement guarantee? What are the breach penalties?',
-    keys: ['ضمان الاستبدال', 'الاستبدال', 'بديل', 'المنفذ اخلف', 'المنفذ ما سلمش', 'عقوبات', 'غرامه اخلال', 'تجميد الحساب', 'حظر نهائي', 'replacement guarantee', 'substitute', 'breach penalty', 'account frozen', 'lifetime ban'],
-    a_ar: 'ضمان الاستبدال بيتفعّل في حالتين بس: المنفذ أعلن عدم قدرته، أو المنفذ سكت في محادثة الحجز يوماً كاملاً بعد قبض العربون رغم تنبيهين آليين. ومفيش موعد تسليم بتفرضه المنصة ولا عدّاد تسليم: التوقيت بتتفقوا عليه في محادثة الحجز، ولو حصل خلاف على التأخير فالتحكيم بيحسمه من أدلة المحادثة. ساعتها المنصة بتوفّر بديلاً واحداً موثّقاً من نفس مدينتك ومجالك بنفس السعر والشروط خلال يوم، وانت تقرر خلال ٣ ساعات؛ ولو مفيش بديل مناسب بيُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. والإخلال المالي بيجمّد الحساب آلياً مع علامة «مستحقات متأخرة» وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف عند التكرار)، والاحتيال = حظر نهائي للشخص نفسه. ولا استبدال بعد اعتماد المعاينة.',
-    a_en: 'The replacement guarantee activates in only 2 cases: the provider declares inability, or the provider stays silent in the booking chat for a full day after receiving the deposit despite two automatic warnings. The platform imposes no delivery date and runs no delivery countdown: timing is agreed between you in the booking chat, and any dispute over delay is decided by arbitration on the chat evidence. The platform then offers exactly one verified substitute from your city and niche at the identical price and terms within a day, and you decide within 3 hours; with no suitable substitute, the deposit is refunded in full by an arbitration decision within 72 hours. Money breaches freeze the account automatically with a public "late dues" marker and a breach penalty of 10% of the deal value (doubling on repetition), and fraud means a lifetime ban of the person. No replacement after the preview is approved.' },
+    a_ar: 'لأ — أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه: لا حماية ولا تحكيم ولا حزمة أدلة ولا تقييم لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal. الحاجة الوحيدة اللي بتتم برّه هي تنفيذ التحويل نفسه من محفظتك؛ الاتفاق والإثبات والتأكيد والتسليم والتقييم والتحكيم كلها جوه المنصة إجبارياً. ومحاولة جرّ الطرف التاني لتعامل خارجي مخالفة بتتصعّد لحد الحظر.',
+    a_en: 'No — any agreement outside the platform does not happen and the platform is not bound by it: no protection, arbitration, evidence bundle or rating for anything not opened and documented as a booking inside Deal. The only step that happens outside is executing the transfer itself from your wallet; the agreement, proof, confirmation, delivery, rating and arbitration are all mandatorily inside the platform. Trying to pull the other party into an outside deal is a violation that escalates up to a ban.' },
+  { id: 'replacement_deterrence', q_ar: 'ما هي قاعدة الاستبدال الموثّق؟ وما عقوبات الإخلال؟', q_en: 'What is the documented replacement rule? What are the breach penalties?',
+    keys: ['الاستبدال', 'بديل', 'المنفذ اخلف', 'المنفذ ما سلمش', 'عقوبات', 'غرامه اخلال', 'تجميد الحساب', 'حظر نهائي', 'replacement', 'substitute', 'breach penalty', 'account frozen', 'lifetime ban'],
+    a_ar: 'قاعدة الاستبدال الموثّق بتتفعّل في حالتين بس: المنفذ أعلن عدم قدرته، أو المنفذ سكت في محادثة الحجز يوماً كاملاً بعد قبض العربون رغم تنبيهين آليين. ومفيش موعد تسليم بتفرضه المنصة ولا عدّاد تسليم: التوقيت بتتفقوا عليه في محادثة الحجز، ولو حصل خلاف على التأخير فالتحكيم بيحسمه من أدلة المحادثة. ساعتها المنصة بتوفّر بديلاً واحداً موثّقاً من نفس مدينتك ومجالك بنفس السعر والشروط خلال يوم، وانت تقرر خلال ٣ ساعات؛ ولو مفيش بديل مناسب بيُردّ العربون كاملاً بقرار تحكيم خلال ٧٢ ساعة. والإخلال المالي بيجمّد الحساب آلياً مع علامة «مستحقات متأخرة» وغرامة إخلال ١٠٪ من قيمة الصفقة (تتضاعف عند التكرار)، والاحتيال = حظر نهائي للشخص نفسه. ولا استبدال بعد اعتماد المعاينة.',
+    a_en: 'The documented replacement rule activates in only 2 cases: the provider declares inability, or the provider stays silent in the booking chat for a full day after receiving the deposit despite two automatic warnings. The platform imposes no delivery date and runs no delivery countdown: timing is agreed between you in the booking chat, and any dispute over delay is decided by arbitration on the chat evidence. The platform then offers exactly one verified substitute from your city and niche at the identical price and terms within a day, and you decide within 3 hours; with no suitable substitute, the deposit is refunded in full by an arbitration decision within 72 hours. Money breaches freeze the account automatically with a public "late dues" marker and a breach penalty of 10% of the deal value (doubling on repetition), and fraud means a lifetime ban of the person. No replacement after the preview is approved.' },
   { id: 'quotes', q_ar: 'كيف تعمل عروض الأسعار على طلبي؟', q_en: 'How do price quotes on my request work?',
     keys: ['عروض الاسعار', 'عرض سعر', 'عروض أسعار', 'اقارن العروض', 'اختار عرض', 'quotes', 'price quote', 'compare quotes', 'accept a quote'],
-    a_ar: 'لما تنشر «طلب خدمة»، الصناع بيقدّموا عروض أسعار مكتوبة على طلبك نفسه: سعر + مدة تسليم + ملحوظة. العروض بتوصلك في صفحة متابعة طلبك (أو «طلباتي» لو عضو) وبتقارنها جنب بعض وتختار عرضاً واحداً — فيتحول لحجز عادي بضمان Deal وكل قواعده، وبقية العروض بتترفض آلياً برسالة مهذبة. وفيه حد أقصى لعدد العروض على الطلب الواحد ضد الإغراق.',
-    a_en: 'When you post a "Request a service", creators submit written quotes on your request itself: price + delivery time + a note. Quotes reach you on your request follow-up page (or "My requests" if you are a member); you compare them side by side and pick one — it becomes a normal booking under the Deal Guarantee with all its rules, and the other quotes are auto-rejected with a polite message. There is a cap on quotes per request against spam.' },
+    a_ar: 'لما تنشر «طلب خدمة»، الصناع بيقدّموا عروض أسعار مكتوبة على طلبك نفسه: سعر + مدة تسليم + ملحوظة. العروض بتوصلك في صفحة متابعة طلبك (أو «طلباتي» لو عضو) وبتقارنها جنب بعض وتختار عرضاً واحداً — فيتحول لحجز عادي موثّق داخل Deal بكل قواعده، وبقية العروض بتترفض آلياً برسالة مهذبة. وفيه حد أقصى لعدد العروض على الطلب الواحد ضد الإغراق.',
+    a_en: 'When you post a "Request a service", creators submit written quotes on your request itself: price + delivery time + a note. Quotes reach you on your request follow-up page (or "My requests" if you are a member); you compare them side by side and pick one — it becomes a normal documented Deal booking with all its rules, and the other quotes are auto-rejected with a polite message. There is a cap on quotes per request against spam.' },
   { id: 'packages_flash', q_ar: 'ما هي باقات الأسعار والعروض السريعة؟', q_en: 'What are pricing packages and flash offers?',
     keys: ['باقات الاسعار', 'باقات أسعار', 'باقه اساسيه', 'عرض سريع', 'خصم ٤٨', 'عروض سريعه', 'packages', 'pricing packages', 'flash offer', 'flash discount'],
     a_ar: 'الصانع يقدر يعرض ٣ باقات أسعار في ملفه (أساسية/متوسطة/شاملة — لكل واحدة اسم وسعر ووصف ومزايا)، واختيارك باقة عند الطلب بيملأ سعر الحجز منها تلقائياً. و«العرض السريع» خصم (نسبة أو سعر خاص) بيعلنه الصانع على خدمته لمدة يومين بعدّاد حي وشارة «عرض سريع» في السوق والملف — وسعر العرض هو اللي بيتبني عليه أي حجز أثناء سريانه، وبينتهي تلقائياً.',
@@ -5293,7 +5293,7 @@ async function tryAiSupportReply(req, viewer, question, lang) {
    صفحة علنية بلا أي دخول: مختارات من قاعدة معرفة الدعم نفسها (SUPPORT_KB)
    حرفياً — مصدر واحد للحقائق فلا تناقض بين ما يقرأه الزائر وما يجيب به
    الدعم. لا وعود مضافة ولا أي عبارة أوسع من الحماية الحقيقية (مختبرة). */
-const PUBLIC_FAQ_IDS = ['what', 'guest_post', 'fee_why', 'stages', 'guarantee', 'p2p', 'auto_confirm', 'off_platform', 'replacement_deterrence', 'star', 'founder_member', 'countries'];
+const PUBLIC_FAQ_IDS = ['what', 'guest_post', 'fee_why', 'stages', 'protection', 'p2p', 'auto_confirm', 'off_platform', 'replacement_deterrence', 'star', 'founder_member', 'countries'];
 app.get('/api/faq', (req, res) => {
   const items = PUBLIC_FAQ_IDS
     .map((id) => SUPPORT_KB.find((x) => x.id === id))
@@ -5329,8 +5329,8 @@ app.post('/api/support/ask', async (req, res) => {
     if (!linked) {
       return res.status(400).json({
         error: lang === 'en'
-          ? 'Platform services gate: arbitration and dispute support require an in-platform booking number that you are a party to. Any agreement outside the platform does not happen, and the platform is not bound by it — no guarantee, arbitration, rating or evidence bundle for any deal that was not opened and documented as a booking inside Deal.'
-          : 'بوابة خدمات المنصة: طلبات التحكيم ودعم النزاعات لازم ترتبط برقم حجز داخل المنصة تكون طرفاً فيه. أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا ضمان ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal. افتح نزاعك من صفحة الحجز نفسه.',
+          ? 'Platform services gate: arbitration and dispute support require an in-platform booking number that you are a party to. Any agreement outside the platform does not happen, and the platform is not bound by it — no protection, arbitration, rating or evidence bundle for any deal that was not opened and documented as a booking inside Deal.'
+          : 'بوابة خدمات المنصة: طلبات التحكيم ودعم النزاعات لازم ترتبط برقم حجز داخل المنصة تكون طرفاً فيه. أي اتفاق خارج المنصة لا يتم، والمنصة غير ملزمة بيه — لا حماية ولا تحكيم ولا تقييم ولا حزمة أدلة لأي اتفاق لم يُفتح ويُوثَّق كحجز داخل Deal. افتح نزاعك من صفحة الحجز نفسه.',
         services_gate: true,
       });
     }
@@ -6999,7 +6999,7 @@ async function acceptQuote(rq, quoteId, agr = { revisions: null, deliveryAt: 0 }
   await db.prepare(`UPDATE request_quotes SET status='accepted', decided_at=? WHERE id=?`).run(now(), q.id);
   await db.prepare(`UPDATE shop_requests SET status='booked' WHERE id=?`).run(rq.id);
   await rejectOtherQuotes(rq.id, q.id, talent.name);
-  await addBookingEvent(bookingId, 'created', 'أُنشئ الحجز من عرض سعر مختار — الضمان والمراحل موثّقة داخل Deal');
+  await addBookingEvent(bookingId, 'created', 'أُنشئ الحجز من عرض سعر مختار — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   await notify(talent.id, 'quote_accepted', `🎉 اختار العميل عرضك (${q.price} ${rq.currency}) على «${String(rq.title).slice(0, 50)}» — اتفتح حجز #${bookingId} بكل حماية Deal`, `booking:${bookingId}`);
   return { bookingId };
 }
@@ -7118,7 +7118,7 @@ app.post('/api/waitlist/:id/accept', auth, async (req, res) => {
   const info = await db.prepare(`INSERT INTO bookings (client_id,talent_id,source,ref_id,title,price,currency,deadline,agreed_revisions,agreed_delivery_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
     .run(req.user.id, talent.id, 'waitlist', e.request_id || null, title, price, talent.currency, now() + 7 * 24 * 3600 * 1000, agrW.revisions, agrW.deliveryAt, now());
   await db.prepare(`UPDATE waitlist_entries SET status='converted' WHERE id=?`).run(e.id);
-  await addBookingEvent(info.lastInsertRowid, 'created', 'أُنشئ الحجز من قائمة الانتظار — الضمان والمراحل موثّقة داخل Deal');
+  await addBookingEvent(info.lastInsertRowid, 'created', 'أُنشئ الحجز من قائمة الانتظار — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   await notify(talent.id, 'booking_new', `طلب حجز جديد #${info.lastInsertRowid} من قائمة الانتظار بقيمة ${price} ${talent.currency}`, `booking:${info.lastInsertRowid}`);
   res.json({ ok: true, booking_id: info.lastInsertRowid });
 });
@@ -7228,7 +7228,7 @@ async function generateContractCycle(c) {
     .run(c.client_id || null, c.talent_id, 'contract', c.id, c.id, c.title || `تعاقد شهري #${c.id} — دورة ${c.cycles_done + 1}`, c.cycle_price, c.currency,
       now() + 30 * 24 * 3600 * 1000, c.guest_name || '', c.guest_token || '', now());
   await db.prepare('UPDATE contracts SET cycles_done=cycles_done+1, next_cycle_at=? WHERE id=?').run(now() + CONTRACT_CYCLE_MS, c.id);
-  await addBookingEvent(ins.lastInsertRowid, 'created', 'أُنشئت دورة تعاقد شهري تلقائياً — الضمان والمراحل موثّقة داخل Deal');
+  await addBookingEvent(ins.lastInsertRowid, 'created', 'أُنشئت دورة تعاقد شهري تلقائياً — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   await notify(c.talent_id, 'contract_cycle', `🔁 دورة جديدة من التعاقد الشهري #${c.id}: حجز #${ins.lastInsertRowid} بقيمة ${c.cycle_price} ${c.currency}`, `booking:${ins.lastInsertRowid}`);
   if (c.client_id) await notify(c.client_id, 'contract_cycle', `🔁 بدأت دورة جديدة من تعاقدك الشهري #${c.id}: حجز #${ins.lastInsertRowid}`, `booking:${ins.lastInsertRowid}`);
   return ins.lastInsertRowid;
@@ -7736,7 +7736,7 @@ const ACADEMY_TRACKS = [
     ] },
   { key: 'pricing', ar: 'سعّر صح واعمل باقات', en: 'Price right & build packages', audience: 'talent', task: 'pricing_apply', task_ar: 'فعّل باقة أسعار واحدة على الأقل بسعر حقيقي في ملفك', task_en: 'Activate at least one priced package on your profile',
     lessons: [
-      L('price_basics', 'أساسيات التسعير', 'Pricing basics', 'سعّرك = وقتك + خبرتك + قيمة النتيجة للعميل. ما تنافسش بالأرخص: نافس بالوضوح والضمان. راجع سعرك كل ١٠ صفقات ناجحة.', 'Your price = your time + expertise + the value of the outcome to the client. Do not compete on cheapest: compete on clarity and guarantee. Review your price every 10 successful deals.'),
+      L('price_basics', 'أساسيات التسعير', 'Pricing basics', 'سعّرك = وقتك + خبرتك + قيمة النتيجة للعميل. ما تنافسش بالأرخص: نافس بالوضوح والتوثيق. راجع سعرك كل ١٠ صفقات ناجحة.', 'Your price = your time + expertise + the value of the outcome to the client. Do not compete on cheapest: compete on clarity and documentation. Review your price every 10 successful deals.'),
       L('packages3', 'الباقات الثلاث', 'The three packages', '٣ باقات (أساسية/متوسطة/شاملة) بتخلي العميل يختار بدل ما يفاصل: الأساسية للتجربة، والمتوسطة هي اللي عايز تبيعها، والشاملة للي عايز كل حاجة.', 'Three packages (Basic/Standard/Premium) let the client choose instead of haggling: Basic for trial, Standard is the one you want to sell, Premium for everything included.'),
       L('raise', 'إمتى ترفع سعرك؟', 'When to raise your price', 'لما نسبة إتمامك عالية وطلباتك أكتر من سعتك، ارفع ١٠–٢٠٪ وجرب أسبوعين. العروض السريعة (يومان) أداة تنشيط مش تخفيض دائم.', 'When your completion rate is high and demand exceeds your capacity, raise 10–20% and test for two weeks. Flash offers (48h) are an activation tool, not a permanent discount.'),
     ] },
@@ -7749,7 +7749,7 @@ const ACADEMY_TRACKS = [
   { key: 'delivery', ar: 'سلّم واتحمى', en: 'Deliver & stay protected', audience: 'talent', task: 'delivery_apply', task_ar: 'أكمل صفقة واحدة على الأقل عبر Deal', task_en: 'Complete at least one deal through Deal',
     lessons: [
       L('deadlines', 'المواعيد والعدّادات', 'Deadlines & timers', 'كل خطوة دفع ليها مهلة ٣ ساعات بعدّاد حي. ومهلة تأكيد المعاينة ٢٤ ساعة من وصول الإثبات (سكوت العميل بعدها = استلام مُعتبَر) بتنبيهات متدرجة. مفيش عدّاد تسليم: توقيت التنفيذ بتتفق عليه مع العميل في محادثة الحجز، والاتفاق الموثّق بيحميك عند أي خلاف.', 'Every payment step has a 3-hour live-countdown deadline. The preview-confirmation window is 24 hours from the proof arriving (client silence after it = deemed receipt) with graduated reminders. There is no delivery countdown: execution timing is agreed with the client in the booking chat, and the documented agreement protects you in any dispute.'),
-      L('proof', 'المعاينة قبل النسخة النهائية', 'Preview before the final file', 'ارفع إثبات التنفيذ كمعاينة أولاً؛ النسخة النهائية ما تتسلمش إلا بعد تأكيد قبض الباقي — ده ضمانك الحقيقي، والمنصة ما بتحتجز فلوس.', 'Upload the delivery proof as a preview first; the final version is delivered only after you confirm receiving the rest — that is your real guarantee, and the platform never holds money.'),
+      L('proof', 'المعاينة قبل النسخة النهائية', 'Preview before the final file', 'ارفع إثبات التنفيذ كمعاينة أولاً؛ النسخة النهائية ما تتسلمش إلا بعد تأكيد قبض الباقي — دي حمايتك الحقيقية، والمنصة ما بتحتجز فلوس.', 'Upload the delivery proof as a preview first; the final version is delivered only after you confirm receiving the rest — that is your real protection, and the platform never holds money.'),
       L('disputes', 'تجنب النزاعات', 'Avoid disputes', 'كل اتفاقك جوه محادثة الحجز بس — هي دليل التحكيم الوحيد. أي اتفاق خارج المنصة المنصة غير ملزمة بيه ومش هيتحسب لصالحك.', 'Keep every agreement inside the booking chat only — it is the sole arbitration evidence. Any agreement outside the platform does not bind the platform and will not count in your favour.'),
     ] },
   ...TAXONOMY.services.map((s) => ({
@@ -7872,7 +7872,7 @@ app.post('/api/owner/managed-requests/:id/convert', auth, ownerOnly, async (req,
     bookingId = ins.lastInsertRowid;
   }
   await db.prepare(`UPDATE shop_requests SET status='booked' WHERE id=?`).run(rq.id);
-  await addBookingEvent(bookingId, 'created', 'أُنشئ الحجز من طلب «Deal بلس» المُدار — الضمان والمراحل موثّقة داخل Deal');
+  await addBookingEvent(bookingId, 'created', 'أُنشئ الحجز من طلب «Deal بلس» المُدار — الحماية الإجرائية والمراحل موثّقة داخل Deal');
   await notify(talent.id, 'booking_new', `طلب حجز جديد #${bookingId} عبر «Deal بلس» (إدارة كاملة من المنصة) بقيمة ${price} ${rq.currency}`, `booking:${bookingId}`);
   if (rq.shop_user_id) await notify(rq.shop_user_id, 'managed_update', `✅ فريق Deal بدأ إدارة طلبك «${String(rq.title).slice(0, 50)}» واتفتح حجز #${bookingId} — تابع من حجوزاتك`, `booking:${bookingId}`);
   res.json({ ok: true, booking_id: bookingId });
@@ -8047,7 +8047,7 @@ app.post('/api/owner/disputes/:id/resolve', auth, ownerOnly, async (req, res) =>
   /* تثبيت إخلال بقرار تحكيم (جولة الردع): المالك يسمّي الطرف المُخِلّ صراحة
      (breach_user_id) فيدخل آلياً: تجميد + غرامة إخلال موثّقة، وإن كان المُخِلّ
      هو المنفذ وكان العربون مدفوعاً فعلاً يُنشأ التزام ردّ العربون الإجباري
-     (٣ ساعات) — قلب «ضمان الاستبدال» المعتمَد. */
+     (٣ ساعات) — قلب «قاعدة الاستبدال الموثّق» المعتمَدة. */
   const breachUser = +(req.body || {}).breach_user_id || 0;
   if (breachUser && (breachUser === b.client_id || breachUser === b.talent_id)) {
     const fresh = await getBooking(b.id);
@@ -8098,7 +8098,7 @@ app.post('/api/owner/bookings/:id/void-protection', auth, ownerOnly, async (req,
     .run(now(), req.user.id, 'cancelled', b.id);
   await logOwnerAction(req, 'void_protection', `booking:${b.id}`, `flagged:${flagIds.join(',') || 'none'}`);
   await closeOpenAppeal(b.id, 'closed_dispute');
-  await addBookingEvent(b.id, 'protection_voided', `🚫 أُلغيت حماية هذا الحجز بقرار المالك: ${note} — قاعدة Deal: خدمات المنصة (الضمان والتحكيم وحزمة الأدلة والتقييمات) للصفقات المفتوحة والموثّقة داخل المنصة فقط، ولا تغطية رجعية لأي اتفاق خارجي`);
+  await addBookingEvent(b.id, 'protection_voided', `🚫 أُلغيت حماية هذا الحجز بقرار المالك: ${note} — قاعدة Deal: خدمات المنصة (الحماية الإجرائية والتحكيم وحزمة الأدلة والتقييمات) للصفقات المفتوحة والموثّقة داخل المنصة فقط، ولا تغطية رجعية لأي اتفاق خارجي`);
   for (const uid of flagIds) {
     await db.prepare('INSERT INTO behavior_flags (booking_id,user_id,kind,created_by,created_at) VALUES (?,?,?,?,?)')
       .run(b.id, uid, 'retro_coverage', req.user.id, now());
